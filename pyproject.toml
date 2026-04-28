@@ -1,0 +1,30 @@
+[project]
+authors = [
+  { name = "Mike Gottlieb", email = "mike.gottlieb@earthscope.org" },
+  { name = "Franklyn Dunbar", email = "franklyn.dunbar@earthscope.org" },
+  { name = "Rachel Akie", email = "rachel.akie@earthscope.org" }
+]
+dependencies = [
+  "julian>=0.14",
+  "numpy>=1.26",
+  "pandas>=2.2",
+  "pandera>=0.20",
+  "pydantic>=2.7",
+  "pymap3d>=3.1"
+]
+name = "earthscope-sfg-tools"
+requires-python = ">= 3.11"
+version = "0.1.0"
+
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["osx-arm64"]
+
+[tool.pixi.pypi-dependencies]
+earthscope_sfg_tools = { path = ".", editable = true }
+
+[tool.pixi.tasks]
