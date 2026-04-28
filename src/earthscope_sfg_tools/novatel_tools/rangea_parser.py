@@ -1,6 +1,14 @@
-"""RANGEA ASCII parser and QC extraction helpers."""
+"""
+RANGEA ASCII Log Parser
 
-from __future__ import annotations
+This module provides Python functions to parse NovAtel RANGEA ASCII log strings
+into structured observation data, inspired by the Go-lang GNSS tools implementation using
+novatelascii.DeserializeRANGEA and observation.Epoch.
+
+The RANGEA log contains GNSS pseudorange, carrier phase, Doppler, and C/N0
+measurements for all tracked satellites across multiple constellations.
+
+"""
 
 import datetime
 import json
@@ -11,6 +19,8 @@ from pydantic import BaseModel, Field, computed_field
 
 
 class GNSSSystem(IntEnum):
+    """GNSS constellation identifiers from NovAtel channel tracking status."""
+
     GPS = 0
     GLONASS = 1
     SBAS = 2
@@ -20,33 +30,160 @@ class GNSSSystem(IntEnum):
     NAVIC = 7
 
 
+class SignalType(IntEnum):
+    """Common GNSS signal types (simplified mapping)."""
+
+    L1CA = 0  # GPS L1 C/A
+    L2P = 5  # GPS L2P
+    L2C = 9  # GPS L2C
+    L5Q = 14  # GPS L5Q
+    L1C = 17  # GPS L1C
+    E1 = 2  # Galileo E1
+    E5A = 12  # Galileo E5a
+    E5B = 17  # Galileo E5b
+    B1I = 0  # BeiDou B1I
+    B2I = 2  # BeiDou B2I
+    B3I = 6  # BeiDou B3I
+
+
 class Observation(BaseModel):
-    signal_type: int
-    pseudorange: float
-    pseudorange_std: float
-    carrier_phase: float
-    carrier_phase_std: float
-    doppler: float
-    cn0: float
-    locktime: float
-    tracking_status: int
-    half_cycle_ambiguity: bool = False
-    phase_lock: bool = True
-    code_lock: bool = True
-    parity_known: bool = True
+    """
+    A single GNSS observation for one signal from one satellite.
+
+    This corresponds to a single observation record within a RANGEA message,
+    containing pseudorange, carrier phase, Doppler, and signal quality metrics.
+
+    """
+
+    signal_type: int = Field(..., title="Signal Type Identifier")
+    pseudorange: float = Field(
+        ..., title="Pseudorange", description="Pseudorange measurement in meters"
+    )
+    pseudorange_std: float = Field(
+        ...,
+        title="Pseudorange Std",
+        description="Pseudorange standard deviation in meters",
+    )
+    carrier_phase: float = Field(
+        ...,
+        title="Carrier Phase",
+        description="Accumulated Doppler range (ADR) in cycles",
+    )
+    carrier_phase_std: float = Field(
+        ...,
+        title="Carrier Phase Std",
+        description="Carrier phase standard deviation in cycles",
+    )
+    doppler: float = Field(..., title="Doppler", description="Doppler frequency shift in Hz")
+    cn0: float = Field(..., title="C/N0", description="Carrier-to-noise density ratio in dB-Hz")
+    locktime: float = Field(
+        ..., title="Lock Time", description="Continuous tracking time in seconds"
+    )
+    tracking_status: int = Field(
+        ...,
+        title="Tracking Status",
+        description="Raw 32-bit channel tracking status word",
+    )
+    half_cycle_ambiguity: bool = Field(
+        default=False,
+        title="Half Cycle Ambiguity",
+        description="True if half-cycle ambiguity is present",
+    )
+    phase_lock: bool = Field(
+        default=True, title="Phase Lock", description="True if phase is locked"
+    )
+    code_lock: bool = Field(default=True, title="Code Lock", description="True if code is locked")
+    parity_known: bool = Field(
+        default=True,
+        title="Parity Known",
+        description="True if parity is known (for navigation data)",
+    )
+    pseudorange_std: float = Field(
+        ...,
+        title="Pseudorange Std",
+        description="Pseudorange standard deviation in meters",
+    )
+    carrier_phase: float = Field(
+        ...,
+        title="Carrier Phase",
+        description="Accumulated Doppler range (ADR) in cycles",
+    )
+    carrier_phase_std: float = Field(
+        ...,
+        title="Carrier Phase Std",
+        description="Carrier phase standard deviation in cycles",
+    )
+    doppler: float = Field(..., title="Doppler", description="Doppler frequency shift in Hz")
+    cn0: float = Field(..., title="C/N0", description="Carrier-to-noise density ratio in dB-Hz")
+    locktime: float = Field(
+        ..., title="Lock Time", description="Continuous tracking time in seconds"
+    )
+    tracking_status: int = Field(
+        ...,
+        title="Tracking Status",
+        description="Raw 32-bit channel tracking status word",
+    )
+    half_cycle_ambiguity: bool = Field(
+        default=False,
+        title="Half Cycle Ambiguity",
+        description="True if half-cycle ambiguity is present",
+    )
+    phase_lock: bool = Field(
+        default=True, title="Phase Lock", description="True if phase is locked"
+    )
+    code_lock: bool = Field(default=True, title="Code Lock", description="True if code is locked")
+    parity_known: bool = Field(
+        default=True,
+        title="Parity Known",
+        description="True if parity is known (for navigation data)",
+    )
+
+    model_config = {"frozen": False}
 
 
 class Satellite(BaseModel):
+    """
+    GNSS satellite with all its observations.
+
+    A satellite may have multiple observations for different signals
+    (e.g., GPS satellite might have L1CA, L2C, and L5 observations).
+
+    Attributes:
+        system: GNSS constellation (GPS, GLONASS, Galileo, etc.)
+        prn: Satellite PRN number (or slot for GLONASS)
+        fcn: GLONASS frequency channel number (-7 to +6), 0 for other systems
+        observations: Dictionary mapping signal type to Observation
+    """
+
     system: GNSSSystem
     prn: int
     fcn: int = 0
     observations: dict[int, Observation] = Field(default_factory=dict)
 
+    model_config = {"frozen": False}
+
     def add_observation(self, obs: Observation) -> None:
+        """Add an observation for a specific signal type."""
         self.observations[obs.signal_type] = obs
 
 
 class GNSSEpoch(BaseModel):
+    """
+    A GNSS observation epoch containing all satellite measurements at one time.
+
+    This is the Python equivalent of Go's observation.Epoch structure.
+    An epoch represents all GNSS observations recorded at a single instant,
+    typically at the receiver's measurement rate (e.g., 1 Hz, 10 Hz).
+
+    Attributes:
+        time: UTC timestamp of the epoch
+        gps_week: GPS week number
+        gps_seconds: Seconds into the GPS week
+        satellites: Dictionary mapping (system, prn) tuple to Satellite
+        receiver_status: Raw receiver status word from header
+        num_observations: Total number of observation records
+    """
+
     time: datetime.datetime
     gps_week: int
     gps_seconds: float
@@ -54,46 +191,113 @@ class GNSSEpoch(BaseModel):
     receiver_status: str = ""
     num_observations: int = 0
 
+    model_config = {"frozen": False}
+
     def add_satellite(self, sat: Satellite) -> None:
+        """Add or update a satellite in this epoch."""
         key = (int(sat.system), sat.prn)
         if key in self.satellites:
+            # Merge observations
             self.satellites[key].observations.update(sat.observations)
         else:
             self.satellites[key] = sat
 
+    def get_satellite(self, system: GNSSSystem, prn: int) -> Satellite | None:
+        """Get a satellite by system and PRN."""
+        return self.satellites.get((int(system), prn))
+
     @computed_field
     @property
     def satellite_count(self) -> int:
+        """Return the number of unique satellites in this epoch."""
         return len(self.satellites)
 
+    def get_systems(self) -> list[GNSSSystem]:
+        """Return list of GNSS systems present in this epoch."""
+        systems = set(sys for sys, _ in self.satellites)
+        return [GNSSSystem(s) for s in systems]
 
+
+# GPS epoch: January 6, 1980 00:00:00 UTC
 GPS_EPOCH = datetime.datetime(1980, 1, 6, 0, 0, 0, tzinfo=datetime.UTC)
-GPS_LEAP_SECONDS = 18
+GPS_LEAP_SECONDS = 18  # Current GPS-UTC leap seconds offset (as of 2017)
 
 
 def _decode_channel_tracking_status(status: int) -> dict:
+    """
+    Decode the 32-bit NovAtel channel tracking status word.
+
+    The channel tracking status encodes information about the signal being
+    tracked, including the GNSS system, signal type, and lock status.
+
+    Bit layout:
+        0-4:   Tracking state (0=idle, 3=code lock, 4=freq lock pull-in, ...)
+        5-9:   SV channel number
+        10-12: Phase lock flag
+        13:    Parity known flag
+        14:    Code lock flag
+        15:    Reserved
+        16-20: Satellite system (0=GPS, 1=GLONASS, 2=SBAS, 3=Galileo, 5=BeiDou, 6=QZSS)
+        21-25: Signal type
+        26-27: Reserved
+        28:    Half-cycle added flag
+        29:    Reserved
+        30:    Digital filtering
+        31:    PRN lock flag
+
+    Args:
+        status: 32-bit channel tracking status integer
+
+    Returns:
+        Dictionary with decoded fields
+    """
     return {
+        "tracking_state": status & 0x1F,
+        "sv_channel": (status >> 5) & 0x1F,
         "phase_lock_flag": (status >> 10) & 0x07,
         "parity_known": bool((status >> 13) & 0x01),
         "code_lock": bool((status >> 14) & 0x01),
         "system": (status >> 16) & 0x1F,
         "signal_type": (status >> 21) & 0x1F,
         "half_cycle_added": bool((status >> 28) & 0x01),
+        "prn_lock": bool((status >> 31) & 0x01),
     }
 
 
 def _parse_header(header_str: str) -> tuple[int, float, str]:
+    """
+    Parse the RANGEA message header to extract GPS time.
+
+    Header format (long message):
+        #RANGEA,port,sequence,idle_time,time_status,gps_week,gps_seconds,
+        receiver_status,reserved,sw_version
+
+    Args:
+        header_str: The header portion of the RANGEA message (before semicolon)
+
+    Returns:
+        Tuple of (gps_week, gps_seconds, receiver_status)
+
+    Raises:
+        ValueError: If header cannot be parsed
+    """
     fields = header_str.split(",")
+
+    # Find GPS week and seconds - they're after time_status field
+    # The time_status is typically a string like "FINESTEERING" or "COARSESTEERING"
     gps_week = None
     gps_seconds = None
     receiver_status = ""
 
     for i, f in enumerate(fields):
+        # GPS week is typically in the range 2000-3000
         if f.isdigit() and 2000 <= int(f) <= 3000:
             gps_week = int(f)
+            # Next field should be GPS seconds
             if i + 1 < len(fields):
                 try:
                     gps_seconds = float(fields[i + 1])
+                    # Receiver status is typically 2 fields after
                     if i + 2 < len(fields):
                         receiver_status = fields[i + 2]
                     break
@@ -106,37 +310,86 @@ def _parse_header(header_str: str) -> tuple[int, float, str]:
     return gps_week, gps_seconds, receiver_status
 
 
-def _gps_to_utc(gps_week: int, gps_seconds: float, leap_seconds: int = GPS_LEAP_SECONDS):
+def _gps_to_utc(
+    gps_week: int, gps_seconds: float, leap_seconds: int = GPS_LEAP_SECONDS
+) -> datetime.datetime:
+    """
+    Convert GPS week and seconds to UTC datetime.
+
+    Args:
+        gps_week: GPS week number
+        gps_seconds: Seconds into the GPS week
+        leap_seconds: GPS-UTC leap second offset
+
+    Returns:
+        UTC datetime with timezone info
+    """
     total_seconds = gps_week * 604800 + gps_seconds - leap_seconds
     return GPS_EPOCH + datetime.timedelta(milliseconds=total_seconds * 1000)
 
 
 def deserialize_rangea(rangea_string: str) -> GNSSEpoch:
+    """
+    Parse a NovAtel RANGEA ASCII log string into an Epoch object.
+
+    This function is the Python equivalent of the Go code:
+        rangea, err := novatelascii.DeserializeRANGEA(m.Data)
+        epoch, err := rangea.SerializeGNSSEpoch(m.Time())
+
+    RANGEA Format:
+        #RANGEA,<header>;num_obs,<obs1>,...,<obsN>*checksum
+
+    Each observation has 10 fields:
+        prn, glo_freq, psr, psr_std, adr, adr_std, dopp, cn0, locktime, ch_tr_status
+
+    Args:
+        rangea_string: Complete RANGEA ASCII log string including header and checksum
+
+    Returns:
+        Epoch object containing all parsed satellite observations
+
+    Raises:
+        ValueError: If the string cannot be parsed as a valid RANGEA message
+
+    Example:
+        >>> rangea = "#RANGEA,USB2,0,73.5,FINESTEERING,2379,414835.000,..."
+        >>> epoch = deserialize_rangea(rangea)
+        >>> print(f"Epoch time: {epoch.time}, satellites: {epoch.satellite_count}")
+    """
     if not rangea_string or "#RANGEA" not in rangea_string:
         raise ValueError("Invalid RANGEA string: missing #RANGEA header")
 
+    # Remove checksum if present
     if "*" in rangea_string:
         rangea_string = rangea_string.split("*")[0]
 
+    # Split header and data at semicolon
     parts = rangea_string.split(";")
     if len(parts) != 2:
         raise ValueError("Invalid RANGEA string: missing semicolon separator")
 
-    gps_week, gps_seconds, receiver_status = _parse_header(parts[0])
+    header_part = parts[0]
+    data_part = parts[1]
+
+    # Parse header
+    gps_week, gps_seconds, receiver_status = _parse_header(header_part)
+    utc_time = _gps_to_utc(gps_week, gps_seconds)
+
+    # Create epoch
     epoch = GNSSEpoch(
-        time=_gps_to_utc(gps_week, gps_seconds),
+        time=utc_time,
         gps_week=gps_week,
         gps_seconds=gps_seconds,
         receiver_status=receiver_status,
     )
 
-    data_fields = parts[1].split(",")
+    # Parse observation data
+    data_fields = data_part.split(",")
     num_obs = int(data_fields[0])
     epoch.num_observations = num_obs
 
-    idx = 1
+    idx = 1  # Start after num_obs field
     fields_per_obs = 10
-    known_system_ids = {e.value for e in GNSSSystem}
 
     for _ in range(num_obs):
         if idx + fields_per_obs > len(data_fields):
@@ -154,12 +407,20 @@ def deserialize_rangea(rangea_string: str) -> GNSSEpoch:
             locktime = float(data_fields[idx + 8])
             ch_tr_status = int(data_fields[idx + 9], 16)
 
+            # Decode channel tracking status
             status = _decode_channel_tracking_status(ch_tr_status)
-            system_id = status["system"]
-            system = GNSSSystem(system_id) if system_id in known_system_ids else GNSSSystem.GPS
 
+            # Get system and signal type
+            system = (
+                GNSSSystem(status["system"])
+                if status["system"] in [e.value for e in GNSSSystem]
+                else GNSSSystem.GPS
+            )
+            signal_type = status["signal_type"]
+
+            # Create observation
             obs = Observation(
-                signal_type=status["signal_type"],
+                signal_type=signal_type,
                 pseudorange=psr,
                 pseudorange_std=psr_std,
                 carrier_phase=adr,
@@ -174,14 +435,18 @@ def deserialize_rangea(rangea_string: str) -> GNSSEpoch:
                 parity_known=status["parity_known"],
             )
 
+            # Get or create satellite
             sat_key = (int(system), prn)
             if sat_key not in epoch.satellites:
                 fcn = glo_freq if system == GNSSSystem.GLONASS else 0
-                epoch.satellites[sat_key] = Satellite(system=system, prn=prn, fcn=fcn)
+                sat = Satellite(system=system, prn=prn, fcn=fcn)
+                epoch.satellites[sat_key] = sat
 
+            # Add observation to satellite
             epoch.satellites[sat_key].add_observation(obs)
 
         except (ValueError, IndexError):
+            # Skip malformed observations but continue parsing
             pass
 
         idx += fields_per_obs
@@ -189,8 +454,62 @@ def deserialize_rangea(rangea_string: str) -> GNSSEpoch:
     return epoch
 
 
-def extract_rangea_strings_from_qcpin(source: str | Path) -> list[str]:
+def extract_rangea_from_qcpin(source: str | Path) -> list[GNSSEpoch]:
+    """
+    Extract and parse all RANGEA logs from a QC PIN file.
+
+    This function loads a QC PIN JSON file and searches through it for
+    NOV_RANGE observations containing raw RANGEA strings, parses them into
+    GNSSEpoch objects, and returns all unique epochs.
+
+    The JSON structure is expected to have entries like:
+        {
+            "interrogation": {"observations": {"NOV_RANGE": {"raw": "#RANGEA,...", "time": {...}}}},
+            "007BE1": {"observations": {"NOV_RANGE": {"raw": "#RANGEA,...", "time": {...}}}},
+            ...
+        }
+
+    Args:
+        source: Path to the QC PIN file in JSON format
+
+    Returns:
+        List of unique GNSSEpoch objects, deduplicated by GPS week/seconds.
+        Returns empty list if file cannot be read or contains no valid RANGEA logs.
+
+    Example:
+        >>> epochs = extract_rangea_from_qcpin("/path/to/file.pin")
+        >>> print(f"Found {len(epochs)} unique epochs")
+    """
+
     path = Path(source)
+    epochs: list[GNSSEpoch] = []
+
+    try:
+        rangea_a_strings: list[str] = extract_rangea_strings_from_qcpin(path)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        print(f"Error reading QC PIN file: {path}")
+        return []
+    epochs.extend(deserialize_rangea(s) for s in rangea_a_strings)
+
+    return epochs
+
+
+def extract_rangea_strings_from_qcpin(source: str | Path) -> list[str]:
+    """
+    Extract raw RANGEA strings from a QC PIN file.
+
+    This function loads a QC PIN JSON file and searches through it for
+    NOV_RANGE observations containing raw RANGEA strings, returning a list
+    of all found RANGEA strings without parsing them into epochs.
+
+    Args:
+        source: Path to the QC PIN file in JSON format
+    Returns:
+        List of raw RANGEA strings found in the file. Returns empty list if
+        file cannot be read or contains no valid RANGEA logs.
+    """
+    path = Path(source)
+
     try:
         with open(path) as f:
             data = json.load(f)
@@ -202,10 +521,12 @@ def extract_rangea_strings_from_qcpin(source: str | Path) -> list[str]:
 
     rangea_strings: list[str] = []
 
-    def _extract_nov_range(obj: dict) -> None:
+    def _extract_nov_range(obj: dict) -> str:
+        """Recursively search for NOV_RANGE entries."""
         if not isinstance(obj, dict):
             return
 
+        # Check if this dict has NOV_RANGE with a raw field
         if "NOV_RANGE" in obj:
             nov_range = obj["NOV_RANGE"]
             if isinstance(nov_range, dict) and "raw" in nov_range:
@@ -216,27 +537,28 @@ def extract_rangea_strings_from_qcpin(source: str | Path) -> list[str]:
         if "observations" in obj:
             _extract_nov_range(obj["observations"])
 
-        for value in obj.values():
+        # Recurse into all dict values
+        for _, value in obj.items():
             if isinstance(value, dict):
                 _extract_nov_range(value)
 
-    for value in data.values():
+    for _, value in data.items():
         if isinstance(value, dict):
             _extract_nov_range(value)
 
     return list(set(rangea_strings))
 
 
-def extract_rangea_from_qcpin(source: str | Path) -> list[GNSSEpoch]:
-    path = Path(source)
-    try:
-        rangea_strings = extract_rangea_strings_from_qcpin(path)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return []
-    return [deserialize_rangea(s) for s in rangea_strings]
-
-
 def epoch_to_dict(epoch: GNSSEpoch) -> dict:
+    """
+    Convert an Epoch object to a dictionary for serialization.
+
+    Args:
+        epoch: Epoch object to convert
+
+    Returns:
+        Dictionary representation suitable for JSON serialization
+    """
     return {
         "time": epoch.time.isoformat(),
         "gps_week": epoch.gps_week,

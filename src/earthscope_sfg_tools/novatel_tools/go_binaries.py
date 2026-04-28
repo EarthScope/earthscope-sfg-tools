@@ -15,8 +15,6 @@ from pathlib import Path
 from typing import Optional
 import platform
 
-from ..logging import get_logger
-
 
 class BinaryNotFoundError(Exception):
     """Raised when a required Go binary cannot be found."""
@@ -59,7 +57,7 @@ def _find_binary(name: str, search_paths: Optional[list[str]] = None) -> Path:
     binary_name = f"{name}_{os_name}_{arch}"
 
     # Check package's go/build/ directory first
-    package_go_build = Path(__file__).parent.parent.parent.parent.parent / "go" / "build"
+    package_go_build = Path(__file__).parent.parent / "go" / "build"
     if package_go_build.exists():
         binary_path = package_go_build / binary_name
         if binary_path.exists() and binary_path.is_file():
