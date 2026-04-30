@@ -6,59 +6,25 @@ import tempfile
 import uuid
 from pathlib import Path
 
+import logging
+
 import numpy as np
 
-from ..logging import ProcessLogger as logger
-from ..utils.command_line_utils import parse_cli_logs
+from ..utils.go_utils import find_binary, parse_cli_logs
+from ..utils.misc import listify
+from .utils import MetadataModel, check_metadata, check_metadata_path, get_metadatav2
 
-# Local imports
-from .utils import (
-    MetadataModel,
-    check_metadata,
-    check_metadata_path,
-    get_metadatav2,
-    get_nova2rnx_binary_path,
-    get_nova2tile_binary_path,
-)
+logger = logging.getLogger(__name__)
 
-
-def novatel_ascii_2tile(
-    files: list[str], gnss_obs_tdb: Path, n_procs: int = 10, verbose: bool = True
-) -> None:
-    """
-    This function is a python wrapper for the nova2tile golang binary.
-    Given a list of novatel ascii files, get all the rangea logs and add them to a single tdb array
-
-    Args:
-        files (List[str]):  List of asset entries to process
-        gnss_obs_tdb (Path): Path to the gnss_obs tiledb array
-        n_procs (int, optional): number of processes to use. Defaults to 10.
-    """
-
-    binary_path = get_nova2tile_binary_path()
-
-    cmd = [str(binary_path), "-tdb", str(gnss_obs_tdb), "-procs", str(n_procs)]
-    for file in files:
-        cmd.append(str(file))
-    if verbose:
-        logger.logdebug(f" Running {cmd}")
-        logger.loginfo(f"Running NOVA2TILE on {len(files)} files")
-        to_stdout = None
-    else:
-        to_stdout = subprocess.DEVNULL
-
-    result = subprocess.run(cmd, stdout=to_stdout, stderr=to_stdout)
-
-    if verbose:
-        parse_cli_logs(result, logger)
 
 
 def novatel_ascii_2rinex(
-    file: Path,
+    files: list[Path | str] | Path | str,
     writedir: Path = None,
     site: str = "SIT1",
     metadata: dict | MetadataModel | Path | str = None,
     modulo_millis: int = 0,
+    logger: logging.Logger = logger,
     *kwargs,
 ) -> list[Path]:
     """Convert a NovAtel ASCII file to a daily RINEX file using nova2rnxo.
@@ -75,11 +41,11 @@ def novatel_ascii_2rinex(
 
     Parameters
     ----------
-    file : pathlib.Path or str
-        Path to the input NovAtel ASCII file to convert.
+    files : list[pathlib.Path or str] or pathlib.Path or str
+        Paths to the input NovAtel ASCII files to convert.
     writedir : pathlib.Path or str, optional
         Directory where the output RINEX (and metadata JSON, if created) will
-        be written. Defaults to the parent directory of `file`.
+        be written. Defaults to the parent directory of the first file in `files`.
     site : str, optional
         Four-character site code used when generating metadata automatically,
         required if `metadata` is not provided. Must be exactly 4 characters.
@@ -116,18 +82,13 @@ def novatel_ascii_2rinex(
         If the provided metadata file path does not exist.
     subprocess.CalledProcessError
         If the `nova2rnxo` subprocess fails.
-
-    Notes
-    -----
-    This function relies on `get_nova2rnxo_binary_path()` to locate a compatible
-    `nova2rnxo` binary for the current system. A temporary working directory
-    under `/tmp/` is used for intermediate files and is cleaned up automatically.
     """
 
-    if isinstance(file, str):
-        file = Path(file)
+    files = listify(files)
+    files = [Path(file) if isinstance(file, str) else file for file in files]
+
     if writedir is None:
-        writedir = file.parent
+        writedir = files[0].parent
     elif isinstance(writedir, str):
         writedir = Path(writedir)
 
@@ -148,13 +109,9 @@ def novatel_ascii_2rinex(
         assert len(site) == 4, f"Site must be 4 characters long, got {site}"
         metadata = get_metadatav2(site, serialNumber=uuid.uuid4().hex[:10])
 
-    # Get the binary path for nova2rnxo
-    # This function will raise an error if the binary is not found
-    # or if the system/architecture is not supported
-    binary_path = get_nova2rnx_binary_path()
+    binary_path = find_binary("nova2rnx")
 
-    # Get metadata for the site
-    logger.loginfo(f"Converting and merging {file} ascii Novatel to RINEX")
+    logger.info(f"Converting and merging {files} ascii Novatel to RINEX", stacklevel=2)
     # write metadata to writedir
     if isinstance(metadata, dict):
         outpath = writedir / f"{site}_metadata.json"
@@ -169,21 +126,22 @@ def novatel_ascii_2rinex(
         cmd = [str(binary_path), "-settings", str(metadata)]
         if modulo_millis > 0:
             cmd.extend(["-modulo", str(modulo_millis)])
-        cmd.append(str(file))
+        for file in files:
+            cmd.append(str(file))
         cmd_str = " ".join(cmd)
-        logger.loginfo(f" Running {cmd_str} in {workdir}")
+        logger.info(f" Running {cmd_str} in {workdir}", stacklevel=2)
         result = subprocess.run(cmd, check=True, capture_output=True, cwd=workdir)
 
         parse_cli_logs(result, logger)
 
         rinex_file_paths = list(Path(workdir).rglob(f"*{site}*"))
-        logger.loginfo(f"Converted {file} to {rinex_file_paths} Daily RINEX files")
+        logger.info(f"Converted {files} to {rinex_file_paths} Daily RINEX files", stacklevel=2)
         outpaths = []
         for rinex_file in rinex_file_paths:
-            logger.logdebug(f" RINEX file: {str(rinex_file)}")
+            logger.debug(f" RINEX file: {str(rinex_file)}")
             new_rinex_path = writedir / rinex_file.name
             shutil.move(src=rinex_file, dst=new_rinex_path)
-            logger.loginfo(f"Generated Daily RINEX file {str(new_rinex_path)}")
+            logger.info(f"Generated Daily RINEX file {str(new_rinex_path)}", stacklevel=2)
             outpaths.append(new_rinex_path)
 
     return outpaths

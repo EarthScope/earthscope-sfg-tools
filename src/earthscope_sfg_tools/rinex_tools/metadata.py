@@ -1,9 +1,5 @@
-import datetime
-import json
-from pathlib import Path
-
 from pydantic import BaseModel, Field
-
+import datetime
 
 class MetadataModel(BaseModel):
     marker_name: str = Field(..., description="Site name")
@@ -21,15 +17,21 @@ class MetadataModel(BaseModel):
         description="Date",
     )
     receiver_model: str | None = Field(default="NOV", description="Receiver model")
-    receiver_serial: str | None = Field(default="XXXXXXXXXX", description="Receiver serial number")
+    receiver_serial: str | None = Field(
+        default="XXXXXXXXXX", description="Receiver serial number"
+    )
     antenna_position: list[float] | None = Field(
         default=[0.0, 0.0, 0.0], description="Antenna position [X, Y, Z]"
     )
     antenna_offsetHEN: list[float] | None = Field(
         default=[0.0, 0.0, 0.0], description="Antenna offset [H, E, N]"
     )
-    antenna_model: str | None = Field(default="NOV850 NONE", description="Antenna model")
-    antenna_serial: str | None = Field(default="987654321", description="Antenna serial number")
+    antenna_model: str | None = Field(
+        default="NOV850 NONE", description="Antenna model"
+    )
+    antenna_serial: str | None = Field(
+        default="987654321", description="Antenna serial number"
+    )
 
 
 def get_metadatav2(
@@ -66,7 +68,51 @@ def get_metadatav2(
     }
 
 
+def get_metadata(site: str, serialNumber: str = "XXXXXXXXXX") -> dict:
+    # TODO: these are placeholder values, need to use real metadata
+    return {
+        "markerName": site,
+        "markerType": "WATER_CRAFT",
+        "observer": "PGF",
+        "agency": "Pacific GPS Facility",
+        "receiver": {
+            "serialNumber": "XXXXXXXXXX",
+            "model": "NOV OEMV1",
+            "firmware": "4.80",
+        },
+        "antenna": {
+            "serialNumber": "ACC_G5ANT_52AT1",
+            "model": "NONE",
+            "position": [
+                0.000,
+                0.000,
+                0.000,
+            ],  # reference position for site what ref frame?
+            "offsetHEN": [0.0, 0.0, 0.0],  # read from lever arms file?
+        },
+    }
+
+
 def check_metadata_path(metadata_path: Path | str) -> str:
+    """Validate and normalize a metadata file path.
+
+    Parameters
+    ----------
+    metadata_path : Path | str
+        Path to the metadata JSON file.
+
+    Returns
+    -------
+    str
+        The validated metadata file path as a string.
+
+    Raises
+    ------
+    AssertionError
+        If the metadata file does not exist.
+    ValueError
+        If the metadata file cannot be parsed into ``MetadataModel``.
+    """
     if isinstance(metadata_path, str):
         metadata_path = Path(metadata_path)
     assert metadata_path.exists(), f"Metadata file {str(metadata_path)} does not exist"
@@ -76,10 +122,29 @@ def check_metadata_path(metadata_path: Path | str) -> str:
         _ = MetadataModel(**metadata_dict).model_dump()
         return str(metadata_path)
     except Exception as e:
-        raise ValueError(f"Error parsing metadata file {str(metadata_path)}: {e}") from e
+        raise ValueError(
+            f"Error parsing metadata file {str(metadata_path)}: {e}"
+        ) from e
 
 
 def check_metadata(meta: dict | MetadataModel) -> dict:
+    """Validate and normalize metadata input into a dictionary.
+
+    Parameters
+    ----------
+    meta : dict or MetadataModel
+        Metadata to validate and normalize.
+
+    Returns
+    -------
+    dict
+        A dictionary representation of the validated metadata.
+
+    Raises
+    ------
+    ValueError
+        If validation fails or ``meta`` is an unsupported type.
+    """
     if isinstance(meta, dict):
         try:
             _ = MetadataModel(**meta).model_dump()

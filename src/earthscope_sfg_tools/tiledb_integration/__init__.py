@@ -7,9 +7,17 @@ This module provides a deep boundary for TileDB workflows with:
 - legacy-compatible helper functions
 """
 
+try:
+    import tiledb  # noqa: F401
+except ImportError as e:
+    raise ImportError(
+        "tiledb is required for earthscope_sfg_tools.tiledb_integration. "
+        "Install it with: pip install earthscope-sfg-tools[tiledb]"
+    ) from e
+
 from .backends import GoBinaryTileDBBackend
 from .errors import TileDBBinaryExecutionError, TileDBIntegrationError
-from .legacy import nov0002tile, nova2tile, tdb2rnx
+from .legacy import nov0002tile, nova2tile, novatel_770_2tile, tdb2rnx, tile2rinex
 from .models import TileDBOperationResult
 from .service import TileDBService
 
@@ -21,5 +29,7 @@ __all__ = [
     "GoBinaryTileDBBackend",
     "nova2tile",
     "nov0002tile",
+    "novatel_770_2tile",
     "tdb2rnx",
+    "tile2rinex",
 ]
