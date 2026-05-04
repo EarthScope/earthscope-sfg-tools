@@ -5,7 +5,12 @@ from .community.posfilter_models import INSPVAASchema, INSSTDEVSchema
 from .garpos.observables import AcousticDataFrame, GARPOSShotDataFrame, IMUPositionDataFrame
 from .parsing.log_models import SV3InterrogationData, SV3ReplyData
 from .parsing.ppp import KinPositionDataFrame
-from .parsing.sv3_models import NovatelInterrogationEvent, NovatelRangeEvent
+from .parsing.sv3_models import (
+    NovatelInterrogationEvent,
+    NovatelRangeEvent,
+    SonardyneInterrogationEvent,
+    SonardyneRangeEvent,
+)
 from .soundvelocity import SoundVelocityDataFrame
 
 __all__ = [
@@ -17,6 +22,8 @@ __all__ = [
     "KinPositionDataFrame",
     "NovatelInterrogationEvent",
     "NovatelRangeEvent",
+    "SonardyneInterrogationEvent",
+    "SonardyneRangeEvent",
     "SFGDSTFSeafloorAcousticData",
     "SoundVelocityDataFrame",
     "SV3InterrogationData",

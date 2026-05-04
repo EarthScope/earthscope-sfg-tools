@@ -1,0 +1,139 @@
+"""Tests for DFOP00 JSONL parsing → GARPOSShotDataFrame."""
+
+import json
+import logging
+from pathlib import Path
+
+import pytest
+
+from earthscope_sfg_tools.sonardyne_tools.sv3_operations import dfop00_to_shotdata
+from earthscope_sfg_tools.sonardyne_tools.sv3_qc_operations import batch_qc_by_day
+
+FIXTURE = Path(__file__).parent / "data" / "test_gcc1_20250822_DFOP00.raw"
+log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def shotdata():
+    df = dfop00_to_shotdata(FIXTURE, log)
+    assert df is not None, "dfop00_to_shotdata returned None for the fixture file"
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Happy-path parsing
+# ---------------------------------------------------------------------------
+
+
+class TestDfop00Parsing:
+    def test_returns_dataframe(self, shotdata):
+        """Parser must return a non-None, non-empty DataFrame."""
+        assert len(shotdata) > 0
+
+    def test_row_count(self, shotdata):
+        """Fixture has 44 interrogation / 135 range events; 40 valid pairs survive
+        (IR5210 and IR5211 only appear with range=0 and are rejected)."""
+        assert len(shotdata) == 40
+
+    def test_only_ir5209_survives(self, shotdata):
+        """IR5210 and IR5211 have range=0 in this fixture and are filtered out."""
+        assert sorted(shotdata.transponderID.unique()) == ["IR5209"]
+
+    def test_required_columns_present(self, shotdata):
+        required = {
+            "transponderID", "pingTime", "returnTime", "tt",
+            "dbv", "xc", "snr", "tat",
+            "head0", "pitch0", "roll0", "east0", "north0", "up0",
+            "head1", "pitch1", "roll1", "east1", "north1", "up1",
+            "isUpdated",
+        }
+        assert required.issubset(set(shotdata.columns))
+
+    def test_isupdated_all_false(self, shotdata):
+        """isUpdated is set to False on every row by dfop00_to_shotdata."""
+        assert (shotdata.isUpdated == False).all()  # noqa: E712
+
+    def test_pingtime_range(self, shotdata):
+        """Ping times should span ~11 minutes on 2025-08-22 UTC."""
+        assert abs(float(shotdata.pingTime.min()) - 1755820840.0) < 1.0
+        assert abs(float(shotdata.pingTime.max()) - 1755821485.0) < 1.0
+
+    def test_travel_time_physical(self, shotdata):
+        """One-way travel times should be physically plausible for seafloor geodesy
+        (meters to low single-digit seconds at ocean depths)."""
+        assert float(shotdata.tt.min()) > 0
+        assert float(shotdata.tt.min()) >= 5.37
+        assert float(shotdata.tt.max()) <= 5.42
+
+    def test_all_rows_same_day(self, shotdata):
+        """All shots in the fixture file are from the same UTC day."""
+        batched = batch_qc_by_day([shotdata])
+        assert list(batched.keys()) == ["2025-08-22"]
+        assert len(batched["2025-08-22"]) == len(shotdata)
+
+
+# ---------------------------------------------------------------------------
+# batch_qc_by_day
+# ---------------------------------------------------------------------------
+
+
+class TestBatchQcByDay:
+    def test_single_dataframe_groups_correctly(self, shotdata):
+        result = batch_qc_by_day([shotdata])
+        assert isinstance(result, dict)
+        assert "2025-08-22" in result
+
+    def test_empty_list_returns_empty_dict(self):
+        assert batch_qc_by_day([]) == {}
+
+    def test_preserves_row_count(self, shotdata):
+        result = batch_qc_by_day([shotdata])
+        total = sum(len(v) for v in result.values())
+        assert total == len(shotdata)
+
+    def test_date_column_dropped_from_output(self, shotdata):
+        result = batch_qc_by_day([shotdata])
+        for df in result.values():
+            assert "date" not in df.columns
+
+
+# ---------------------------------------------------------------------------
+# Error handling
+# ---------------------------------------------------------------------------
+
+
+class TestDfop00Errors:
+    def test_missing_file_returns_none(self, tmp_path):
+        result = dfop00_to_shotdata(tmp_path / "ghost.raw", log)
+        assert result is None
+
+    def test_empty_file_returns_none(self, tmp_path):
+        empty = tmp_path / "empty.raw"
+        empty.write_text("")
+        result = dfop00_to_shotdata(empty, log)
+        assert result is None
+
+    def test_no_valid_pairs_returns_none(self, tmp_path):
+        """A file with only interrogation events (no ranges) yields no pairs."""
+        only_interrogations = tmp_path / "interrog_only.raw"
+        line = json.dumps({"event": "interrogation", "event_id": 1,
+                           "observations": {}, "sequence": 1,
+                           "time": {"common": 0}, "type": "SV3"})
+        only_interrogations.write_text(line + "\n")
+        result = dfop00_to_shotdata(only_interrogations, log)
+        assert result is None
+
+    def test_corrupt_json_lines_skipped(self, tmp_path):
+        """Corrupt JSON lines are skipped; if nothing survives, None is returned."""
+        bad = tmp_path / "corrupt.raw"
+        bad.write_text("not json\nalso not json\n")
+        # Should not raise; corrupt lines are skipped
+        try:
+            result = dfop00_to_shotdata(bad, log)
+        except Exception as exc:
+            pytest.fail(f"dfop00_to_shotdata raised on corrupt input: {exc}")

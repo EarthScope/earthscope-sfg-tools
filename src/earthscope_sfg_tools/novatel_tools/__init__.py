@@ -1,5 +1,6 @@
 from .novatel_ascii_operations import nova2rnx, novatel_ascii_2rinex
-from .novatel_to_rinex_operations import nov0002rnx, novatel_binary_2rinex as novatel_2rinex, rnxqc
+from .novatel_to_rinex_operations import nov0002rnx, novatel_binary_2rinex as novatel_2rinex
+from ..rinex_tools.quality_control import rnxqc
 from .rangea_parser import (
     GNSSEpoch,
     GNSSSystem,

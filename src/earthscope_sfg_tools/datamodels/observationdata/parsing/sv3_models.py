@@ -185,3 +185,7 @@ class SonardyneInterrogationEvent(BaseModel):
     sequence: int = Field(description="Sequence ID", ge=0)
     time: TimeData = Field(description="Event time")
     type: str = Field(description="Interrogation type")
+
+
+NovatelInterrogationEvent = SonardyneInterrogationEvent
+NovatelRangeEvent = SonardyneRangeEvent

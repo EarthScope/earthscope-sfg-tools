@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, Field, PrivateAttr, field_serializer, field_validator
-from regex import match
+from re import match
 
 from .utils import (
     AttributeUpdater,

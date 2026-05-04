@@ -53,6 +53,8 @@ def _novatel_2rinex_wrapper(
     binary_path: Path,
     modulo_millis: int = 0,
     num_routines: int = 1,
+    antindex: int = 0,
+    logger: logging.Logger = logger,
 ) -> list[Path]:
     """Internal helper to call a NovAtel-to-RINEX Go binary on a batch of files.
 
@@ -118,6 +120,8 @@ def _novatel_2rinex_wrapper(
             cmd.extend(["-modulo", str(modulo_millis)])
         if num_routines > 1:
             cmd.extend(["-numroutines", str(num_routines)])
+
+        cmd.extend(["-antindex",str(antindex)])
         cmd.extend([str(p) for p in file_paths])
 
         logger.info(f"Running {' '.join(cmd)} in {workdir}", stacklevel=2)
@@ -165,6 +169,7 @@ def novatel_binary_2rinex(
     metadata: dict | MetadataModel | Path | str | None = None,
     modulo_millis: int = 0,
     num_routines: int = 1,
+    antindex: int = 0,
     **kwargs,
 ) -> list[Path]:
     """Convert NovAtel NOV000 / NOV770 binary files to daily RINEX.
@@ -246,6 +251,8 @@ def novatel_binary_2rinex(
                 binary_path=binary_path,
                 modulo_millis=modulo_millis,
                 num_routines=num_routines,
+                antindex=antindex,
+                logger=logger,
             )
             logger.info(
                 f"Converted {len(files_to_process)} NOV000.bin files to "
