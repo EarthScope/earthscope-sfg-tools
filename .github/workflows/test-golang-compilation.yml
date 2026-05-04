@@ -28,7 +28,7 @@ jobs:
         uses: prefix-dev/setup-pixi@v0.8.3
 
       - name: Compile Go binaries
-        run: pixi run build-novatel-go
+        run: pixi run build-go
 
       - name: Verify all binaries exist
         run: |

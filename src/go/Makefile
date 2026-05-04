@@ -10,23 +10,27 @@ COMMANDS=$(wildcard cmd/*)
 # Use existing CONDA_PREFIX (from conda or micromamba); avoid calling `conda` directly
 CONDA_PREFIX := $(shell echo $$CONDA_PREFIX)
 
-# Set DYLD_LIBRARY_PATH on macOS or LD_LIBRARY_PATH on Linux
+# Derive build PREFIX:
+#   On macOS: DYLD_LIBRARY_PATH takes priority when explicitly set (e.g. by the pixi
+#             build-go task pointing at the tiledb env). Falls back to CONDA_PREFIX.
+#   On Linux: same logic using LD_LIBRARY_PATH.
+# This lets the pixi default environment build correctly without requiring -e tiledb.
 ifeq ($(OS),darwin)
-    DYLD_LIBRARY_PATH := $(CONDA_PREFIX)/lib:$(DYLD_LIBRARY_PATH)
+    DYLD_LIBRARY_PATH := $(PREFIX)/lib:$(DYLD_LIBRARY_PATH)
     # Use -Xlinker form to avoid Go CGO double-interpreting -Wl,-rpath,X
     RPATH_FLAG = -Xlinker -rpath -Xlinker @executable_path/libs
 else
-    LD_LIBRARY_PATH := $(CONDA_PREFIX)/lib:$(LD_LIBRARY_PATH)
+    LD_LIBRARY_PATH := $(PREFIX)/lib:$(LD_LIBRARY_PATH)
     RPATH_FLAG = -Xlinker -rpath -Xlinker $$ORIGIN/libs
 endif
 
 # CGO flags for TileDB
-CGO_CFLAGS = -I$(CONDA_PREFIX)/include -Wno-deprecated-declarations
-CGO_LDFLAGS = -L$(CONDA_PREFIX)/lib -ltiledb $(RPATH_FLAG)
+CGO_CFLAGS = -I$(PREFIX)/include -Wno-deprecated-declarations
+CGO_LDFLAGS = -L$(PREFIX)/lib -ltiledb $(RPATH_FLAG)
 
-LIBRARY_PATH = $(CONDA_PREFIX)/lib
-CPATH = $(CONDA_PREFIX)/include
-CLANG_PATH = $(CONDA_PREFIX)/bin/clang
+LIBRARY_PATH = $(PREFIX)/lib
+CPATH = $(PREFIX)/include
+CLANG_PATH = $(PREFIX)/bin/clang
 PSEUDO_PATH = $(CLANG_PATH)
 CC = clang
 
@@ -54,14 +58,14 @@ ifeq ($(OS),darwin)
 	@echo "Bundling dylibs for macOS..."
 	@python3 $(CURDIR)/bundle_dylibs.py \
 		--build-dir $(CURDIR)/$(BUILD_DIR) \
-		--conda-lib $(CONDA_PREFIX)/lib \
+		--conda-lib $(PREFIX)/lib \
 		--os $(OS) \
 		--arch $(ARCH)
 else
 	@echo "Bundling .so files for Linux..."
 	@python3 $(CURDIR)/bundle_dylibs.py \
 		--build-dir $(CURDIR)/$(BUILD_DIR) \
-		--conda-lib $(CONDA_PREFIX)/lib \
+		--conda-lib $(PREFIX)/lib \
 		--os $(OS) \
 		--arch $(ARCH)
 endif
@@ -76,7 +80,8 @@ debug:
 	@echo "TEST_PREFIX: $(TEST_PREFIX)"
 	@echo "LIBRARY_PATH: $(LIBRARY_PATH)"
 	@echo "Conda Prefix: $(CONDA_PREFIX)"
-	@echo "TileDB Library Path: $(CONDA_PREFIX)/lib"
+	@echo "Resolved PREFIX: $(PREFIX)"
+	@echo "TileDB Library Path: $(PREFIX)/lib"
 	@echo "DYLD_LIBRARY_PATH: $(DYLD_LIBRARY_PATH)"
 	@echo "CPATH: $(CPATH)"
 	@for cmd in $(COMMANDS); do \

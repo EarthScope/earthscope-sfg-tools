@@ -49,8 +49,19 @@ default = { features = [], solve-group = "default" }
 tiledb = { features = ["tiledb"], solve-group = "default" }
 geolab = { features = ["jupyter","tiledb"], solve-group = "default" }
 
+
 [tool.pixi.tasks]
+build-go = { cmd = "make -B", cwd= "src/go", description = "Build Go binary for Novatel to RINEX conversion" }
 test = { cmd = "pytest tests/ -v", description = "Run the test suite" }
 lint = { cmd = "ruff check src/ tests/", description = "Lint with ruff" }
 format-check = { cmd = "ruff format --check src/ tests/", description = "Check formatting" }
 format = { cmd = "ruff format src/ tests/", description = "Auto-format source" }
+
+# =============================================================================
+# Activation - environment variables
+# =============================================================================
+[tool.pixi.activation]
+[tool.pixi.activation.env]
+CGO_ENABLED = "1"
+DYLD_LIBRARY_PATH = "$PIXI_PROJECT_ROOT/.pixi/envs/$PIXI_ENVIRONMENT_NAME/lib:$DYLD_LIBRARY_PATH"
+LD_LIBRARY_PATH = "$PIXI_PROJECT_ROOT/.pixi/envs/$PIXI_ENVIRONMENT_NAME/lib:$LD_LIBRARY_PATH"
