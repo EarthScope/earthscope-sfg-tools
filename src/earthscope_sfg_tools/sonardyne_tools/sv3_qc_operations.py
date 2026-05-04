@@ -12,30 +12,70 @@ from ..datamodels.observationdata.garpos.observables import GARPOSShotDataFrame
 from ..datamodels.observationdata.parsing.sv3_models import NovatelInterrogationEvent, NovatelRangeEvent
 
 from .sv3_operations import (
-    merge_interrogation_reply,
+    build_shotdata,
     novatel_interrogation_to_garpos_interrogation,
     novatel_reply_to_garpos_reply,
 )
 
 logger = logging.getLogger(__name__)
 
-def qcjson_to_shotdata(source: str | Path, logger: logging.Logger) -> DataFrame[GARPOSShotDataFrame] | None:
+
+def parse_qcjson_dict(
+    raw: dict,
+    logger: logging.Logger,
+) -> "DataFrame[GARPOSShotDataFrame] | None":
+    """Parse a decoded QC JSON dict into a validated shot-data DataFrame.
+
+    Pure function: no filesystem access.  Pass the result of ``json.load()``.
+
+    Args:
+        raw: Python dict decoded from a Sonardyne QC JSON file.
+        logger: For missing-block and merge-failure messages.
+
+    Returns:
+        Validated GARPOSShotDataFrame, or None if the interrogation block is
+        missing or no valid range entries are found.
+    """
+    interrogation_raw = raw.get("interrogation")
+    if interrogation_raw is None:
+        logger.error("QC JSON is missing 'interrogation' block")
+        return None
+
+    try:
+        interrogation_event = NovatelInterrogationEvent(**interrogation_raw)
+        interrogation_parsed = novatel_interrogation_to_garpos_interrogation(interrogation_event)
+    except Exception as e:
+        logger.error(f"Failed to parse interrogation block: {e}")
+        return None
+
+    def _pairs():
+        for key, value in raw.items():
+            if key == "interrogation" or not isinstance(value, dict):
+                continue
+            if value.get("event") != "range":
+                continue
+            try:
+                reply_event = NovatelRangeEvent(**value)
+                yield interrogation_parsed, novatel_reply_to_garpos_reply(reply_event)
+            except Exception:
+                continue
+
+    return build_shotdata(_pairs(), logger)
+
+
+def qcjson_to_shotdata(source: str | Path, logger: logging.Logger) -> "DataFrame[GARPOSShotDataFrame] | None":
     """Parse a Sonardyne QC JSON file into a validated shot-data DataFrame.
 
-    Reads the QC JSON file (trying UTF-8 first, falling back to latin-1), extracts
-    the single ``'interrogation'`` block, then iterates over all ``event = 'range'``
-    entries to build matched ping/reply pairs via
-    :func:`~sv3_operations.merge_interrogation_reply`.
+    Thin I/O wrapper around :func:`parse_qcjson_dict`.  Tries UTF-8 first,
+    falls back to latin-1.
 
     Args:
         source: Path to the QC JSON file.
-        logger: Logger instance used to report file I/O errors, parse failures,
-            and empty-result warnings.
+        logger: Logger instance for I/O errors and empty-result warnings.
 
     Returns:
-        A validated :class:`ShotDataFrame` with one row per successful ping/reply
-        pair, or ``None`` if the file cannot be read, the interrogation block is
-        missing, or no valid range entries are found.
+        A validated :class:`GARPOSShotDataFrame`, or ``None`` on read error or
+        no valid pairs.
     """
     path = Path(source)
 
@@ -54,44 +94,7 @@ def qcjson_to_shotdata(source: str | Path, logger: logging.Logger) -> DataFrame[
         logger.error(f"Error reading QC JSON {path}: {e}")
         return None
 
-    interrogation_raw = raw.get("interrogation")
-    if interrogation_raw is None:
-        logger.error(f"QC JSON {path} is missing 'interrogation' block")
-        return None
-
-    try:
-        interrogation_event = NovatelInterrogationEvent(**interrogation_raw)
-        interrogation_parsed = novatel_interrogation_to_garpos_interrogation(interrogation_event)
-    except Exception as e:  # noqa: BLE001
-        logger.error(f"Failed to parse interrogation block in {path}: {e}")
-        return None
-
-    processed: list[dict] = []
-
-    for key, value in raw.items():
-        if key == "interrogation" or not isinstance(value, dict):
-            continue
-        if value.get("event") != "range":
-            continue
-
-        try:
-            reply_event = NovatelRangeEvent(**value)
-            reply_parsed = novatel_reply_to_garpos_reply(reply_event)
-            merged = merge_interrogation_reply(interrogation_parsed, reply_parsed)
-        except Exception:  # noqa: BLE001
-            continue
-
-        if merged is not None:
-            processed.append(merged)
-
-    if not processed:
-        logger.error(f"No valid range entries found in QC JSON {path}")
-        return None
-
-    df = pd.DataFrame(processed)
-    df["isUpdated"] = False
-
-    return GARPOSShotDataFrame.validate(df, lazy=True)
+    return parse_qcjson_dict(raw, logger)
 
 
 def batch_qc_by_day(

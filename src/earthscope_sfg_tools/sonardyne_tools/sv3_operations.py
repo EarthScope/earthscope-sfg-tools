@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import Enum, auto
 from pathlib import Path
 
 import pandas as pd
@@ -17,6 +20,141 @@ from ..datamodels.observationdata.garpos.observables import GARPOSShotDataFrame
 from ..datamodels.observationdata.parsing.sv3_models import NovatelInterrogationEvent, NovatelRangeEvent
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# C3: Pairing rules and pipeline stages
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class SV3PairingRules:
+    """Thresholds governing interrogation/reply pair validation.
+
+    Defaults reproduce the original hardcoded assertion values.
+    """
+    max_roundtrip_seconds: float = 15.0
+    min_range_metres: float = 1e-3
+    return_time_tolerance_seconds: float = 1e-6
+
+
+class RejectionReason(Enum):
+    ZERO_RANGE = auto()
+    ROUNDTRIP_TOO_LONG = auto()
+    RETURN_TIME_MISMATCH = auto()
+
+
+@dataclass
+class PairResult:
+    """Outcome of pairing one interrogation with one reply."""
+    data: dict | None
+    rejection: RejectionReason | None = None
+
+
+def _validate_pair(
+    interrogation: SV3InterrogationData,
+    reply: SV3ReplyData,
+    rules: SV3PairingRules,
+) -> PairResult:
+    """Validate one interrogation/reply pair against pairing rules.
+
+    Returns a PairResult — never raises.
+    """
+    rng = float(reply.tt) + float(reply.tat) + TRIGGER_DELAY_SV3
+    if abs(rng) <= rules.min_range_metres:
+        return PairResult(data=None, rejection=RejectionReason.ZERO_RANGE)
+
+    time_diff = abs(float(reply.returnTime) - float(interrogation.pingTime))
+    if time_diff > rules.max_roundtrip_seconds:
+        return PairResult(data=None, rejection=RejectionReason.ROUNDTRIP_TOO_LONG)
+
+    range_original = float(reply.tt) + float(reply.tat)
+    calc_return = float(interrogation.pingTime) + range_original
+    if abs(calc_return - float(reply.returnTime)) >= rules.return_time_tolerance_seconds:
+        return PairResult(data=None, rejection=RejectionReason.RETURN_TIME_MISMATCH)
+
+    return PairResult(data=dict(interrogation) | dict(reply))
+
+
+def parse_jsonl_lines(
+    lines: Iterable[str],
+) -> list[NovatelInterrogationEvent | NovatelRangeEvent]:
+    """Parse raw JSONL strings into typed event objects.
+
+    Skips lines that fail JSON decoding or Pydantic validation.
+    """
+    events: list[NovatelInterrogationEvent | NovatelRangeEvent] = []
+    for line in lines:
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        event_type = data.get("event")
+        try:
+            if event_type == "interrogation":
+                events.append(NovatelInterrogationEvent(**data))
+            elif event_type == "range":
+                events.append(NovatelRangeEvent(**data))
+        except Exception:
+            continue
+    return events
+
+
+def pair_events(
+    events: Iterable[NovatelInterrogationEvent | NovatelRangeEvent],
+) -> Iterator[tuple[SV3InterrogationData, SV3ReplyData]]:
+    """Convert events to internal types and yield matched (interrogation, reply) pairs.
+
+    Stateful: each range event is paired with the most recent preceding
+    interrogation.  Range events without a preceding interrogation are skipped.
+    """
+    current_interro: SV3InterrogationData | None = None
+    for event in events:
+        if isinstance(event, NovatelInterrogationEvent):
+            try:
+                current_interro = novatel_interrogation_to_garpos_interrogation(event)
+            except Exception:
+                current_interro = None
+        elif isinstance(event, NovatelRangeEvent) and current_interro is not None:
+            try:
+                reply = novatel_reply_to_garpos_reply(event)
+                yield current_interro, reply
+            except Exception:
+                continue
+
+
+def build_shotdata(
+    pairs: Iterable[tuple[SV3InterrogationData, SV3ReplyData]],
+    logger: logging.Logger,
+    rules: SV3PairingRules = SV3PairingRules(),
+) -> "DataFrame[GARPOSShotDataFrame] | None":
+    """Validate pairs, assemble a DataFrame, and run Pandera schema validation.
+
+    The single place that owns DataFrame construction, ``isUpdated`` injection,
+    and schema enforcement.  Both DFOP00 and QC-JSON callers delegate here.
+
+    Args:
+        pairs: Iterable of (interrogation, reply) internal-type pairs.
+        logger: For rejection logging.
+        rules: Validation thresholds.
+
+    Returns:
+        Validated GARPOSShotDataFrame, or None if no pairs survive validation.
+    """
+    processed: list[dict] = []
+    for interrogation, reply in pairs:
+        result = _validate_pair(interrogation, reply, rules)
+        if result.data is not None:
+            processed.append(result.data)
+        else:
+            logger.debug("Rejected pair [%s] for transponder %s", result.rejection, reply.transponderID)
+
+    if not processed:
+        logger.error("No valid pairs found")
+        return None
+
+    df = pd.DataFrame(processed)
+    df["isUpdated"] = False
+    return GARPOSShotDataFrame.validate(df, lazy=True)
 
 
 def novatel_interrogation_to_garpos_interrogation(
@@ -140,68 +278,47 @@ def merge_interrogation_reply(
     return dict(interrogation) | dict(reply)
 
 
-def dfop00_to_shotdata(source: str | Path, logger: logging.Logger) -> DataFrame[GARPOSShotDataFrame] | None:
+def parse_dfop00_lines(
+    lines: list[str],
+    logger: logging.Logger,
+    rules: SV3PairingRules = SV3PairingRules(),
+) -> "DataFrame[GARPOSShotDataFrame] | None":
+    """Parse DFOP00 JSONL lines into a validated shot-data DataFrame.
+
+    Pure function: no filesystem access.  Pass ``f.readlines()`` output or
+    any list of JSON strings.
+
+    Args:
+        lines: Raw text lines from a DFOP00 JSONL file.
+        logger: For rejection and empty-result messages.
+        rules: Validation thresholds; defaults reproduce original behaviour.
+
+    Returns:
+        Validated GARPOSShotDataFrame, or None if no valid pairs exist.
+    """
+    return build_shotdata(pair_events(parse_jsonl_lines(lines)), logger, rules)
+
+
+def dfop00_to_shotdata(source: str | Path, logger: logging.Logger) -> "DataFrame[GARPOSShotDataFrame] | None":
     """Parse a DFOP00 JSONL log file into a validated shot-data DataFrame.
 
-    Reads each line of the file as a JSON object.  Lines with ``event =
-    'interrogation'`` are parsed as :class:`NovatelInterrogationEvent` records;
-    lines with ``event = 'range'`` are paired with the most recent interrogation
-    and merged via :func:`merge_interrogation_reply`.  Successfully merged pairs
-    are collected into a :class:`ShotDataFrame`.
+    Thin I/O wrapper around :func:`parse_dfop00_lines`.
 
     Args:
         source: Path to the DFOP00 JSONL file.
-        logger: Logger instance used to report file I/O errors, parse failures,
-            and empty-result warnings.
+        logger: Logger instance for I/O errors and empty-result warnings.
 
     Returns:
-        A validated :class:`ShotDataFrame` with one row per successful ping/reply
-        pair, or ``None`` if the file cannot be read or contains no valid pairs.
+        A validated :class:`GARPOSShotDataFrame`, or ``None`` on read error or
+        no valid pairs.
     """
-    processed = []
-
     try:
         with open(source, encoding="utf-8") as f:
             lines = f.readlines()
     except (FileNotFoundError, PermissionError, UnicodeDecodeError) as e:
         logger.error(f"Error reading {source}: {e}")
         return None
-
-    interrogation_parsed = None
-
-    for line in lines:
-        data = json.loads(line)
-        if data.get("event") == "interrogation":
-            try:
-                interrogation = NovatelInterrogationEvent(**data)
-                interrogation_parsed = novatel_interrogation_to_garpos_interrogation(interrogation)
-            except Exception:
-                interrogation_parsed = None
-
-        if data.get("event") == "range":
-            try:
-                reply_data = NovatelRangeEvent(**data)
-                reply_data_parsed = novatel_reply_to_garpos_reply(reply_data)
-            except Exception:
-                reply_data_parsed = None
-
-            if reply_data_parsed is not None and interrogation_parsed is not None:
-                try:
-                    merged_data = merge_interrogation_reply(interrogation_parsed, reply_data_parsed)
-                except AssertionError as e:
-                    logger.error(f"Assertion error in merging ping/reply data: {e}")
-                    merged_data = None
-
-                if merged_data is not None:
-                    processed.append(merged_data)
-
-    if not processed:
-        logger.error(f"No valid data found in {source}")
-        return None
-
-    df = pd.DataFrame(processed)
-    df["isUpdated"] = False
-    return GARPOSShotDataFrame.validate(df, lazy=True)
+    return parse_dfop00_lines(lines, logger)
 
 
 def dfop00_to_sfgdstf_seafloor_acoustic_data(

@@ -454,90 +454,47 @@ def deserialize_rangea(rangea_string: str) -> GNSSEpoch:
     return epoch
 
 
-def extract_rangea_from_qcpin(source: str | Path) -> list[GNSSEpoch]:
-    """
-    Extract and parse all RANGEA logs from a QC PIN file.
+def parse_rangea_epochs_from_dict(data: dict) -> list[GNSSEpoch]:
+    """Extract and parse all RANGEA logs from a pre-decoded QC PIN dict.
 
-    This function loads a QC PIN JSON file and searches through it for
-    NOV_RANGE observations containing raw RANGEA strings, parses them into
-    GNSSEpoch objects, and returns all unique epochs.
-
-    The JSON structure is expected to have entries like:
-        {
-            "interrogation": {"observations": {"NOV_RANGE": {"raw": "#RANGEA,...", "time": {...}}}},
-            "007BE1": {"observations": {"NOV_RANGE": {"raw": "#RANGEA,...", "time": {...}}}},
-            ...
-        }
+    Pure function: no filesystem access.  Pass the result of ``json.load()``.
 
     Args:
-        source: Path to the QC PIN file in JSON format
+        data: Decoded JSON object from a QC PIN file.
 
     Returns:
-        List of unique GNSSEpoch objects, deduplicated by GPS week/seconds.
-        Returns empty list if file cannot be read or contains no valid RANGEA logs.
-
-    Example:
-        >>> epochs = extract_rangea_from_qcpin("/path/to/file.pin")
-        >>> print(f"Found {len(epochs)} unique epochs")
+        List of unique GNSSEpoch objects.  Empty list if no valid RANGEA logs.
     """
-
-    path = Path(source)
-    epochs: list[GNSSEpoch] = []
-
-    try:
-        rangea_a_strings: list[str] = extract_rangea_strings_from_qcpin(path)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        print(f"Error reading QC PIN file: {path}")
-        return []
-    epochs.extend(deserialize_rangea(s) for s in rangea_a_strings)
-
-    return epochs
+    return [deserialize_rangea(s) for s in extract_rangea_strings_from_qcpin_dict(data)]
 
 
-def extract_rangea_strings_from_qcpin(source: str | Path) -> list[str]:
-    """
-    Extract raw RANGEA strings from a QC PIN file.
+def extract_rangea_strings_from_qcpin_dict(data: dict) -> list[str]:
+    """Extract raw RANGEA strings from a decoded QC PIN dict.
 
-    This function loads a QC PIN JSON file and searches through it for
-    NOV_RANGE observations containing raw RANGEA strings, returning a list
-    of all found RANGEA strings without parsing them into epochs.
+    Pure function: no filesystem access.
 
     Args:
-        source: Path to the QC PIN file in JSON format
+        data: Decoded JSON object from a QC PIN file.
+
     Returns:
-        List of raw RANGEA strings found in the file. Returns empty list if
-        file cannot be read or contains no valid RANGEA logs.
+        List of unique raw RANGEA strings found in the dict.
     """
-    path = Path(source)
-
-    try:
-        with open(path) as f:
-            data = json.load(f)
-    except UnicodeDecodeError:
-        return []
-
     if not isinstance(data, dict):
         return []
 
     rangea_strings: list[str] = []
 
-    def _extract_nov_range(obj: dict) -> str:
-        """Recursively search for NOV_RANGE entries."""
+    def _extract_nov_range(obj: dict) -> None:
         if not isinstance(obj, dict):
             return
-
-        # Check if this dict has NOV_RANGE with a raw field
         if "NOV_RANGE" in obj:
             nov_range = obj["NOV_RANGE"]
             if isinstance(nov_range, dict) and "raw" in nov_range:
                 raw_rangea = nov_range["raw"]
                 if isinstance(raw_rangea, str) and "#RANGEA" in raw_rangea:
                     rangea_strings.append(raw_rangea)
-
         if "observations" in obj:
             _extract_nov_range(obj["observations"])
-
-        # Recurse into all dict values
         for _, value in obj.items():
             if isinstance(value, dict):
                 _extract_nov_range(value)
@@ -547,6 +504,47 @@ def extract_rangea_strings_from_qcpin(source: str | Path) -> list[str]:
             _extract_nov_range(value)
 
     return list(set(rangea_strings))
+
+
+def extract_rangea_from_qcpin(source: str | Path) -> list[GNSSEpoch]:
+    """Extract and parse all RANGEA logs from a QC PIN JSON file.
+
+    Thin I/O wrapper around :func:`parse_rangea_epochs_from_dict`.
+
+    Args:
+        source: Path to the QC PIN file in JSON format.
+
+    Returns:
+        List of unique GNSSEpoch objects.  Empty list on read/parse error.
+    """
+    path = Path(source)
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        print(f"Error reading QC PIN file: {path}")
+        return []
+    return parse_rangea_epochs_from_dict(data)
+
+
+def extract_rangea_strings_from_qcpin(source: str | Path) -> list[str]:
+    """Extract raw RANGEA strings from a QC PIN JSON file.
+
+    Thin I/O wrapper around :func:`extract_rangea_strings_from_qcpin_dict`.
+
+    Args:
+        source: Path to the QC PIN file in JSON format.
+
+    Returns:
+        List of unique raw RANGEA strings.  Empty list on read/parse error.
+    """
+    path = Path(source)
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except UnicodeDecodeError:
+        return []
+    return extract_rangea_strings_from_qcpin_dict(data)
 
 
 def epoch_to_dict(epoch: GNSSEpoch) -> dict:

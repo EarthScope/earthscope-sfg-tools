@@ -15,39 +15,41 @@ from ..datamodels.observationdata.soundvelocity import SoundVelocityDataFrame
 
 logger = logging.getLogger(__name__)    
 
-@pa.check_types(lazy=True)
-def seabird_to_soundvelocity(source: str | Path,
-                             logger: logging.Logger = logger) -> DataFrame[SoundVelocityDataFrame]:
-    """Parse a Seabird CTD sound velocity profile file into a validated DataFrame.
+def parse_seabird_lines(
+    lines: list[str],
+    logger: logging.Logger = logger,
+) -> "DataFrame[SoundVelocityDataFrame] | None":
+    """Parse Seabird CTD SVP lines into a validated DataFrame.
 
-    Reads lines from a Seabird-formatted file, skipping the header section that
-    ends with ``*END*``, then extracts depth (column 0) and sound speed (column 5)
-    from each data row.
+    Pure function — no filesystem access. Pass the output of
+    ``f.readlines()`` or any list of strings.
 
     Args:
-        source: Path to the Seabird SVP file.
-        logger: Logger instance to use for info/error messages.
+        lines: Text lines from a Seabird SVP file, including the
+            header section that ends with ``*END*``.
+        logger: For info/error messages.
 
     Returns:
-        A validated :class:`SoundVelocityDataFrame` with ``depth`` (m) and
-        ``speed`` (m/s) columns, or ``None`` if no data rows are found.
+        Validated ``SoundVelocityDataFrame`` with ``depth`` and
+        ``speed`` columns, or ``None`` if no data rows follow
+        ``*END*``.
     """
-    with open(source) as f:
-        lines = f.readlines()
-        data = []
-        data_start = re.compile(r"\*END\*")
-        while lines:
-            line = lines.pop(0)
-            if data_start.match(line):
-                break
+    data = []
+    data_start = re.compile(r"\*END\*")
+    remaining = list(lines)
 
-        if not lines:
-            logger.error(f"No data found in the sound speed profile file {source}")
-            return None
+    while remaining:
+        line = remaining.pop(0)
+        if data_start.match(line):
+            break
 
-        for line in lines:
-            values = line.split()
-            data.append({"depth": float(values[0]), "speed": float(values[5])})
+    if not remaining:
+        logger.error("No data found in the sound speed profile lines")
+        return None
+
+    for line in remaining:
+        values = line.split()
+        data.append({"depth": float(values[0]), "speed": float(values[5])})
 
     df = pd.DataFrame(data)
     logger.info(
@@ -58,18 +60,47 @@ def seabird_to_soundvelocity(source: str | Path,
 
 
 @pa.check_types(lazy=True)
-def ctd_to_svp_v1(source: str | Path) -> DataFrame[SoundVelocityDataFrame]:
-    """Load a CTD sound velocity profile (v1 format) and extend it via interpolation.
+def seabird_to_soundvelocity(
+    source: str | Path,
+    logger: logging.Logger = logger,
+) -> DataFrame[SoundVelocityDataFrame]:
+    """Parse a Seabird CTD sound velocity profile file into a DataFrame.
 
-    Reads a comma-separated file with ``depth`` and ``speed`` columns, negates
-    depth values to convert from negative-down to positive-down convention, then
-    calls :func:`interpolate_svp` to extend the profile by 200 m.
+    Thin I/O wrapper around :func:`parse_seabird_lines`.
 
     Args:
-        source: Path to the CSV file containing depth and speed columns.
+        source: Path to the Seabird SVP file.
+        logger: Logger for info/error messages.
 
     Returns:
-        A validated :class:`SoundVelocityDataFrame` with ``depth`` (m) and
+        Validated ``SoundVelocityDataFrame`` with ``depth`` (m) and
+        ``speed`` (m/s) columns, or ``None`` if no data rows are
+        found after ``*END*``.
+
+    Example:
+        >>> df = seabird_to_soundvelocity("cast_001.cnv")
+        >>> df["depth"].max()
+        500.0
+    """
+    with open(source) as f:
+        lines = f.readlines()
+    return parse_seabird_lines(lines, logger)
+
+
+@pa.check_types(lazy=True)
+def ctd_to_svp_v1(source: str | Path) -> DataFrame[SoundVelocityDataFrame]:
+    """Load a comma-separated CTD SVP file and extend it via interpolation.
+
+    Negates depth values to convert from negative-down to positive-down
+    convention, then calls :func:`interpolate_svp` to append 200 m of
+    extrapolated speeds beyond the maximum measured depth.
+
+    Args:
+        source: Path to the comma-separated file with ``depth`` and
+            ``speed`` columns (no header).
+
+    Returns:
+        Validated ``SoundVelocityDataFrame`` with ``depth`` (m) and
         ``speed`` (m/s) columns.
     """
     df = pd.read_csv(source, names=["depth", "speed"])
@@ -80,18 +111,19 @@ def ctd_to_svp_v1(source: str | Path) -> DataFrame[SoundVelocityDataFrame]:
 
 @pa.check_types(lazy=True)
 def ctd_to_svp_v2(source: str | Path) -> DataFrame[SoundVelocityDataFrame]:
-    """Load a CTD sound velocity profile (v2 format) and extend it via interpolation.
+    """Load a whitespace-separated CTD SVP file and extend it via interpolation.
 
-    Reads a whitespace-separated file with ``depth`` and ``speed`` columns, negates
-    depth values to convert from negative-down to positive-down convention, adds a
-    tiny random jitter to speed values to break exact duplicates, then calls
-    :func:`interpolate_svp` to extend the profile by 200 m.
+    Negates depth values to convert from negative-down to positive-down
+    convention. Adds a sub-micrometre random jitter to speed values to
+    prevent exact duplicates, then calls :func:`interpolate_svp` to
+    append 200 m of extrapolated speeds beyond the maximum measured depth.
 
     Args:
-        source: Path to the whitespace-delimited file containing depth and speed columns.
+        source: Path to the whitespace-delimited file with ``depth``
+            and ``speed`` columns (no header).
 
     Returns:
-        A validated :class:`SoundVelocityDataFrame` with ``depth`` (m) and
+        Validated ``SoundVelocityDataFrame`` with ``depth`` (m) and
         ``speed`` (m/s) columns.
     """
     df = pd.read_csv(source, sep=r"\s+", names=["depth", "speed"])
@@ -102,20 +134,21 @@ def ctd_to_svp_v2(source: str | Path) -> DataFrame[SoundVelocityDataFrame]:
 
 
 def interpolate_svp(svp: pd.DataFrame, additional_depth: float = 200.0) -> pd.DataFrame:
-    """Extend a sound velocity profile by linearly interpolating beyond its maximum depth.
+    """Extend a sound velocity profile by linear extrapolation.
 
-    Appends rows from ``max_depth + 1`` to ``max_depth + additional_depth`` using
-    :func:`numpy.interp` based on the existing profile, allowing acoustic ray-tracing
-    to continue past the last measured depth.
+    Appends integer-metre depth rows from ``max_depth + 1`` to
+    ``max_depth + additional_depth`` using :func:`numpy.interp`,
+    allowing acoustic ray-tracing to continue past the deepest
+    measured sample.
 
     Args:
         svp: DataFrame with ``depth`` (m) and ``speed`` (m/s) columns.
-        additional_depth: Number of metres to extend the profile beyond its current
-            maximum depth. Defaults to 200.0 m.
+        additional_depth: Metres to append beyond the current maximum
+            depth. Defaults to 200.0.
 
     Returns:
-        The input DataFrame concatenated with the interpolated extension rows,
-        with the index reset.
+        Input DataFrame concatenated with the extrapolated rows,
+        index reset to be contiguous.
     """
     max_depth = svp["depth"].max()
     new_depths = np.arange(max_depth + 1, max_depth + additional_depth)

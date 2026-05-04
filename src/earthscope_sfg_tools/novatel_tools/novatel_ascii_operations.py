@@ -11,7 +11,8 @@ import numpy as np
 
 from ..utils.go_utils import find_binary, parse_cli_logs
 from ..utils.misc import listify
-from .utils import MetadataModel, resolve_metadata, write_metadata_json
+from .rinex_metadata import RinexMetadata
+from .utils import MetadataModel  # backward-compat alias
 
 logger = logging.getLogger(__name__)
 
@@ -122,20 +123,14 @@ def novatel_ascii_2rinex(
     elif isinstance(writedir, str):
         writedir = Path(writedir)
 
-    metadata = resolve_metadata(metadata=metadata, site=site)
-
+    meta = RinexMetadata.load(metadata, site=site)
     binary_path = find_binary("nova2rnx")
 
     logger.info(f"Converting and merging {files} ascii Novatel to RINEX", stacklevel=2)
-    # write metadata to writedir
-    if isinstance(metadata, dict):
-        outpath = writedir / f"{site}_metadata.json"
-        metadata = write_metadata_json(metadata, outpath)
 
-    assert isinstance(metadata, (str, Path)), "Metadata must be a path to a JSON file at this point"
-
-    with tempfile.TemporaryDirectory(dir="/tmp/") as workdir:
-        cmd = [str(binary_path), "-settings", str(metadata)]
+    with tempfile.TemporaryDirectory() as workdir:
+        metadata_path = meta.write(Path(workdir) / f"{meta.marker_name}_metadata.json")
+        cmd = [str(binary_path), "-settings", str(metadata_path)]
         if modulo_millis > 0:
             cmd.extend(["-modulo", str(modulo_millis)])
         for file in files:
