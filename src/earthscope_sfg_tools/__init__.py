@@ -1,9 +1,12 @@
 """earthscope_sfg_tools package."""
 
-from . import data_models, novatel_tools, seafloor_site_tools, sonardyne_tools
+from . import datamodels, novatel_tools, seafloor_site_tools, sonardyne_tools
+from .datamodels import metadata, observationdata
 
 __all__ = [
-    "data_models",
+    "datamodels",
+    "metadata",
+    "observationdata",
     "novatel_tools",
     "seafloor_site_tools",
     "sonardyne_tools",

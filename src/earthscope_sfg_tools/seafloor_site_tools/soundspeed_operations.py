@@ -11,7 +11,7 @@ import pandas as pd
 import pandera.pandas as pa
 from pandera.typing import DataFrame
 
-from ..data_models.observables import SoundVelocityDataFrame
+from ..datamodels.observationdata.soundvelocity import SoundVelocityDataFrame
 
 logger = logging.getLogger(__name__)    
 

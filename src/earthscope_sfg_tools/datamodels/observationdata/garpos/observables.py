@@ -6,7 +6,7 @@ import pandas as pd
 import pandera.pandas as pa
 from pandera.typing import Series
 
-from .constants import GNSS_START_TIME, LEAP_SECONDS
+from ..constants import GNSS_START_TIME, LEAP_SECONDS
 
 
 class AcousticDataFrame(pa.DataFrameModel):
@@ -32,7 +32,7 @@ class AcousticDataFrame(pa.DataFrameModel):
         add_missing_columns = True
 
 
-class ShotDataFrame(AcousticDataFrame):
+class GARPOSShotDataFrame(AcousticDataFrame):
     head0: Series[float]
     pitch0: Series[float]
     roll0: Series[float]
@@ -56,40 +56,6 @@ class ShotDataFrame(AcousticDataFrame):
         add_missing_columns = True
         coerce = True
         drop_invalid_rows = True
-
-
-class SoundVelocityDataFrame(pa.DataFrameModel):
-    depth: Series[float] = pa.Field(ge=0, le=10000, coerce=True)
-    speed: Series[float] = pa.Field(unique=True, ge=0, le=3800, coerce=True)
-
-    class Config:
-        coerce = True
-        drop_invalid_rows = True
-
-
-class KinPositionDataFrame(pa.DataFrameModel):
-    """Kinematic GNSS position solution stored in TileDB KinPosition arrays.
-
-    Columns match KinPositionArraySchema; time is the sparse dimension index.
-    """
-
-    time: Series[pd.DatetimeTZDtype] = pa.Field(
-        dtype_kwargs={"unit": "ms", "tz": "UTC"},
-        description="Observation timestamp [datetime64[ms, UTC]]",
-    )
-    latitude: Series[float] = pa.Field(ge=-90.0, le=90.0, description="Latitude [deg]")
-    longitude: Series[float] = pa.Field(ge=-180.0, le=180.0, description="Longitude [deg]")
-    height: Series[float] = pa.Field(description="Ellipsoidal height [m]")
-    east: Series[float] = pa.Field(description="East displacement [m]")
-    north: Series[float] = pa.Field(description="North displacement [m]")
-    up: Series[float] = pa.Field(description="Up displacement [m]")
-    number_of_satellites: Series[int] = pa.Field(ge=0, description="Number of tracked satellites")
-    pdop: Series[float] = pa.Field(ge=0.0, description="Position dilution of precision")
-    wrms: Series[float] = pa.Field(ge=0.0, description="Weighted RMS of position residuals [m]")
-
-    class Config:
-        coerce = True
-        strict = False
 
 
 class IMUPositionDataFrame(pa.DataFrameModel):

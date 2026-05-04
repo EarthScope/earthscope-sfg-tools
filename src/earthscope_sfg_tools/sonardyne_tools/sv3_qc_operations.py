@@ -8,8 +8,8 @@ import logging
 import pandas as pd
 from pandera.typing import DataFrame
 
-from ..data_models.observables import ShotDataFrame
-from ..data_models.sv3_models import NovatelInterrogationEvent, NovatelRangeEvent
+from ..datamodels.observationdata.garpos.observables import GARPOSShotDataFrame
+from ..datamodels.observationdata.parsing.sv3_models import NovatelInterrogationEvent, NovatelRangeEvent
 
 from .sv3_operations import (
     merge_interrogation_reply,
@@ -19,7 +19,7 @@ from .sv3_operations import (
 
 logger = logging.getLogger(__name__)
 
-def qcjson_to_shotdata(source: str | Path, logger: logging.Logger) -> DataFrame[ShotDataFrame] | None:
+def qcjson_to_shotdata(source: str | Path, logger: logging.Logger) -> DataFrame[GARPOSShotDataFrame] | None:
     """Parse a Sonardyne QC JSON file into a validated shot-data DataFrame.
 
     Reads the QC JSON file (trying UTF-8 first, falling back to latin-1), extracts
@@ -91,7 +91,7 @@ def qcjson_to_shotdata(source: str | Path, logger: logging.Logger) -> DataFrame[
     df = pd.DataFrame(processed)
     df["isUpdated"] = False
 
-    return ShotDataFrame.validate(df, lazy=True)
+    return GARPOSShotDataFrame.validate(df, lazy=True)
 
 
 def batch_qc_by_day(

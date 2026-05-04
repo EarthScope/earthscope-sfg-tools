@@ -13,12 +13,12 @@ import pandas as pd
 import tiledb
 from cloudpathlib import S3Path
 
-from ..data_models.observables import (
+from ..datamodels.observationdata.garpos.observables import (
     AcousticDataFrame,
     IMUPositionDataFrame,
-    KinPositionDataFrame,
-    ShotDataFrame,
+    GARPOSShotDataFrame,
 )
+from ..datamodels.observationdata.parsing.ppp import KinPositionDataFrame
 from ..novatel_tools import novatel_ascii_operations as nova_ops
 from ..novatel_tools.rangea_parser import GNSSEpoch
 from .schemas import (
@@ -282,7 +282,7 @@ class TDBIMUPositionArray(TBDArray):
 class TDBShotDataArray(TBDArray):
     """Handles TileDB storage for processed shot data."""
 
-    dataframe_schema = ShotDataFrame
+    dataframe_schema = GARPOSShotDataFrame
     array_schema = ShotDataArraySchema
     name = "Shot Data"
 

@@ -9,11 +9,12 @@ import pymap3d as pm
 from pandera.typing import DataFrame
 import logging
 
-from ..data_models.community_standards import SFGDSTFSeafloorAcousticData, SFGDTSFSite
-from ..data_models.constants import LEAP_SECONDS, TRIGGER_DELAY_SV3
-from ..data_models.log_models import SV3InterrogationData, SV3ReplyData
-from ..data_models.observables import ShotDataFrame
-from ..data_models.sv3_models import NovatelInterrogationEvent, NovatelRangeEvent
+from ..datamodels.observationdata.community.community_standards import SFGDSTFSeafloorAcousticData
+from ..datamodels.metadata.community.site import SFGDTSFSite
+from ..datamodels.observationdata.constants import LEAP_SECONDS, TRIGGER_DELAY_SV3
+from ..datamodels.observationdata.parsing.log_models import SV3InterrogationData, SV3ReplyData
+from ..datamodels.observationdata.garpos.observables import GARPOSShotDataFrame
+from ..datamodels.observationdata.parsing.sv3_models import NovatelInterrogationEvent, NovatelRangeEvent
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +140,7 @@ def merge_interrogation_reply(
     return dict(interrogation) | dict(reply)
 
 
-def dfop00_to_shotdata(source: str | Path, logger: logging.Logger) -> DataFrame[ShotDataFrame] | None:
+def dfop00_to_shotdata(source: str | Path, logger: logging.Logger) -> DataFrame[GARPOSShotDataFrame] | None:
     """Parse a DFOP00 JSONL log file into a validated shot-data DataFrame.
 
     Reads each line of the file as a JSON object.  Lines with ``event =
@@ -200,7 +201,7 @@ def dfop00_to_shotdata(source: str | Path, logger: logging.Logger) -> DataFrame[
 
     df = pd.DataFrame(processed)
     df["isUpdated"] = False
-    return ShotDataFrame.validate(df, lazy=True)
+    return GARPOSShotDataFrame.validate(df, lazy=True)
 
 
 def dfop00_to_sfgdstf_seafloor_acoustic_data(

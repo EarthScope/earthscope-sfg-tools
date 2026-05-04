@@ -8,9 +8,10 @@ Column names follow the gnatss constants convention:
 """
 
 from __future__ import annotations
-from turtle import pd
 
-from earthscope_sfg_tools.data_models.constants import GNSS_START_TIME
+import pandas as pd
+
+from earthscope_sfg_tools.datamodels.observationdata.constants import GNSS_START_TIME
 import pandera.pandas as pa
 from pandera.typing import Series
 

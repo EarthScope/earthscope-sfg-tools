@@ -1,4 +1,4 @@
-"""Pydantic models representing NovAtel/SV3 event payloads."""
+"""Pydantic models representing Sonardyne/SV3 event payloads."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator
 
-from .constants import GNSS_START_TIME
+from ..constants import GNSS_START_TIME
 
 
 class SV3GPSQuality(Enum):
@@ -22,7 +22,7 @@ class SV3GPSQuality(Enum):
     WAAS_SBAS = 9
 
 
-class NovatelSolutionStatus(Enum):
+class SonardyneSolutionStatus(Enum):
     SOL_COMPUTED = 0
     INSUFFICIENT_OBS = 1
     NO_CONVERGENCE = 2
@@ -40,7 +40,7 @@ class NovatelSolutionStatus(Enum):
     INVALID_RATE = 22
 
 
-class NovatelPositionType(Enum):
+class SonardynePositionType(Enum):
     NONE = 0
     FIXEDPOS = 1
     FIXEDHEIGHT = 2
@@ -80,39 +80,39 @@ class TimeData(BaseModel):
     status: str = Field(description="Status of the time data")
 
 
-class NovatelHeadingData(BaseModel):
+class SonardyneHeadingData(BaseModel):
     gpst: Decimal = Field(description="GPS time in seconds since GNSS start time", ge=0)
     h: Decimal = Field(description="GNSS Computed Heading in degrees", ge=0, le=360)
     p: Decimal = Field(description="GNSS Computed Pitch in degrees", ge=-90, le=90)
-    position_type: NovatelPositionType = Field(description="Type of position data")
+    position_type: SonardynePositionType = Field(description="Type of position data")
     receiver_status: str = Field(description="Status of the receiver")
     sdh: Decimal | None = Field(description="Standard deviation of heading in degrees", ge=0)
     sdp: Decimal | None = Field(description="Standard deviation of pitch in degrees", ge=0)
-    solution_type: NovatelSolutionStatus = Field(description="Solution type of the heading data")
+    solution_type: SonardyneSolutionStatus = Field(description="Solution type of the heading data")
     sv_used: int = Field(description="Number of satellites used in the solution", ge=0)
     sv_visible: int = Field(description="Number of satellites visible", ge=0, alias="sv_visable")
     time: TimeData = Field(description="Time data associated with the log")
 
 
-class NovatelINSData(BaseModel):
+class SonardyneINSData(BaseModel):
     gpst: Decimal = Field(description="GPS time in seconds since GNSS start time", ge=0)
     h: Decimal = Field(description="SPAN INS Computed Heading in degrees", ge=0, le=360)
     p: Decimal = Field(description="SPAN INS Computed Pitch in degrees", ge=-90, le=90)
     r: Decimal = Field(description="SPAN INS Computed Roll in degrees", ge=-180, le=180)
     receiver_status: str = Field(description="Status of the receiver")
-    solution_type: NovatelSolutionStatus = Field(description="Solution type of the INS data")
+    solution_type: SonardyneSolutionStatus = Field(description="Solution type of the INS data")
     time: TimeData = Field(description="Time data associated with the log")
     velx: Decimal = Field(description="SPAN INS measured acceleration X axis in m/s^2", alias="vx")
     vely: Decimal = Field(description="SPAN INS measured acceleration Y axis in m/s^2", alias="vy")
     velz: Decimal = Field(description="SPAN INS measured acceleration Z axis in m/s^2", alias="vz")
 
 
-class NovatelRangeData(BaseModel):
+class SonardyneRangeData(BaseModel):
     raw: str = Field(description="Raw range data as a string")
     time: TimeData = Field(description="Time data associated with the range data")
 
 
-class NovatelGNSSData(BaseModel):
+class SonardyneGNSSData(BaseModel):
     hae: Decimal = Field(description="Height above ellipsoid in meters", ge=-1000, le=1000)
     latitude: Decimal = Field(description="Latitude in degrees", ge=-90, le=90)
     longitude: Decimal = Field(description="Longitude in degrees", ge=-180, le=180)
@@ -124,7 +124,7 @@ class NovatelGNSSData(BaseModel):
     time: TimeData = Field(description="Time data associated with the log")
 
 
-class NovatelAHRSData(BaseModel):
+class SonardyneAHRSData(BaseModel):
     acx: Decimal = Field(description="Acceleration X axis in m/s^2")
     acy: Decimal = Field(description="Acceleration Y axis in m/s^2")
     acz: Decimal = Field(description="Acceleration Z axis in m/s^2")
@@ -135,7 +135,7 @@ class NovatelAHRSData(BaseModel):
     time: TimeData = Field(description="Time data associated with the log")
 
 
-class NovatelRangeDiagnosticData(BaseModel):
+class SonardyneRangeDiagnosticData(BaseModel):
     dbv: Decimal = Field(description="Decibel voltage in volts")
     snr: Decimal = Field(description="Signal-to-noise ratio in dB")
     xc: Decimal = Field(description="Cross-correlation % - signal quality")
@@ -148,9 +148,9 @@ class NovatelRangeDiagnosticData(BaseModel):
         return Decimal(value)
 
 
-class NovatelRangeReplyData(BaseModel):
+class SonardyneRangeReplyData(BaseModel):
     cn: str = Field(description="transponder ID", max_length=20)
-    diag: NovatelRangeDiagnosticData = Field(description="Range diagnostic data")
+    diag: SonardyneRangeDiagnosticData = Field(description="Range diagnostic data")
     range: Decimal = Field(description="Two-way travel time in seconds")
     tat: Decimal = Field(description="Beacon turn around time in seconds", ge=0)
 
@@ -160,28 +160,28 @@ class NovatelRangeReplyData(BaseModel):
         return float(value) / 1000.0
 
 
-class NovatelObservations(BaseModel):
-    AHRS: NovatelAHRSData | None = Field(description="AHRS data")
-    GNSS: NovatelGNSSData | None = Field(description="GNSS data")
-    NOV_HEADING: NovatelHeadingData | None = Field(description="Novatel heading data")
-    NOV_INS: NovatelINSData | None = Field(description="Novatel INS data")
-    NOV_RANGE: NovatelRangeData | None = Field(description="Novatel range data")
+class SonardyneObservations(BaseModel):
+    AHRS: SonardyneAHRSData | None = Field(description="AHRS data")
+    GNSS: SonardyneGNSSData | None = Field(description="GNSS data")
+    NOV_HEADING: SonardyneHeadingData | None = Field(description="Sonardyne heading data")
+    NOV_INS: SonardyneINSData | None = Field(description="Sonardyne INS data")
+    NOV_RANGE: SonardyneRangeData | None = Field(description="Sonardyne range data")
 
 
-class NovatelRangeEvent(BaseModel):
+class SonardyneRangeEvent(BaseModel):
     event: str = "range"
     event_id: int = Field(description="Tracking-cycle ID", ge=0)
-    observations: NovatelObservations = Field(description="Event observations")
-    range: NovatelRangeReplyData = Field(description="Range reply data")
+    observations: SonardyneObservations = Field(description="Event observations")
+    range: SonardyneRangeReplyData = Field(description="Range reply data")
     sequence: int = Field(description="Sequence ID", ge=0)
     time: TimeData = Field(description="Event time")
     uid: str | None = Field(description="Unique identifier", max_length=50)
 
 
-class NovatelInterrogationEvent(BaseModel):
+class SonardyneInterrogationEvent(BaseModel):
     event: str = "interrogation"
     event_id: int = Field(description="Tracking-cycle ID", ge=0)
-    observations: NovatelObservations = Field(description="Observations")
+    observations: SonardyneObservations = Field(description="Observations")
     sequence: int = Field(description="Sequence ID", ge=0)
     time: TimeData = Field(description="Event time")
     type: str = Field(description="Interrogation type")
