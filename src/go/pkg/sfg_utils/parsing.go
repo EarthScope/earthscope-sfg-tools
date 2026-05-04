@@ -12,9 +12,9 @@ import (
 	"time"
 
 	log "github.com/labstack/gommon/log"
-	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 	novatelascii "gitlab.com/earthscope/gnsstools/codecs/novatel/novatel_ascii"
 	novatelbinary "gitlab.com/earthscope/gnsstools/codecs/novatel/novatel_binary"
+	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 )
 
 type InspvaaRecord struct {
@@ -565,12 +565,20 @@ epochLoop:
 //
 // Returns:
 //   - A slice of observation.Epoch containing the extracted epochs.
-func ProcessFileNOVB(file string) ([]observation.Epoch,int,error) {
+func ProcessFileNOVB(file string,antIndex uint8) ([]observation.Epoch,int,error) {
 	f, err := os.Open(file)
 	if err != nil {
 		log.Fatalf("failed opening file: %s", err)
 	}
 	defer f.Close()
+	if antIndex < 0 {
+		log.Warnf("invalid antenna index %d, defaulting to 0", antIndex)
+		antIndex = 0
+	}
+	if antIndex > 1 {
+		log.Warnf("invalid antenna index %d, defaulting to 1", antIndex)
+		antIndex = 1
+	}
 
 	reader := bufio.NewReader(f)
 	epochs := []observation.Epoch{}
@@ -592,21 +600,43 @@ func ProcessFileNOVB(file string) ([]observation.Epoch,int,error) {
 				//log.Warnf("failed reading message: %s", err)
 				continue MessageLoop
 			}
-			if msg.MessageID == 140 {
-				msg140 := msg.DeserializeMessage140()
-				epoch, err := msg140.SerializeGNSSEpoch(msg.Time())
-				if err != nil {
-					log.Errorf("failed serializing epoch: %s", err)
-					fail_counter++
-					continue MessageLoop
+			switch msg.MessageID {
+
+				case 140:{
+					msg140 := msg.DeserializeMessage140()
+					epoch, err := msg140.SerializeGNSSEpoch(msg.Time())
+					if err != nil {
+						log.Errorf("failed serializing epoch: %s", err)
+						fail_counter++
+						continue MessageLoop
+					}
+					if len(epoch.Satellites) == 0 {
+						fail_counter++
+						continue MessageLoop
+					}
+					epochs = append(epochs, epoch)
 				}
-				if len(epoch.Satellites) == 0 {
-					fail_counter++
-					continue MessageLoop
+				case 2537: {
+					msg2537, err := msg.DeserializeMessage2537()
+					if err != nil {
+						log.Errorf("failed deserializing message 2537: %s", err)
+						fail_counter++
+						continue MessageLoop
+					}
+					epoch, err := msg2537.SerializeGNSSEpoch(msg.Time())
+					if err != nil {
+						log.Errorf("failed serializing epoch: %s", err)
+						fail_counter++
+						continue MessageLoop
+					}
+					if epoch.AntennaIndex == antIndex {
+						if len(epoch.Satellites) == 0 {
+							fail_counter++
+							continue MessageLoop
+						}
+						epochs = append(epochs, epoch)
+					}
 				}
-				epochs = append(epochs, epoch)
-			} else {
-				continue MessageLoop
 			}
 		}
 	return epochs, fail_counter, nil

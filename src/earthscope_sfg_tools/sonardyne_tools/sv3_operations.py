@@ -21,6 +21,20 @@ logger = logging.getLogger(__name__)
 def novatel_interrogation_to_garpos_interrogation(
     novatel_interrogation: NovatelInterrogationEvent,
 ) -> SV3InterrogationData:
+    """Convert a Novatel interrogation event to a GARPOS-compatible interrogation record.
+
+    Transforms geodetic GNSS coordinates to ECEF, applies the GPS leap-second
+    offset to the ping timestamp, and packages attitude and position uncertainty
+    into an :class:`SV3InterrogationData` object.
+
+    Args:
+        novatel_interrogation: Parsed Novatel interrogation event containing GNSS
+            position, AHRS attitude, and a common timestamp.
+
+    Returns:
+        An :class:`SV3InterrogationData` instance with ECEF position, attitude,
+        position standard deviations, and ping time (GPS time).
+    """
     east_ecef, north_ecef, up_ecef = pm.geodetic2ecef(
         float(novatel_interrogation.observations.GNSS.latitude),
         float(novatel_interrogation.observations.GNSS.longitude),
@@ -41,6 +55,21 @@ def novatel_interrogation_to_garpos_interrogation(
 
 
 def novatel_reply_to_garpos_reply(novatel_reply: NovatelRangeEvent) -> SV3ReplyData:
+    """Convert a Novatel range event to a GARPOS-compatible reply record.
+
+    Transforms geodetic GNSS coordinates to ECEF, computes the one-way acoustic
+    travel time by subtracting the transponder turnaround time (TAT) and the
+    hardware trigger delay from the raw range, and packages all fields into an
+    :class:`SV3ReplyData` object.
+
+    Args:
+        novatel_reply: Parsed Novatel range event containing GNSS position, AHRS
+            attitude, acoustic range diagnostics, and a common timestamp.
+
+    Returns:
+        An :class:`SV3ReplyData` instance with ECEF position, attitude, acoustic
+        diagnostics, TAT, one-way travel time, and return time (GPS time).
+    """
     east_ecef, north_ecef, up_ecef = pm.geodetic2ecef(
         float(novatel_reply.observations.GNSS.latitude),
         float(novatel_reply.observations.GNSS.longitude),
@@ -71,6 +100,26 @@ def merge_interrogation_reply(
     interrogation: SV3InterrogationData,
     reply: SV3ReplyData,
 ) -> dict | None:
+    """Validate and merge a matched interrogation/reply pair into a single dict.
+
+    Performs three sanity checks:
+
+    1. The reconstructed two-way range is non-zero (``> 1 mm``).
+    2. The time difference between ping and return is ``<= 15`` seconds.
+    3. The independently calculated return time matches the logged return time
+       to within ``1 µs``.
+
+    Args:
+        interrogation: GARPOS-formatted interrogation data for the outgoing ping.
+        reply: GARPOS-formatted reply data for the incoming acoustic return.
+
+    Returns:
+        A merged dictionary combining both dataclass instances, or ``None`` if
+        any assertion fails (the caller is expected to catch :class:`AssertionError`).
+
+    Raises:
+        AssertionError: If any of the range or timing sanity checks fail.
+    """
     rng = float(reply.tt) + float(reply.tat) + TRIGGER_DELAY_SV3
     assert abs(rng) > 1e-3, (
         f"Transponder {reply.transponderID} has range={abs(round(rng, 1))} "
@@ -90,14 +139,31 @@ def merge_interrogation_reply(
     return dict(interrogation) | dict(reply)
 
 
-def dfop00_to_shotdata(source: str | Path) -> DataFrame[ShotDataFrame] | None:
+def dfop00_to_shotdata(source: str | Path, logger: logging.Logger) -> DataFrame[ShotDataFrame] | None:
+    """Parse a DFOP00 JSONL log file into a validated shot-data DataFrame.
+
+    Reads each line of the file as a JSON object.  Lines with ``event =
+    'interrogation'`` are parsed as :class:`NovatelInterrogationEvent` records;
+    lines with ``event = 'range'`` are paired with the most recent interrogation
+    and merged via :func:`merge_interrogation_reply`.  Successfully merged pairs
+    are collected into a :class:`ShotDataFrame`.
+
+    Args:
+        source: Path to the DFOP00 JSONL file.
+        logger: Logger instance used to report file I/O errors, parse failures,
+            and empty-result warnings.
+
+    Returns:
+        A validated :class:`ShotDataFrame` with one row per successful ping/reply
+        pair, or ``None`` if the file cannot be read or contains no valid pairs.
+    """
     processed = []
 
     try:
         with open(source, encoding="utf-8") as f:
             lines = f.readlines()
     except (FileNotFoundError, PermissionError, UnicodeDecodeError) as e:
-        get_logger().logerr(f"Error reading {source}: {e}")
+        logger.error(f"Error reading {source}: {e}")
         return None
 
     interrogation_parsed = None
@@ -129,7 +195,7 @@ def dfop00_to_shotdata(source: str | Path) -> DataFrame[ShotDataFrame] | None:
                     processed.append(merged_data)
 
     if not processed:
-        get_logger().logerr(f"No valid data found in {source}")
+        logger.error(f"No valid data found in {source}")
         return None
 
     df = pd.DataFrame(processed)
@@ -140,10 +206,29 @@ def dfop00_to_shotdata(source: str | Path) -> DataFrame[ShotDataFrame] | None:
 def dfop00_to_sfgdstf_seafloor_acoustic_data(
     source: str | Path,
     site_data: SFGDTSFSite,
+    logger: logging.Logger,
 ) -> SFGDSTFSeafloorAcousticData | None:
-    shotdata = dfop00_to_shotdata(source)
+    """Convert a DFOP00 log file to the SFG DSTF seafloor acoustic data format.
+
+    Calls :func:`dfop00_to_shotdata` to obtain a raw shot DataFrame, then applies
+    the site ATD (Antenna-to-Transducer) offset to both transmit and receive ECEF
+    positions before assembling the standardised :class:`SFGDSTFSeafloorAcousticData`
+    DataFrame with MT IDs, travel times, timestamps, corrected positions, attitude
+    angles, acoustic diagnostics, and position uncertainties.
+
+    Args:
+        source: Path to the DFOP00 JSONL file.
+        site_data: Site metadata including the 3-element ATD offset vector
+            ``[dEast, dNorth, dUp]`` in metres.
+        logger: Logger instance used to report conversion failures.
+
+    Returns:
+        An :class:`SFGDSTFSeafloorAcousticData` instance, or ``None`` if
+        shot-data extraction fails.
+    """
+    shotdata = dfop00_to_shotdata(source, logger)
     if shotdata is None:
-        get_logger().logerr(f"Failed to convert {source} to ShotDataFrame")
+        logger.error(f"Failed to convert {source} to ShotDataFrame")
         return None
 
     x_transmit = shotdata.east0.apply(lambda x: x + site_data.ATDoffset[0])

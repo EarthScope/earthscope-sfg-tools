@@ -46,19 +46,6 @@ def nov0002rnx(
     return result
 
 
-def rnxqc(
-    input_file: str | Path,
-    logger: logging.Logger = logger,
-) -> subprocess.CompletedProcess:
-    """Perform RINEX quality-control checks using the Go utility."""
-    binary = find_binary("rnxqc")
-    input_file = Path(input_file)
-    assert input_file.exists(), f"Input file {input_file} does not exist."
-    cmd = [str(binary), str(input_file)]
-    logger.info(f"Running rnxqc: {' '.join(cmd)}")
-    return subprocess.run(cmd, capture_output=True, text=True, check=False)
-
-
 def _novatel_2rinex_wrapper(
     files: list[Path] | list[str],
     writedir: Path,

@@ -16,7 +16,6 @@ def nova2tile(
     input_files: list[str] | str,
     tdb_path: str,
     num_procs: int = 10,
-    search_paths: Optional[list[str]] = None,
     logger: logging.Logger = logger,
 ) -> subprocess.CompletedProcess:
     """Convert NovAtel ASCII logs to a TileDB array.
@@ -55,7 +54,6 @@ def novb2tile(
     input_files: list[str] | str,
     tdb_path: str,
     num_procs: int = 10,
-    search_paths: Optional[list[str]] = None,
     logger: logging.Logger = logger,
 ) -> subprocess.CompletedProcess:
     """Convert NovAtel NOV770 binary logs to a TileDB array.
@@ -93,7 +91,6 @@ def novb2tile(
 def nov0002tile(
     input_files: list[str] | str,
     tdb_path: str,
-    search_paths: Optional[list[str]] = None,
     logger: logging.Logger = logger,
 ) -> subprocess.CompletedProcess:
     """Convert NovAtel NOV000 binary logs to a TileDB array.
@@ -132,7 +129,6 @@ def tdb2rnx(
     time_interval: int = 1,
     processing_year: int = 0,
     modulo_millis: int = 0,
-    search_paths: Optional[list[str]] = None,
     logger: logging.Logger = logger,
 ) -> subprocess.CompletedProcess:
     """Convert a TileDB GNSS observation array to RINEX files.

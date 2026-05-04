@@ -5,8 +5,8 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/gommon v0.4.2
 	github.com/sirupsen/logrus v1.9.3
-	gitlab.com/earthscope/gnsstools v0.52.0
-	gitlab.com/earthscope/gnsstools/geodata v0.52.0
+	gitlab.com/earthscope/gnsstools v0.58.0
+	gitlab.com/earthscope/gnsstools/geodata v0.58.0
 )
 
 require (

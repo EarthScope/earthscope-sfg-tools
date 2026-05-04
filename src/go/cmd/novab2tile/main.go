@@ -75,6 +75,8 @@ func main() {
 	sfg_utils.LoadEnv()
 	tdbPathPtr := flag.String("tdb", "", "Path to the TileDB array")
 	numProcsPtr := flag.Int("procs", 10, "Number of concurrent processes")
+	antIndexPtr := flag.Int("antindex", 0, "Antenna index to filter on (0 or 1)")
+
 	flag.Parse()
 	filenames := flag.Args()
 	if len(filenames) == 0 {
@@ -108,7 +110,7 @@ func main() {
 				defer wg.Done()
 				sem <- struct{}{}
 				defer func() { <-sem }()
-			epochs, failCounter, err := sfg_utils.ProcessFileNOVB(filename)
+			epochs, failCounter, err := sfg_utils.ProcessFileNOVB(filename, uint8(*antIndexPtr))
 			if err != nil {
 				log.Errorf("error processing file: %v",err)
 				return
