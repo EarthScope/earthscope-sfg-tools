@@ -3,7 +3,6 @@ import json
 import shutil
 import subprocess
 import tempfile
-import uuid
 from pathlib import Path
 
 import logging
@@ -12,9 +11,40 @@ import numpy as np
 
 from ..utils.go_utils import find_binary, parse_cli_logs
 from ..utils.misc import listify
-from .utils import MetadataModel, check_metadata, check_metadata_path, get_metadatav2
+from .utils import MetadataModel, resolve_metadata, write_metadata_json
 
 logger = logging.getLogger(__name__)
+
+
+def nova2rnx(
+    input_files: list[str] | str,
+    settings_file: str | Path,
+    output_dir: Path | str | None = None,
+    modulo: int | None = None,
+    logger: logging.Logger = logger,
+) -> subprocess.CompletedProcess:
+    """Convert NovAtel ASCII logs to RINEX files using the Go utility."""
+    binary = find_binary("nova2rnx")
+
+    settings_file = Path(settings_file)
+    assert settings_file.exists(), f"Settings file {settings_file} does not exist."
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        assert output_dir.exists(), f"Output directory {output_dir} does not exist."
+
+    files = [Path(f) for f in listify(input_files)]
+    for file in files:
+        assert file.exists(), f"Input file {file} does not exist."
+
+    cmd = [str(binary), "-settings", str(settings_file)]
+    if modulo is not None:
+        cmd.extend(["-modulo", str(modulo)])
+    cmd.extend([str(file) for file in files])
+
+    logger.info(f"Running nova2rnx: {' '.join(cmd)}")
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=output_dir)
+    parse_cli_logs(result, logger)
+    return result
 
 
 
@@ -92,22 +122,7 @@ def novatel_ascii_2rinex(
     elif isinstance(writedir, str):
         writedir = Path(writedir)
 
-    if metadata is not None:
-        if isinstance(metadata, (str, Path)):
-            metadata = check_metadata_path(metadata)
-
-        elif isinstance(metadata, (dict, MetadataModel)):
-            metadata = check_metadata(metadata)
-
-        else:
-            raise ValueError(
-                f"Metadata must be a dict, MetadataModel, or path to a JSON file, got {type(metadata)}"
-            )
-    else:
-        assert site is not None, "Either metadata or site must be provided"
-        assert isinstance(site, str), f"Site must be a string, got {type(site)}"
-        assert len(site) == 4, f"Site must be 4 characters long, got {site}"
-        metadata = get_metadatav2(site, serialNumber=uuid.uuid4().hex[:10])
+    metadata = resolve_metadata(metadata=metadata, site=site)
 
     binary_path = find_binary("nova2rnx")
 
@@ -115,10 +130,7 @@ def novatel_ascii_2rinex(
     # write metadata to writedir
     if isinstance(metadata, dict):
         outpath = writedir / f"{site}_metadata.json"
-        with open(outpath, "w") as f:
-            json_object = json.dumps(metadata, indent=4)
-            f.write(json_object)
-        metadata = outpath
+        metadata = write_metadata_json(metadata, outpath)
 
     assert isinstance(metadata, (str, Path)), "Metadata must be a path to a JSON file at this point"
 

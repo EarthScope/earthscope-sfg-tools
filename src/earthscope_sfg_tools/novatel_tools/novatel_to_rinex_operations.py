@@ -4,19 +4,59 @@ import os
 import shutil
 import subprocess
 import tempfile
-import uuid
 from collections import defaultdict
 from pathlib import Path
 
 from ..utils.go_utils import BinaryNotFoundError, find_binary, parse_cli_logs
-from .utils import MetadataModel, check_metadata, check_metadata_path, get_metadatav2
-
-os.environ["DYLD_LIBRARY_PATH"] = os.environ.get("CONDA_PREFIX", "") + "/lib"
-os.environ["LD_LIBRARY_PATH"] = os.environ.get("CONDA_PREFIX", "") + "/lib"
+from .utils import MetadataModel, resolve_metadata, write_metadata_json
 
 # Don't use basicConfig as it configures the root logger with default format
 logger = logging.getLogger("ES_SFGTools.NovatelToRinex")
 logger.setLevel(logging.INFO)
+
+
+def nov0002rnx(
+    input_files: list[str] | str,
+    settings_file: str | Path,
+    output_dir: Path | str | None = None,
+    modulo: int | None = None,
+    logger: logging.Logger = logger,
+) -> subprocess.CompletedProcess:
+    """Convert NovAtel NOV000 binary logs to RINEX files using the Go utility."""
+    binary = find_binary("nov0002rnx")
+
+    files = [Path(f) for f in ([input_files] if isinstance(input_files, str) else list(input_files))]
+    for file in files:
+        assert file.exists(), f"Input file {file} does not exist."
+
+    settings_file = Path(settings_file)
+    assert settings_file.exists(), f"Settings file {settings_file} does not exist."
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        assert output_dir.exists(), f"Output directory {output_dir} does not exist."
+
+    cmd = [str(binary), "-settings", str(settings_file)]
+    if modulo is not None:
+        cmd.extend(["-modulo", str(modulo)])
+    cmd.extend([str(file) for file in files])
+
+    logger.info(f"Running nov0002rnx: {' '.join(cmd)}")
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=output_dir)
+    parse_cli_logs(result, logger)
+    return result
+
+
+def rnxqc(
+    input_file: str | Path,
+    logger: logging.Logger = logger,
+) -> subprocess.CompletedProcess:
+    """Perform RINEX quality-control checks using the Go utility."""
+    binary = find_binary("rnxqc")
+    input_file = Path(input_file)
+    assert input_file.exists(), f"Input file {input_file} does not exist."
+    cmd = [str(binary), str(input_file)]
+    logger.info(f"Running rnxqc: {' '.join(cmd)}")
+    return subprocess.run(cmd, capture_output=True, text=True, check=False)
 
 
 def _novatel_2rinex_wrapper(
@@ -84,9 +124,7 @@ def _novatel_2rinex_wrapper(
 
         site = metadata_dict.get("marker_name", "SIT1")
 
-        metadata_tmp_path = workdir / f"{site}_metadata.json"
-        with open(metadata_tmp_path, "w") as f:
-            json.dump(metadata_dict, f, indent=4)
+        metadata_tmp_path = write_metadata_json(metadata_dict, workdir / f"{site}_metadata.json")
 
         cmd = [str(binary_path), "-settings", str(metadata_tmp_path)]
         if modulo_millis > 0:
@@ -171,23 +209,7 @@ def novatel_binary_2rinex(
     when ``writedir`` is shared.
     """
 
-    if metadata is not None:
-        if isinstance(metadata, (str, Path)):
-            metadata = check_metadata_path(metadata)
-        elif isinstance(metadata, (dict, MetadataModel)):
-            metadata = check_metadata(metadata)
-        else:
-            raise ValueError(
-                f"Metadata must be a dict, MetadataModel, or path to a JSON file, got {type(metadata)}"
-            )
-    else:
-        if site is None:
-            raise ValueError("Either metadata or site must be provided")
-        if not isinstance(site, str):
-            raise ValueError(f"Site must be a string, got {type(site)}")
-        if len(site) != 4:
-            raise ValueError(f"Site must be 4 characters long, got {site}")
-        metadata = get_metadatav2(site, serialNumber=uuid.uuid4().hex[:10])
+    metadata = resolve_metadata(metadata=metadata, site=site)
 
     if isinstance(files, (str, Path)):
         file_paths: list[Path] = [Path(files)]

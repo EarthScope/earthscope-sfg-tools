@@ -7,6 +7,7 @@ import logging
 from typing import Optional
 
 from ...utils.go_utils import BinaryNotFoundError, find_binary, parse_cli_logs  # noqa: F401
+from ...utils.misc import listify
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ def nova2tile(
     """
     binary = find_binary("nova2tile")
 
-    files = [input_files] if isinstance(input_files, str) else list(input_files)
+    files = listify(input_files)
     cmd = [str(binary), "-tdb", tdb_path, "-procs", str(num_procs)]
     cmd.extend(files)
 
@@ -79,7 +80,7 @@ def novb2tile(
     """
     binary = find_binary("novb2tile")
 
-    files = [input_files] if isinstance(input_files, str) else list(input_files)
+    files = listify(input_files)
     cmd = [str(binary), "-tdb", tdb_path, "-procs", str(num_procs)]
     cmd.extend(files)
 
@@ -115,7 +116,7 @@ def nov0002tile(
     """
     binary = find_binary("nov0002tile")
 
-    files = [input_files] if isinstance(input_files, str) else list(input_files)
+    files = listify(input_files)
     cmd = [str(binary), "-tdb", tdb_path]
     cmd.extend(files)
 

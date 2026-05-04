@@ -1,6 +1,7 @@
 import datetime
 import json
 from pathlib import Path
+import uuid
 
 from pydantic import BaseModel, Field
 
@@ -90,3 +91,39 @@ def check_metadata(meta: dict | MetadataModel) -> dict:
         return meta.model_dump()
     else:
         raise ValueError(f"Metadata must be a dict or MetadataModel, got {type(meta)}")
+
+
+def resolve_metadata(
+    metadata: dict | MetadataModel | Path | str | None = None,
+    site: str | None = None,
+) -> dict | str:
+    """Validate or generate metadata for RINEX conversion workflows.
+
+    If ``metadata`` is provided, this validates either a metadata mapping/model or
+    a path to a metadata JSON file. If ``metadata`` is omitted, site-based default
+    metadata is generated.
+    """
+    if metadata is not None:
+        if isinstance(metadata, (str, Path)):
+            return check_metadata_path(metadata)
+        if isinstance(metadata, (dict, MetadataModel)):
+            return check_metadata(metadata)
+        raise ValueError(
+            f"Metadata must be a dict, MetadataModel, or path to a JSON file, got {type(metadata)}"
+        )
+
+    if site is None:
+        raise ValueError("Either metadata or site must be provided")
+    if not isinstance(site, str):
+        raise ValueError(f"Site must be a string, got {type(site)}")
+    if len(site) != 4:
+        raise ValueError(f"Site must be 4 characters long, got {site}")
+    return get_metadatav2(site, serialNumber=uuid.uuid4().hex[:10])
+
+
+def write_metadata_json(metadata: dict, output_path: Path | str) -> Path:
+    """Write validated metadata to a JSON file and return the path."""
+    output_path = Path(output_path)
+    with open(output_path, "w") as f:
+        json.dump(metadata, f, indent=4)
+    return output_path

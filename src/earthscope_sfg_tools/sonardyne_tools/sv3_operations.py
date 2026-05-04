@@ -7,13 +7,15 @@ from pathlib import Path
 import pandas as pd
 import pymap3d as pm
 from pandera.typing import DataFrame
+import logging
 
 from ..data_models.community_standards import SFGDSTFSeafloorAcousticData, SFGDTSFSite
 from ..data_models.constants import LEAP_SECONDS, TRIGGER_DELAY_SV3
 from ..data_models.log_models import SV3InterrogationData, SV3ReplyData
 from ..data_models.observables import ShotDataFrame
 from ..data_models.sv3_models import NovatelInterrogationEvent, NovatelRangeEvent
-from ..logging import get_logger
+
+logger = logging.getLogger(__name__)
 
 
 def novatel_interrogation_to_garpos_interrogation(
@@ -120,7 +122,7 @@ def dfop00_to_shotdata(source: str | Path) -> DataFrame[ShotDataFrame] | None:
                 try:
                     merged_data = merge_interrogation_reply(interrogation_parsed, reply_data_parsed)
                 except AssertionError as e:
-                    logger.logerr(f"Assertion error in merging ping/reply data: {e}")
+                    logger.error(f"Assertion error in merging ping/reply data: {e}")
                     merged_data = None
 
                 if merged_data is not None:

@@ -1,37 +1,10 @@
+"""RINEX quality-control helpers.
 
-from typing import Optional
-import logging
-import subprocess
+This module intentionally re-exports :func:`rnxqc` from the NovAtel RINEX
+operations module so there is a single implementation for invoking the QC
+binary while preserving the historical import path.
+"""
 
-from earthscope_sfg_tools.utils.go_utils import find_binary
+from ..novatel_tools.novatel_to_rinex_operations import rnxqc
 
-logger = logging.getLogger(__name__)
-
-def rnxqc(
-    input_file: str,
-    logger: logging.Logger = logger,
-) -> subprocess.CompletedProcess:
-    """Perform RINEX quality control checks.
-
-    Parameters
-    ----------
-    input_file : str
-        Path to RINEX file.
-
-    Returns
-    -------
-    subprocess.CompletedProcess
-        Subprocess result containing exit code and output.
-
-    Raises
-    ------
-    BinaryNotFoundError
-        If the rnxqc binary cannot be found.
-    """
-    binary = find_binary("rnxqc")
-
-    cmd = [str(binary), input_file]
-
-    logger.info(f"Running rnxqc: {' '.join(cmd)}", stacklevel=2)
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    return result
+__all__ = ["rnxqc"]

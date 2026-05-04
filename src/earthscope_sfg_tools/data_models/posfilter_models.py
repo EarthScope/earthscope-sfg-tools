@@ -8,106 +8,201 @@ Column names follow the gnatss constants convention:
 """
 
 from __future__ import annotations
+from turtle import pd
 
+from earthscope_sfg_tools.data_models.constants import GNSS_START_TIME
 import pandera.pandas as pa
 from pandera.typing import Series
 
 
-class INSPVAADataFrame(pa.DataFrameModel):
-    """INSPVAA: INS+GNSS combined antenna solution with ENU velocity.
+class INSPVAASchema(pa.DataFrameModel):
+    """Schema for the INSPVAA (NovAtel Level-1) DataFrame.
 
-    Minimum required columns for kalman_filtering() inspvaa_df input.
-    The function selects only time and the three velocity components;
-    additional columns (lat, lon, alt, roll, pitch, heading) are allowed.
+    Loaded via :func:`gnatss.loaders.load_novatel`.
+    Specification: https://docs.novatel.com/OEM7/Content/SPAN_Logs/INSPVA.htm
     """
 
-    time: Series[float] = pa.Field(description="J2000 epoch time [s]")
-    east: Series[float] = pa.Field(
-        nullable=True,
-        description="East velocity component [m/s]",
+    week: Series[int] = pa.Field(ge=0, description="GPS week number")
+    seconds: Series[float] = pa.Field(ge=0.0, description="GPS seconds of week")
+    lat: Series[float] = pa.Field(
+        ge=-90.0, le=90.0, description="Geodetic latitude [deg.]"
     )
+    lon: Series[float] = pa.Field(
+        ge=-180.0, le=180.0, description="Geodetic longitude [deg.]"
+    )
+    alt: Series[float] = pa.Field(description="Geodetic altitude [m]")
     north: Series[float] = pa.Field(
-        nullable=True,
-        description="North velocity component [m/s]",
+        description="Velocity in local tangent North direction [m/s]"
+    )
+    east: Series[float] = pa.Field(
+        description="Velocity in local tangent East direction [m/s]"
     )
     up: Series[float] = pa.Field(
-        nullable=True,
-        description="Up velocity component [m/s]",
+        description="Velocity in local tangent Up direction [m/s]"
+    )
+    roll: Series[float] = pa.Field(ge=-180.0, le=180.0, description="Roll angle [deg.]")
+    pitch: Series[float] = pa.Field(ge=-90.0, le=90.0, description="Pitch angle [deg.]")
+    heading: Series[float] = pa.Field(
+        ge=0.0, lt=360.0, description="Heading angle [deg.]"
+    )
+    time: Series[float] = pa.Field(
+        description="J2000 time [sec since 2000-01-01 12:00:00]"
     )
 
     class Config:
-        coerce = True
-        strict = False
+        name = "INSPVAASchema"
+        strict = False  # Allow extra columns added downstream
+        coerce = False
 
 
-class INSSTDEVADataFrame(pa.DataFrameModel):
-    """INSSTDEVA: INS+GNSS ENU velocity standard deviations.
+class INSSTDEVSchema(pa.DataFrameModel):
+    """Schema for the INSSTDEVA (NovAtel Level-1) DataFrame.
 
-    Minimum required columns for kalman_filtering() insstdeva_df input.
-    The function selects only time and the three ENU velocity sigma columns;
-    additional columns (lat_sig, lon_sig, alt_sig, cov_rr, etc.) are allowed.
+    Loaded via :func:`gnatss.loaders.load_novatel_std`.
+    Specification: https://docs.novatel.com/OEM7/Content/SPAN_Logs/INSSTDEV.htm
     """
 
-    time: Series[float] = pa.Field(description="J2000 epoch time [s]")
-    east_sig: Series[float] = pa.Field(
-        ge=0.0,
-        nullable=True,
-        description="East velocity standard deviation [m/s]",
+    week: Series[int] = pa.Field(ge=0, description="GPS week number")
+    seconds: Series[float] = pa.Field(ge=0.0, description="GPS seconds of week")
+    lat_sig: Series[float] = pa.Field(
+        ge=0.0, description="Latitude std deviation [deg.]"
     )
+    lon_sig: Series[float] = pa.Field(
+        ge=0.0, description="Longitude std deviation [deg.]"
+    )
+    alt_sig: Series[float] = pa.Field(ge=0.0, description="Altitude std deviation [m]")
     north_sig: Series[float] = pa.Field(
-        ge=0.0,
-        nullable=True,
-        description="North velocity standard deviation [m/s]",
+        ge=0.0, description="North velocity std deviation [m/s]"
+    )
+    east_sig: Series[float] = pa.Field(
+        ge=0.0, description="East velocity std deviation [m/s]"
     )
     up_sig: Series[float] = pa.Field(
-        ge=0.0,
+        ge=0.0, description="Up velocity std deviation [m/s]"
+    )
+    cov_rr: Series[float] = pa.Field(
+        ge=0.0, description="Roll-Roll covariance diagonal [deg.^2]"
+    )
+    cov_pp: Series[float] = pa.Field(
+        ge=0.0, description="Pitch-Pitch covariance diagonal [deg.^2]"
+    )
+    cov_hh: Series[float] = pa.Field(
+        ge=0.0, description="Heading-Heading covariance diagonal [deg.^2]"
+    )
+    ext_sol_stat: Series[str] = pa.Field(description="Extended solution status")
+    time_since_update: Series[str] = pa.Field(description="Time since last update")
+    time: Series[float] = pa.Field(
+        description="J2000 time [sec since 2000-01-01 12:00:00]"
+    )
+
+    class Config:
+        name = "INSSTDEVSchema"
+        strict = False
+        coerce = False
+
+
+class IMUPositionDataFrame(pa.DataFrameModel):
+    time: Series[pd.Timestamp] = pa.Field(
+        ge=GNSS_START_TIME.replace(tzinfo=None),
+        coerce=True,
+        description="Timestamp of the measurement in millisecond precision (UTC) [Y-M-D-H-M-S]",
+    )
+    azimuth: Series[float] = pa.Field(
+        ge=-180,
+        le=360,
+        coerce=True,
         nullable=True,
-        description="Up velocity standard deviation [m/s]",
+        description="Heading/azimuth of the vessel at the time of the measurement [degrees]",
+    )
+    pitch: Series[float] = pa.Field(
+        ge=-90,
+        le=90,
+        coerce=True,
+        nullable=True,
+        description="Pitch of the vessel at the time of the measurement [degrees]",
+    )
+    roll: Series[float] = pa.Field(
+        ge=-180,
+        le=180,
+        coerce=True,
+        nullable=True,
+        description="Roll of the vessel at the time of the measurement [degrees]",
+    )
+    latitude: Series[float] = pa.Field(
+        ge=-90,
+        le=90,
+        coerce=True,
+        description="Latitude from the GNSS receiver (WGS84) [degrees]",
+    )
+    longitude: Series[float] = pa.Field(
+        ge=-180,
+        le=360,
+        coerce=True,
+        description="Longitude from the GNSS receiver (WGS84) [degrees]",
+    )
+    height: Series[float] = pa.Field(
+        ge=-6378100,
+        le=6378100,
+        coerce=True,
+        description="Height above ellipsoid [m]",
+    )
+    latitude_std: Series[float] = pa.Field(
+        nullable=True,
+        description="Standard deviation of latitude [degrees]",
+    )
+    longitude_std: Series[float] = pa.Field(
+        nullable=True,
+        description="Standard deviation of longitude [degrees]",
+    )
+    height_std: Series[float] = pa.Field(
+        nullable=True,
+        description="Standard deviation of height [m]",
+    )
+    northVelocity: Series[float] = pa.Field(
+        coerce=True,
+        nullable=True,
+        description="North velocity [m/s]",
+    )
+    eastVelocity: Series[float] = pa.Field(
+        coerce=True,
+        nullable=True,
+        description="East velocity [m/s]",
+    )
+    upVelocity: Series[float] = pa.Field(
+        coerce=True,
+        nullable=True,
+        description="Up velocity [m/s]",
+    )
+    northVelocity_std: Series[float] = pa.Field(
+        nullable=True,
+        description="Standard deviation of north velocity [m/s]",
+    )
+    eastVelocity_std: Series[float] = pa.Field(
+        nullable=True,
+        description="Standard deviation of east velocity [m/s]",
+    )
+    upVelocity_std: Series[float] = pa.Field(
+        nullable=True,
+        description="Standard deviation of up velocity [m/s]",
+    )
+    roll_std: Series[float] = pa.Field(
+        nullable=True,
+        description="Standard deviation of roll [degrees]",
+    )
+    pitch_std: Series[float] = pa.Field(
+        nullable=True,
+        description="Standard deviation of pitch [degrees]",
+    )
+    azimuth_std: Series[float] = pa.Field(
+        nullable=True,
+        description="Standard deviation of azimuth/heading [degrees]",
     )
 
     class Config:
         coerce = True
-        strict = False
+        add_missing_columns = True
+        drop_invalid_rows = True
 
-
-class GPSPositionDataFrame(pa.DataFrameModel):
-    """GPS ECEF antenna positions with standard deviations.
-
-    Required columns for kalman_filtering() gps_df input.
-    Position and sigma columns are nullable because the GPS solutions may not
-    cover every timestamp in the merged filter dataset.
-    """
-
-    time: Series[float] = pa.Field(description="J2000 epoch time [s]")
-    ant_x: Series[float] = pa.Field(
-        nullable=True,
-        description="Antenna ECEF X position [m]",
-    )
-    ant_y: Series[float] = pa.Field(
-        nullable=True,
-        description="Antenna ECEF Y position [m]",
-    )
-    ant_z: Series[float] = pa.Field(
-        nullable=True,
-        description="Antenna ECEF Z position [m]",
-    )
-    ant_sigx: Series[float] = pa.Field(
-        ge=0.0,
-        nullable=True,
-        description="Antenna ECEF X standard deviation [m]",
-    )
-    ant_sigy: Series[float] = pa.Field(
-        ge=0.0,
-        nullable=True,
-        description="Antenna ECEF Y standard deviation [m]",
-    )
-    ant_sigz: Series[float] = pa.Field(
-        ge=0.0,
-        nullable=True,
-        description="Antenna ECEF Z standard deviation [m]",
-    )
-
-    class Config:
-        coerce = True
-        strict = False
-
+    @pa.parser("time")
+    def parse_time(cls, series: pd.Series) -> pd.Series:
+        return pd.to_datetime(series, unit="ms")
