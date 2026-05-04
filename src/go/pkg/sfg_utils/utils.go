@@ -15,7 +15,7 @@ import (
 	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
 	novatelascii "gitlab.com/earthscope/gnsstools/codecs/novatel/novatel_ascii"
-	"gitlab.com/earthscope/gnsstools/codecs/rinex"
+	rinex "gitlab.com/earthscope/gnsstools/codecs/rinex"
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 )
 
@@ -116,18 +116,19 @@ func WriteEpochs(epochs []observation.Epoch, settings *rinex.Settings) error {
 	}
 
 	defer outFile.Close()
-	header, err := rinex.NewHeader(settings)
-	if err != nil {
-		slog.Error("Error creating RINEX header", "error", err)
-		os.Exit(1)
-	}
 
-	header.Write(outFile)
+	writer := bufio.NewWriter(outFile)
+	defer writer.Flush()
+
+	obsWriter := rinex.NewObsWriter(writer, settings)
+	defer obsWriter.Flush()
+
 
 	for _, e := range epochs {
-		err = rinex.SerializeRnxObs(outFile, e, settings)
+		_, err := obsWriter.Write(e)
 		if err != nil {
 			slog.Error("Error writing observation", "error", err)
+			return err
 		}
 	}
 	return nil

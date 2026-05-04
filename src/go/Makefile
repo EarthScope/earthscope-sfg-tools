@@ -13,12 +13,11 @@ CONDA_PREFIX := $(shell echo $$CONDA_PREFIX)
 # Set DYLD_LIBRARY_PATH on macOS or LD_LIBRARY_PATH on Linux
 ifeq ($(OS),darwin)
     DYLD_LIBRARY_PATH := $(CONDA_PREFIX)/lib:$(DYLD_LIBRARY_PATH)
-    # Embed @executable_path/libs so bundled dylibs are found without conda
-    RPATH_FLAG = -Wl,-rpath,@executable_path/libs
+    # Use -Xlinker form to avoid Go CGO double-interpreting -Wl,-rpath,X
+    RPATH_FLAG = -Xlinker -rpath -Xlinker @executable_path/libs
 else
     LD_LIBRARY_PATH := $(CONDA_PREFIX)/lib:$(LD_LIBRARY_PATH)
-    # On Linux embed $ORIGIN/libs so bundled .so files are found without conda
-    RPATH_FLAG = -Wl,-rpath,$$ORIGIN/libs
+    RPATH_FLAG = -Xlinker -rpath -Xlinker $$ORIGIN/libs
 endif
 
 # CGO flags for TileDB

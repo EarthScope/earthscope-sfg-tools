@@ -4,6 +4,7 @@ authors = [
   { name = "Franklyn Dunbar", email = "franklyn.dunbar@earthscope.org" },
   { name = "Rachel Akie", email = "rachel.akie@earthscope.org" }
 ]
+# pypi dependencies
 dependencies = [
   "julian>=0.14",
   "numpy>=1.26",
@@ -29,5 +30,15 @@ platforms = ["osx-arm64"]
 
 [tool.pixi.pypi-dependencies]
 earthscope_sfg_tools = { path = ".", editable = true }
+
+[tool.pixi.feature.tiledb.dependencies]
+tiledb = ">=2.27"
+
+[tool.pixi.feature.tiledb.pypi-dependencies]
+tiledb = ">=0.30"
+
+[tool.pixi.environments]
+default = { features = [], solve-group = "default" }
+tiledb = { features = ["tiledb"], solve-group = "default" }
 
 [tool.pixi.tasks]

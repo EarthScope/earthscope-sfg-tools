@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"flag"
@@ -15,7 +16,6 @@ import (
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/sfg_utils"
 	log "github.com/sirupsen/logrus"
 	"gitlab.com/earthscope/gnsstools/codecs/rinex"
-	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 	"gitlab.com/earthscope/gnsstools/geodata/gnsstiledb"
 )
 
@@ -23,91 +23,6 @@ type BodyParameters struct {
 	URI         string                    `json:"uri"`
 	Region      string                    `json:"region"`
 	QueryParams gnsstiledb.ObsQueryParams `json:"query"`
-}
-
-func WriteFirstEpochBatch(epochs []observation.Epoch, settings *rinex.Settings) (string, error) {
-
-	if settings.RinexVersion.Major == rinex.MajorVersion3 || settings.RinexVersion.Major == rinex.MajorVersion4 {
-		// Write the RINEX header
-		for _, epoch := range epochs {
-
-			settings.ObservationsBySystem.AddEpoch(epoch)
-		}
-	}
-
-	startYear, startMonth, startDay := epochs[0].Time.Date()
-
-	currentDate := time.Date(startYear, startMonth, startDay, 0, 0, 0, 0, time.UTC)
-	dayOfYear := currentDate.YearDay()
-	outFile := &os.File{}
-	yy := startYear % 100
-	filename := fmt.Sprintf("%s%03d0.%02do", settings.MarkerName, dayOfYear, yy)
-	log.Infof("Generating Daily RINEX File For Year %d, Month %d, Day %d To %s", startYear, startMonth, startDay, filename)
-
-	// Check if the file already exists
-	if _, err := os.Stat(filename); err == nil {
-		log.Warnf("File Already Exists: %s", filename)
-		// delete the file
-		err := os.Remove(filename)
-		if err != nil {
-			return filename, fmt.Errorf("failed deleting existing file: %s", err)
-		}
-	}
-	outFile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
-
-	if err != nil {
-		return filename, fmt.Errorf("failed creating output file: %s", err)
-	}
-	header, err := rinex.NewHeader(settings)
-	if err != nil {
-		return filename, fmt.Errorf("failed creating RINEX header: %s", err)
-	}
-	err = header.Write(outFile)
-	if err != nil {
-		return filename, fmt.Errorf("failed writing RINEX header: %s", err)
-	}
-
-	for _, epoch := range epochs {
-		if epoch.Time.Day() != currentDate.Day() {
-			// close current output file if it exists
-			log.Warnf("Detected Epoch Out of Range: %s > %s", epoch.Time, currentDate)
-			if outFile != nil {
-				err := outFile.Close()
-				if err != nil {
-					log.Warnf("failed closing file: %s", err)
-				}
-			}
-			break
-
-		}
-		err = rinex.SerializeRnxObs(outFile, epoch, settings)
-
-		if err != nil {
-			log.Warnf("failed writing observation: %s", err)
-		}
-
-	}
-	defer outFile.Close()
-
-	return filename, nil
-}
-
-// WriteEpochs appends the provided epochs to the given file
-func WriteEpochs(epochs []observation.Epoch, filename string, settings *rinex.Settings) error {
-	log.Infof("Writing Epochs To File: %s", filename)
-	outFile, err := os.OpenFile(filename, os.O_RDWR|os.O_APPEND, 0644)
-	if err != nil {
-		return fmt.Errorf("failed creating output file:%s %s", filename, err)
-	}
-	defer outFile.Close()
-
-	for _, epoch := range epochs {
-		err = rinex.SerializeRnxObs(outFile, epoch, settings)
-		if err != nil {
-			log.Warnf("failed writing observation: %s", err)
-		}
-	}
-	return nil
 }
 
 // Helper function to parse metadata from the JSON file
@@ -179,7 +94,6 @@ func ProcessDaySlice(ctx context.Context, client *gnsstiledb.Client, daySlice gn
 	// break daySlice into 1 hour slices
 	hourSlices := GetHourSlice(daySlice, interval)
 	batchNum := 0
-	var currentFile string
 	for _, hourSlice := range hourSlices {
 		// Read the epochs from the TDB
 		queryParams := gnsstiledb.ObsQueryParams{
@@ -204,25 +118,56 @@ func ProcessDaySlice(ctx context.Context, client *gnsstiledb.Client, daySlice gn
 				continue
 			}
 		}
-
+		var obsWriter *rinex.ObsWriter
 		if batchNum == 0 {
 			settings.TimeOfFirst = epochs[0].Time
 			settings.TimeOfLast = daySlice.End // TODO find a way to update time of last OBS
-			filename, err := WriteFirstEpochBatch(epochs, settings)
-			if err != nil {
-				log.Warnf("Error Writing First Epoch Batch: %s", err)
-				break
-			}
-			log.Infof("Wrote First Epoch Batch To: %s", filename)
-			currentFile = filename
+			if settings.RinexVersion.Major == rinex.MajorVersion3 || settings.RinexVersion.Major == rinex.MajorVersion4 {
+				// Write the RINEX header
+				for _, epoch := range epochs {
 
-		} else {
-			err := WriteEpochs(epochs, currentFile, settings)
-			if err != nil {
-				log.Warnf("Error Writing Epochs: %s", err)
-				break
+					settings.ObservationsBySystem.AddEpoch(epoch)
+				}
 			}
-			log.Infof("Wrote Epochs To: %s", currentFile)
+
+			startYear, startMonth, startDay := epochs[0].Time.Date()
+
+			currentDate := time.Date(startYear, startMonth, startDay, 0, 0, 0, 0, time.UTC)
+			dayOfYear := currentDate.YearDay()
+		
+			yy := startYear % 100
+			filename := fmt.Sprintf("%s%03d0.%02do", settings.MarkerName, dayOfYear, yy)
+			log.Infof("Generating Daily RINEX File For Year %d, Month %d, Day %d To %s", startYear, startMonth, startDay, filename)
+
+			// Check if the file already exists
+			if _, err := os.Stat(filename); err == nil {
+				log.Warnf("File Already Exists: %s", filename)
+				// delete the file
+				err := os.Remove(filename)
+				if err != nil {
+					log.Errorf("failed deleting existing file: %s", err)
+				}
+			}
+			outFile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
+			defer outFile.Close()
+			if err != nil {
+				log.Errorf("failed creating output file: %s", err)
+			}
+			defer outFile.Close()
+			writer := bufio.NewWriter(outFile)
+			defer writer.Flush()
+			obsWriter = rinex.NewObsWriter(writer, settings)
+			
+
+		} 
+	
+		for _, epoch := range epochs {
+			_, err = obsWriter.Write(epoch)
+
+			if err != nil {
+				log.Warnf("failed writing observation: %s", err)
+			}
+
 		}
 		batchNum++
 	}

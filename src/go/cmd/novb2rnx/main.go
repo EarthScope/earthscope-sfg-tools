@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/sfg_utils"
-	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 	"gitlab.com/earthscope/gnsstools/codecs/rinex"
+	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 )
 
 var (
@@ -28,7 +28,7 @@ func main() {
 	metaPtr := flag.String("settings", "", "settings file")
 	moduloPtr := flag.Int64("modulo", 0, "decimation modulo in milliseconds (e.g., 100 for 10 Hz , 1000 for 1 Hz, 15000 for 15s intervals). If 0, no decimation is applied.")
 	numRoutinesPtr := flag.Int("numroutines", 1, "number of concurrent goroutines to use for processing files")
-	
+	antIndexPtr := flag.Int("antindex", 0, "index of antenna to use for position and clock in case of multiple antennas in the file")
 	flag.Parse()
 
 	filenames := flag.Args()
@@ -93,7 +93,7 @@ func main() {
 			defer func() { <-sem }()
 			
 			for _, fileNameTime := range fileNameTimes {
-				file_epochs, fails, err := sfg_utils.ProcessFileNOVB(fileNameTime.Filename)
+				file_epochs, fails, err := sfg_utils.ProcessFileNOVB(fileNameTime.Filename, uint8(*antIndexPtr))
 
 				if err != nil {
 					slog.Error("Error processing file", "filename", fileNameTime.Filename, "error", err)
