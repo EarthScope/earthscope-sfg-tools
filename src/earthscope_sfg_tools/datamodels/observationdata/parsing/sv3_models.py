@@ -11,6 +11,8 @@ from ..constants import GNSS_START_TIME
 
 
 class SV3GPSQuality(Enum):
+    """GPS fix quality codes reported in Sonardyne GNSS data."""
+
     FIX_NOT_AVAILABLE = 0
     SINGLE_POINT = 1
     PSEUDO_RANGE_DIFFERENTIAL = 2
@@ -23,6 +25,8 @@ class SV3GPSQuality(Enum):
 
 
 class SonardyneSolutionStatus(Enum):
+    """NovAtel/Sonardyne position solution status codes."""
+
     SOL_COMPUTED = 0
     INSUFFICIENT_OBS = 1
     NO_CONVERGENCE = 2
@@ -41,6 +45,8 @@ class SonardyneSolutionStatus(Enum):
 
 
 class SonardynePositionType(Enum):
+    """NovAtel/Sonardyne position type identifiers."""
+
     NONE = 0
     FIXEDPOS = 1
     FIXEDHEIGHT = 2
@@ -74,6 +80,7 @@ class SonardynePositionType(Enum):
 
 
 class TimeData(BaseModel):
+    """Timestamp block from a Sonardyne SV3 event JSON."""
     common: Decimal = Field(description="TZ unaware UNIX time", ge=GNSS_START_TIME.timestamp())
     instrument: Decimal = Field(description="Instrument time in seconds", ge=0)
     start_count: int = Field(description="Start count for the time", ge=0)
@@ -81,6 +88,8 @@ class TimeData(BaseModel):
 
 
 class SonardyneHeadingData(BaseModel):
+    """GNSS dual-antenna heading solution from a Sonardyne event log."""
+
     gpst: Decimal = Field(description="GPS time in seconds since GNSS start time", ge=0)
     h: Decimal = Field(description="GNSS Computed Heading in degrees", ge=0, le=360)
     p: Decimal = Field(description="GNSS Computed Pitch in degrees", ge=-90, le=90)
@@ -95,6 +104,8 @@ class SonardyneHeadingData(BaseModel):
 
 
 class SonardyneINSData(BaseModel):
+    """NovAtel SPAN INS attitude and velocity solution from a Sonardyne event log."""
+
     gpst: Decimal = Field(description="GPS time in seconds since GNSS start time", ge=0)
     h: Decimal = Field(description="SPAN INS Computed Heading in degrees", ge=0, le=360)
     p: Decimal = Field(description="SPAN INS Computed Pitch in degrees", ge=-90, le=90)
@@ -108,11 +119,15 @@ class SonardyneINSData(BaseModel):
 
 
 class SonardyneRangeData(BaseModel):
+    """Raw range string and timestamp from a Sonardyne acoustic reply."""
+
     raw: str = Field(description="Raw range data as a string")
     time: TimeData = Field(description="Time data associated with the range data")
 
 
 class SonardyneGNSSData(BaseModel):
+    """GNSS position fix and standard deviations from a Sonardyne event log."""
+
     hae: Decimal = Field(description="Height above ellipsoid in meters", ge=-1000, le=1000)
     latitude: Decimal = Field(description="Latitude in degrees", ge=-90, le=90)
     longitude: Decimal = Field(description="Longitude in degrees", ge=-180, le=180)
@@ -125,6 +140,8 @@ class SonardyneGNSSData(BaseModel):
 
 
 class SonardyneAHRSData(BaseModel):
+    """AHRS attitude (heading, pitch, roll) and acceleration from a Sonardyne event log."""
+
     acx: Decimal = Field(description="Acceleration X axis in m/s^2")
     acy: Decimal = Field(description="Acceleration Y axis in m/s^2")
     acz: Decimal = Field(description="Acceleration Z axis in m/s^2")
@@ -136,6 +153,8 @@ class SonardyneAHRSData(BaseModel):
 
 
 class SonardyneRangeDiagnosticData(BaseModel):
+    """Acoustic signal quality diagnostics for one transponder reply."""
+
     dbv: Decimal = Field(description="Decibel voltage in volts")
     snr: Decimal = Field(description="Signal-to-noise ratio in dB")
     xc: Decimal = Field(description="Cross-correlation % - signal quality")
@@ -149,6 +168,8 @@ class SonardyneRangeDiagnosticData(BaseModel):
 
 
 class SonardyneRangeReplyData(BaseModel):
+    """Acoustic range reply from one transponder, including TAT and diagnostics."""
+
     cn: str = Field(description="transponder ID", max_length=20)
     diag: SonardyneRangeDiagnosticData = Field(description="Range diagnostic data")
     range: Decimal = Field(description="Two-way travel time in seconds")
@@ -161,6 +182,8 @@ class SonardyneRangeReplyData(BaseModel):
 
 
 class SonardyneObservations(BaseModel):
+    """Bundle of all sensor observations attached to one Sonardyne event."""
+
     AHRS: SonardyneAHRSData | None = Field(description="AHRS data")
     GNSS: SonardyneGNSSData | None = Field(description="GNSS data")
     NOV_HEADING: SonardyneHeadingData | None = Field(description="Sonardyne heading data")
@@ -169,6 +192,8 @@ class SonardyneObservations(BaseModel):
 
 
 class SonardyneRangeEvent(BaseModel):
+    """Full Sonardyne range (reply) event parsed from a DFOP00 JSONL log."""
+
     event: str = "range"
     event_id: int = Field(description="Tracking-cycle ID", ge=0)
     observations: SonardyneObservations = Field(description="Event observations")
@@ -179,6 +204,8 @@ class SonardyneRangeEvent(BaseModel):
 
 
 class SonardyneInterrogationEvent(BaseModel):
+    """Full Sonardyne interrogation event parsed from a DFOP00 JSONL log."""
+
     event: str = "interrogation"
     event_id: int = Field(description="Tracking-cycle ID", ge=0)
     observations: SonardyneObservations = Field(description="Observations")

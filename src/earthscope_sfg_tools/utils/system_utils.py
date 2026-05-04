@@ -1,9 +1,17 @@
 import platform
 
 def get_system_architecture() -> tuple[str, str]:
-    """Get the current system and architecture
+    """Return the normalised OS name and CPU architecture.
+
+    Maps Python's ``platform`` output to the naming convention used by
+    the Go binary build system (e.g. ``x86_64`` → ``amd64``).
+
     Returns:
-        Tuple[str, str]: A tuple containing the system and architecture.
+        A ``(system, arch)`` tuple such as ``('darwin', 'arm64')`` or
+        ``('linux', 'amd64')``.
+
+    Raises:
+        ValueError: If the platform or architecture is not supported.
     """
     system = platform.system().lower()
     arch = platform.machine().lower()
@@ -44,6 +52,19 @@ EXCEPTIONS_DICT_MACOS = {
 
 
 def raise_exception(string: str) -> Exception | None:
+    """Return the exception class matching an error string, or ``None``.
+
+    Looks up the stripped input against the platform-appropriate
+    exceptions dictionary.  The caller is responsible for raising the
+    returned class.
+
+    Args:
+        string: Error text to test, typically from subprocess stderr.
+
+    Returns:
+        The matching exception class (e.g. ``DYLDLibraryException``),
+        or ``None`` if no pattern matches.
+    """
     string = string.strip()
     sys, _ = get_system_architecture()
     if sys == "linux":

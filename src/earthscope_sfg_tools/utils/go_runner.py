@@ -163,10 +163,18 @@ class GoBinaryRunner:
         extra_flags: list[str] | None = None,
         cwd: Path | None = None,
     ) -> subprocess.CompletedProcess:
-        """Run the binary and return the raw CompletedProcess.
+        """Run the binary without output-file collection.
 
-        No output-file handling, no temp workdir.  Intended for QC tools
-        whose useful output is stdout/stderr rather than files.
+        No temp workdir is created.  Intended for QC tools whose useful
+        output is stdout/stderr rather than produced files.
+
+        Args:
+            input_files: One or more input file paths.
+            extra_flags: Optional CLI flags inserted before file arguments.
+            cwd: Working directory for the subprocess. Defaults to ``'.'``.
+
+        Returns:
+            The raw ``subprocess.CompletedProcess`` from the binary.
         """
         files = _coerce_files(input_files)
         cmd = [str(self._binary)] + (extra_flags or []) + [str(f) for f in files]
@@ -178,13 +186,22 @@ class GoBinaryRunner:
 
     @property
     def binary_path(self) -> Path:
+        """Resolved filesystem path to the Go binary."""
         return self._binary
 
     @classmethod
     def available_binaries(cls, names: list[str]) -> dict[str, Path | None]:
-        """Probe binary names; return a dict of name → resolved path (or None).
+        """Probe binary names and return a mapping of name to resolved path.
 
         Useful for health-checks and CI pre-flight checks.
+
+        Args:
+            names: List of logical binary names to probe (e.g.
+                ``['nova2rnx', 'nov0002rnx']``).
+
+        Returns:
+            Dict mapping each name to its resolved ``Path``, or ``None``
+            if the binary is not found.
         """
         result: dict[str, Path | None] = {}
         for name in names:

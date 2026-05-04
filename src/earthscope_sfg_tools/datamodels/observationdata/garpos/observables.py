@@ -10,6 +10,12 @@ from ..constants import GNSS_START_TIME, LEAP_SECONDS
 
 
 class AcousticDataFrame(pa.DataFrameModel):
+    """Base Pandera schema for raw acoustic ranging data.
+
+    Defines the minimal set of columns required by all acoustic shot
+    DataFrames: transponder ID, ping and return timestamps (GPS seconds),
+    one-way travel time, signal diagnostics, TAT, and SNR.
+    """
     transponderID: Series[str] = pa.Field(description="Unique identifier", coerce=True)
     pingTime: Series[float] = pa.Field(
         ge=GNSS_START_TIME.timestamp() - LEAP_SECONDS,
@@ -33,6 +39,12 @@ class AcousticDataFrame(pa.DataFrameModel):
 
 
 class GARPOSShotDataFrame(AcousticDataFrame):
+    """Pandera schema for a GARPOS-ready shot DataFrame.
+
+    Extends :class:`AcousticDataFrame` with full ECEF position and
+    attitude columns for both the transmit (``*0``) and receive (``*1``)
+    epochs, plus optional position standard deviations.
+    """
     head0: Series[float]
     pitch0: Series[float]
     roll0: Series[float]

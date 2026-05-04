@@ -66,7 +66,8 @@ def _novatel_2rinex_wrapper(
             flags += ["-modulo", str(modulo_millis)]
         if num_routines > 1:
             flags += ["-numroutines", str(num_routines)]
-        flags += ["-antindex", str(antindex)]
+        if antindex > 0:
+            flags += ["-antindex", str(antindex)]
         return flags
 
     runner = GoBinaryRunner(

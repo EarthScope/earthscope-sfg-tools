@@ -14,7 +14,18 @@ _runner = GoBinaryRunner("rnxqc", log=logger)
 def rnxqc(
     input_file: str | Path,
 ) -> subprocess.CompletedProcess:
-    """Perform RINEX quality-control checks using the Go utility."""
+    """Run RINEX quality-control checks using the Go ``rnxqc`` binary.
+
+    Args:
+        input_file: Path to the RINEX file to inspect.
+
+    Returns:
+        The raw ``subprocess.CompletedProcess``; stdout/stderr contain
+        the quality-control report produced by the binary.
+
+    Raises:
+        FileNotFoundError: If ``input_file`` does not exist.
+    """
     input_file = Path(input_file)
     if not input_file.exists():
         raise FileNotFoundError(f"Input file {input_file} does not exist.")

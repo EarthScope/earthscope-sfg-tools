@@ -145,7 +145,7 @@ class TestNov770FileRouting:
             mock_wrap.return_value = []
             novatel_binary_2rinex(files=[FIXTURE_RAW], writedir=tmp_path, site=SITE)
 
-        assert mock_wrap.call_args.kwargs["metadata"]["marker_name"] == SITE
+        assert mock_wrap.call_args.kwargs["metadata"].marker_name == SITE
 
     def test_missing_file_raises_file_not_found(self, tmp_path, metadata):
         """A .raw path that does not exist should raise FileNotFoundError."""

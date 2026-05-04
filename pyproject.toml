@@ -28,6 +28,10 @@ requires = ["hatchling"]
 channels = ["conda-forge"]
 platforms = ["osx-arm64", "osx-64", "linux-64", "win-64"]
 
+[tool.pixi.dependencies]
+pytest = ">=8"
+ruff = ">=0.4"
+
 [tool.pixi.pypi-dependencies]
 earthscope_sfg_tools = { path = ".", editable = true }
 
@@ -46,3 +50,7 @@ tiledb = { features = ["tiledb"], solve-group = "default" }
 geolab = { features = ["jupyter","tiledb"], solve-group = "default" }
 
 [tool.pixi.tasks]
+test = { cmd = "pytest tests/ -v", description = "Run the test suite" }
+lint = { cmd = "ruff check src/ tests/", description = "Lint with ruff" }
+format-check = { cmd = "ruff format --check src/ tests/", description = "Check formatting" }
+format = { cmd = "ruff format src/ tests/", description = "Auto-format source" }

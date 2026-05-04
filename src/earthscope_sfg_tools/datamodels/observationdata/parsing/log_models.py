@@ -10,6 +10,12 @@ getcontext().prec = 10
 
 
 class SV3InterrogationData(BaseModel):
+    """GARPOS-formatted interrogation record for one acoustic ping.
+
+    Holds the ECEF position and attitude of the vessel transducer at
+    ping time, position standard deviations, and the outgoing ping
+    timestamp in GPS seconds.
+    """
     head0: Decimal
     pitch0: Decimal
     roll0: Decimal
@@ -23,6 +29,13 @@ class SV3InterrogationData(BaseModel):
 
 
 class SV3ReplyData(BaseModel):
+    """GARPOS-formatted reply record for one acoustic return.
+
+    Extends the interrogation geometry with the receive-epoch ECEF
+    position and attitude, transponder ID, acoustic diagnostics (SNR,
+    dBV, cross-correlation), hardware turnaround time (TAT), one-way
+    travel time, and return timestamp in GPS seconds.
+    """
     head1: Decimal
     pitch1: Decimal
     roll1: Decimal

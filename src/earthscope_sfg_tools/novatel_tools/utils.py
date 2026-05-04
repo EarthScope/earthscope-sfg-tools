@@ -25,6 +25,23 @@ def get_metadatav2(
     antennaPosition: list = None,
     antennaeOffsetHEN: list = None,
 ) -> dict:
+    """Build a RinexMetadata dict with sensible defaults.
+
+    .. deprecated::
+        Prefer ``RinexMetadata.load()`` in new code.
+
+    Args:
+        site: 4-character marker name.
+        serialNumber: Receiver serial number. Defaults to
+            ``'XXXXXXXXXX'``.
+        antennaPosition: ``[X, Y, Z]`` reference position in metres.
+            Defaults to ``[0, 0, 0]``.
+        antennaeOffsetHEN: ``[H, E, N]`` antenna offset in metres.
+            Defaults to ``[0, 0, 0]``.
+
+    Returns:
+        Validated metadata as a plain ``dict``.
+    """
     if antennaPosition is None:
         antennaPosition = [0, 0, 0]
     if antennaeOffsetHEN is None:
@@ -38,13 +55,35 @@ def get_metadatav2(
 
 
 def check_metadata_path(metadata_path: Path | str) -> str:
-    """Validate a JSON metadata file path and return it as a string."""
+    """Validate a JSON metadata file path and return it as a string.
+
+    Args:
+        metadata_path: Path to an existing JSON metadata file.
+
+    Returns:
+        The path as a ``str``.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        pydantic.ValidationError: If the file fails schema validation.
+    """
     RinexMetadata.load(metadata_path)  # validates; raises on bad schema or missing file
     return str(metadata_path)
 
 
 def check_metadata(meta: dict | RinexMetadata) -> dict:
-    """Validate a metadata dict or model and return a dict."""
+    """Validate a metadata dict or model and return a plain dict.
+
+    Args:
+        meta: A raw metadata ``dict`` or an existing
+            :class:`RinexMetadata` instance.
+
+    Returns:
+        Validated metadata as a plain ``dict``.
+
+    Raises:
+        pydantic.ValidationError: If the data fails schema validation.
+    """
     return RinexMetadata.load(meta).model_dump()
 
 
@@ -52,10 +91,30 @@ def resolve_metadata(
     metadata: "dict | RinexMetadata | Path | str | None" = None,
     site: str | None = None,
 ) -> RinexMetadata:
-    """Resolve and validate metadata. Returns a RinexMetadata instance."""
+    """Resolve and validate metadata from any supported source.
+
+    Thin shim around :meth:`RinexMetadata.load` kept for import
+    compatibility.
+
+    Args:
+        metadata: A ``dict``, JSON file path, existing
+            :class:`RinexMetadata`, or ``None`` (requires ``site``).
+        site: 4-character site code used when ``metadata`` is ``None``.
+
+    Returns:
+        A validated :class:`RinexMetadata` instance.
+    """
     return RinexMetadata.load(metadata, site=site)
 
 
 def write_metadata_json(metadata: dict, output_path: Path | str) -> Path:
-    """Write a metadata dict to a JSON file and return the path."""
+    """Write a metadata dict to a JSON file and return the path.
+
+    Args:
+        metadata: Plain ``dict`` of RINEX metadata fields.
+        output_path: Destination file path (parent must exist).
+
+    Returns:
+        The resolved ``Path`` of the written file.
+    """
     return RinexMetadata.load(metadata).write(output_path)
