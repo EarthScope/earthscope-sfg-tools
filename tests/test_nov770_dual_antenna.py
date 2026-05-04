@@ -26,9 +26,9 @@ def novb2rnxo_available():
     from earthscope_sfg_tools.utils.go_utils import find_binary
 
     try:
-        find_binary("novb2rnxo")
+        find_binary("novb2rnx")
     except BinaryNotFoundError:
-        pytest.skip("novb2rnxo binary not available")
+        pytest.skip("novb2rnx binary not available")
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +59,9 @@ class TestNov770DualAntennaIntegration:
             assert path.exists()
             assert path.stat().st_size > 0, f"RINEX file {path} is empty"
 
-    def test_rinex_files_written_to_writedir(self, tmp_path, metadata, novb2rnxo_available):
+    def test_rinex_files_written_to_writedir(
+        self, tmp_path, metadata, novb2rnxo_available
+    ):
         """All output RINEX files should land in writedir."""
         rinex_files = novatel_binary_2rinex(
             files=[FIXTURE_RAW],
@@ -87,17 +89,19 @@ class TestNov770DualAntennaIntegration:
 
 class TestNov770FileRouting:
     def test_raw_file_routed_to_novb2rnxo(self, tmp_path, metadata):
-        """A .raw file should invoke novb2rnxo, not nov0002rnx."""
+        """A .raw file should invoke novb2rnx, not nov0002rnx."""
         with (
             patch(FIND) as mock_find,
             patch(WRAP) as mock_wrap,
         ):
-            mock_find.return_value = Path("/fake/novb2rnxo")
+            mock_find.return_value = Path("/fake/novb2rnx")
             mock_wrap.return_value = []
 
-            novatel_binary_2rinex(files=[FIXTURE_RAW], writedir=tmp_path, metadata=metadata)
+            novatel_binary_2rinex(
+                files=[FIXTURE_RAW], writedir=tmp_path, metadata=metadata
+            )
 
-            mock_find.assert_called_once_with("novb2rnxo")
+            mock_find.assert_called_once_with("novb2rnx")
             assert mock_wrap.call_args.kwargs["binary_path"] == Path("/fake/novb2rnxo")
 
     def test_bin_file_routed_to_nov0002rnx(self, tmp_path, metadata):
@@ -112,7 +116,9 @@ class TestNov770FileRouting:
             mock_find.return_value = Path("/fake/nov0002rnx")
             mock_wrap.return_value = []
 
-            novatel_binary_2rinex(files=[fake_bin], writedir=tmp_path, metadata=metadata)
+            novatel_binary_2rinex(
+                files=[fake_bin], writedir=tmp_path, metadata=metadata
+            )
 
             mock_find.assert_called_once_with("nov0002rnx")
 
@@ -135,7 +141,10 @@ class TestNov770FileRouting:
         with patch(FIND), patch(WRAP) as mock_wrap:
             mock_wrap.return_value = []
             novatel_binary_2rinex(
-                files=[FIXTURE_RAW], writedir=tmp_path, metadata=metadata, modulo_millis=1000
+                files=[FIXTURE_RAW],
+                writedir=tmp_path,
+                metadata=metadata,
+                modulo_millis=1000,
             )
         assert mock_wrap.call_args.kwargs["modulo_millis"] == 1000
 
@@ -176,4 +185,6 @@ class TestNov770FileRouting:
         """BinaryNotFoundError from find_binary should propagate to the caller."""
         with patch(FIND, side_effect=BinaryNotFoundError("not found")):
             with pytest.raises(BinaryNotFoundError):
-                novatel_binary_2rinex(files=[FIXTURE_RAW], writedir=tmp_path, metadata=metadata)
+                novatel_binary_2rinex(
+                    files=[FIXTURE_RAW], writedir=tmp_path, metadata=metadata
+                )

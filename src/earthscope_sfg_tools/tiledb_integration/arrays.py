@@ -132,7 +132,9 @@ class TBDArray:
         if end is None:
             end = start + datetime.timedelta(days=1)
 
-        if isinstance(start, datetime.date) and not isinstance(start, datetime.datetime):
+        if isinstance(start, datetime.date) and not isinstance(
+            start, datetime.datetime
+        ):
             start = datetime.datetime.combine(start, datetime.datetime.min.time())
         if isinstance(end, datetime.date) and not isinstance(end, datetime.datetime):
             end = datetime.datetime.combine(end, datetime.datetime.max.time())
@@ -304,7 +306,9 @@ class TDBShotDataArray(TBDArray):
         Returns:
             pd.DataFrame: A DataFrame of shot data, or None on error.
         """
-        if isinstance(start, datetime.date) and not isinstance(start, datetime.datetime):
+        if isinstance(start, datetime.date) and not isinstance(
+            start, datetime.datetime
+        ):
             start = datetime.datetime.combine(start, datetime.datetime.min.time())
 
         logger.debug(f"Reading dataframe from {self.uri} for {start} to {end}")
@@ -353,11 +357,17 @@ class TDBShotDataArray(TBDArray):
             logger.warning(f"Dataframe is empty, not writing to {self.uri}")
             return
         if isinstance(df_val.pingTime.iloc[0], float):
-            df_val.pingTime = df_val.pingTime.apply(lambda x: np.datetime64(int(x * 1e9), "ns"))
-            df_val.returnTime = df_val.returnTime.apply(lambda x: np.datetime64(int(x * 1e9), "ns"))
+            df_val.pingTime = df_val.pingTime.apply(
+                lambda x: np.datetime64(int(x * 1e9), "ns")
+            )
+            df_val.returnTime = df_val.returnTime.apply(
+                lambda x: np.datetime64(int(x * 1e9), "ns")
+            )
         else:
             df_val.pingTime = df_val.pingTime.apply(lambda x: np.datetime64(x, "ns"))
-            df_val.returnTime = df_val.returnTime.apply(lambda x: np.datetime64(x, "ns"))
+            df_val.returnTime = df_val.returnTime.apply(
+                lambda x: np.datetime64(x, "ns")
+            )
 
         tiledb.from_pandas(str(self.uri), df_val, mode="append")
 
@@ -473,7 +483,9 @@ class TDBGNSSObsArray(TBDArray):
         tiledb.from_pandas(str(self.uri), df, mode="append")
         return len(d0_buffer)
 
-    def write_rangea_strings(self, rangea_strings: list[str], verbose: bool = False) -> int:
+    def write_rangea_strings(
+        self, rangea_strings: list[str], verbose: bool = False
+    ) -> int:
         """
         Write GNSS observation epochs to this TileDB array from RINEX 3.05
         observation file lines.

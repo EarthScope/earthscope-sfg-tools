@@ -16,6 +16,7 @@ class AcousticDataFrame(pa.DataFrameModel):
     DataFrames: transponder ID, ping and return timestamps (GPS seconds),
     one-way travel time, signal diagnostics, TAT, and SNR.
     """
+
     transponderID: Series[str] = pa.Field(description="Unique identifier", coerce=True)
     pingTime: Series[float] = pa.Field(
         ge=GNSS_START_TIME.timestamp() - LEAP_SECONDS,
@@ -30,7 +31,9 @@ class AcousticDataFrame(pa.DataFrameModel):
     tt: Series[float] = pa.Field(ge=0.0, le=600, coerce=True)
     dbv: Series[int] = pa.Field(coerce=True)
     xc: Series[int] = pa.Field(ge=0, le=100, coerce=True)
-    snr: Series[float] = pa.Field(ge=-100, le=100.0, coerce=True, default=0, nullable=True)
+    snr: Series[float] = pa.Field(
+        ge=-100, le=100.0, coerce=True, default=0, nullable=True
+    )
     tat: Series[float] = pa.Field(ge=0, le=10, coerce=True, default=0, nullable=True)
 
     class Config:
@@ -45,6 +48,7 @@ class GARPOSShotDataFrame(AcousticDataFrame):
     attitude columns for both the transmit (``*0``) and receive (``*1``)
     epochs, plus optional position standard deviations.
     """
+
     head0: Series[float]
     pitch0: Series[float]
     roll0: Series[float]
@@ -81,24 +85,46 @@ class IMUPositionDataFrame(pa.DataFrameModel):
         dtype_kwargs={"unit": "ms", "tz": "UTC"},
         description="Observation timestamp [datetime64[ms, UTC]]",
     )
-    azimuth: Series[float] = pa.Field(ge=0.0, le=360.0, description="Heading / azimuth [deg]")
+    azimuth: Series[float] = pa.Field(
+        ge=0.0, le=360.0, description="Heading / azimuth [deg]"
+    )
     pitch: Series[float] = pa.Field(ge=-90.0, le=90.0, description="Pitch angle [deg]")
     roll: Series[float] = pa.Field(ge=-180.0, le=180.0, description="Roll angle [deg]")
     latitude: Series[float] = pa.Field(ge=-90.0, le=90.0, description="Latitude [deg]")
-    longitude: Series[float] = pa.Field(ge=-180.0, le=180.0, description="Longitude [deg]")
+    longitude: Series[float] = pa.Field(
+        ge=-180.0, le=180.0, description="Longitude [deg]"
+    )
     height: Series[float] = pa.Field(description="Ellipsoidal height [m]")
     northVelocity: Series[float] = pa.Field(description="North velocity [m/s]")
     eastVelocity: Series[float] = pa.Field(description="East velocity [m/s]")
     upVelocity: Series[float] = pa.Field(description="Up velocity [m/s]")
-    latitude_std: Series[float] = pa.Field(ge=0.0, nullable=True, description="Latitude std dev [deg]")
-    longitude_std: Series[float] = pa.Field(ge=0.0, nullable=True, description="Longitude std dev [deg]")
-    height_std: Series[float] = pa.Field(ge=0.0, nullable=True, description="Height std dev [m]")
-    northVelocity_std: Series[float] = pa.Field(ge=0.0, nullable=True, description="North velocity std dev [m/s]")
-    eastVelocity_std: Series[float] = pa.Field(ge=0.0, nullable=True, description="East velocity std dev [m/s]")
-    upVelocity_std: Series[float] = pa.Field(ge=0.0, nullable=True, description="Up velocity std dev [m/s]")
-    roll_std: Series[float] = pa.Field(ge=0.0, nullable=True, description="Roll std dev [deg]")
-    pitch_std: Series[float] = pa.Field(ge=0.0, nullable=True, description="Pitch std dev [deg]")
-    azimuth_std: Series[float] = pa.Field(ge=0.0, nullable=True, description="Azimuth std dev [deg]")
+    latitude_std: Series[float] = pa.Field(
+        ge=0.0, nullable=True, description="Latitude std dev [deg]"
+    )
+    longitude_std: Series[float] = pa.Field(
+        ge=0.0, nullable=True, description="Longitude std dev [deg]"
+    )
+    height_std: Series[float] = pa.Field(
+        ge=0.0, nullable=True, description="Height std dev [m]"
+    )
+    northVelocity_std: Series[float] = pa.Field(
+        ge=0.0, nullable=True, description="North velocity std dev [m/s]"
+    )
+    eastVelocity_std: Series[float] = pa.Field(
+        ge=0.0, nullable=True, description="East velocity std dev [m/s]"
+    )
+    upVelocity_std: Series[float] = pa.Field(
+        ge=0.0, nullable=True, description="Up velocity std dev [m/s]"
+    )
+    roll_std: Series[float] = pa.Field(
+        ge=0.0, nullable=True, description="Roll std dev [deg]"
+    )
+    pitch_std: Series[float] = pa.Field(
+        ge=0.0, nullable=True, description="Pitch std dev [deg]"
+    )
+    azimuth_std: Series[float] = pa.Field(
+        ge=0.0, nullable=True, description="Azimuth std dev [deg]"
+    )
 
     class Config:
         coerce = True

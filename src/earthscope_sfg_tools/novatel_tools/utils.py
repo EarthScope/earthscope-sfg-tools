@@ -19,6 +19,7 @@ MetadataModel = RinexMetadata
 # Legacy helpers (kept for import compatibility; delegate to RinexMetadata)
 # ---------------------------------------------------------------------------
 
+
 def get_metadatav2(
     site: str,
     serialNumber: str = "XXXXXXXXXX",

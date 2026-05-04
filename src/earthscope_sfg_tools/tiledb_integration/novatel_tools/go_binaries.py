@@ -159,10 +159,14 @@ def tdb2rnx(
 
     cmd = [
         str(binary),
-        "-tdb", tdb_path,
-        "-settings", settings_file,
-        "-timeint", str(time_interval),
-        "-year", str(processing_year),
+        "-tdb",
+        tdb_path,
+        "-settings",
+        settings_file,
+        "-timeint",
+        str(time_interval),
+        "-year",
+        str(processing_year),
     ]
     if modulo_millis > 0:
         cmd.extend(["-modulo", str(modulo_millis)])

@@ -5,7 +5,7 @@ import warnings
 from pathlib import Path
 import logging
 
-from .system_utils import raise_exception ,get_system_architecture
+from .system_utils import raise_exception, get_system_architecture
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +120,6 @@ def parse_cli_logs(result: subprocess.CompletedProcess, logger: logging.Logger):
             when its trigger string is found in stdout or stderr.
     """
     if result.stdout:
-
         stdout_cleaned = remove_ansi_escape(result.stdout)
         logger.debug(stdout_cleaned)
         result_message = stdout_cleaned.split("msg=")
@@ -131,17 +130,13 @@ def parse_cli_logs(result: subprocess.CompletedProcess, logger: logging.Logger):
             if (exception := raise_exception(message)) is not None:
                 raise exception
     if result.stderr:
-
         stderr_cleaned = remove_ansi_escape(result.stderr)
         if "error" in stderr_cleaned.lower():
-
             logger.error(stderr_cleaned)
             if (warning := parse_error(stderr_cleaned)) is not None:
-
                 logger.warning(warning.message)
                 warnings.warn(warning.message, warning, 3)
         else:
-
             logger.warning(stderr_cleaned)
 
         result_message = stderr_cleaned.split("msg=")

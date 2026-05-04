@@ -75,7 +75,9 @@ class GoBinaryRunner:
         runner: SubprocessRunner | None = None,
         log: logging.Logger | None = None,
     ) -> None:
-        self._binary: Path = binary_path if binary_path is not None else find_binary(binary_name)
+        self._binary: Path = (
+            binary_path if binary_path is not None else find_binary(binary_name)
+        )
         self._output_glob = output_glob
         self._runner: SubprocessRunner = runner or _real_runner
         self._log = log or logger
@@ -215,6 +217,7 @@ class GoBinaryRunner:
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
 
 def _coerce_files(raw: list[Path | str] | Path | str) -> list[Path]:
     if isinstance(raw, (str, Path)):

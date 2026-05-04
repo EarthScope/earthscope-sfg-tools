@@ -13,7 +13,8 @@ from pandera.typing import DataFrame
 
 from ..datamodels.observationdata.soundvelocity import SoundVelocityDataFrame
 
-logger = logging.getLogger(__name__)    
+logger = logging.getLogger(__name__)
+
 
 def parse_seabird_lines(
     lines: list[str],

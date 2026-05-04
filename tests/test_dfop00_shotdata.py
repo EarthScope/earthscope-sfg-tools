@@ -58,10 +58,26 @@ class TestDfop00Parsing:
 
     def test_required_columns_present(self, shotdata):
         required = {
-            "transponderID", "pingTime", "returnTime", "tt",
-            "dbv", "xc", "snr", "tat",
-            "head0", "pitch0", "roll0", "east0", "north0", "up0",
-            "head1", "pitch1", "roll1", "east1", "north1", "up1",
+            "transponderID",
+            "pingTime",
+            "returnTime",
+            "tt",
+            "dbv",
+            "xc",
+            "snr",
+            "tat",
+            "head0",
+            "pitch0",
+            "roll0",
+            "east0",
+            "north0",
+            "up0",
+            "head1",
+            "pitch1",
+            "roll1",
+            "east1",
+            "north1",
+            "up1",
             "isUpdated",
         }
         assert required.issubset(set(shotdata.columns))
@@ -133,9 +149,16 @@ class TestDfop00Errors:
     def test_no_valid_pairs_returns_none(self, tmp_path):
         """A file with only interrogation events (no ranges) yields no pairs."""
         only_interrogations = tmp_path / "interrog_only.raw"
-        line = json.dumps({"event": "interrogation", "event_id": 1,
-                           "observations": {}, "sequence": 1,
-                           "time": {"common": 0}, "type": "SV3"})
+        line = json.dumps(
+            {
+                "event": "interrogation",
+                "event_id": 1,
+                "observations": {},
+                "sequence": 1,
+                "time": {"common": 0},
+                "type": "SV3",
+            }
+        )
         only_interrogations.write_text(line + "\n")
         result = dfop00_to_shotdata(only_interrogations, log)
         assert result is None

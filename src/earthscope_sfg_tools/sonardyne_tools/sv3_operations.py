@@ -12,12 +12,20 @@ import pymap3d as pm
 from pandera.typing import DataFrame
 import logging
 
-from ..datamodels.observationdata.community.community_standards import SFGDSTFSeafloorAcousticData
+from ..datamodels.observationdata.community.community_standards import (
+    SFGDSTFSeafloorAcousticData,
+)
 from ..datamodels.metadata.community.site import SFGDTSFSite
 from ..datamodels.observationdata.constants import LEAP_SECONDS, TRIGGER_DELAY_SV3
-from ..datamodels.observationdata.parsing.log_models import SV3InterrogationData, SV3ReplyData
+from ..datamodels.observationdata.parsing.log_models import (
+    SV3InterrogationData,
+    SV3ReplyData,
+)
 from ..datamodels.observationdata.garpos.observables import GARPOSShotDataFrame
-from ..datamodels.observationdata.parsing.sv3_models import NovatelInterrogationEvent, NovatelRangeEvent
+from ..datamodels.observationdata.parsing.sv3_models import (
+    NovatelInterrogationEvent,
+    NovatelRangeEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +34,14 @@ logger = logging.getLogger(__name__)
 # C3: Pairing rules and pipeline stages
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class SV3PairingRules:
     """Thresholds governing interrogation/reply pair validation.
 
     Defaults reproduce the original hardcoded assertion values.
     """
+
     max_roundtrip_seconds: float = 15.0
     min_range_metres: float = 1e-3
     return_time_tolerance_seconds: float = 1e-6
@@ -46,6 +56,7 @@ class RejectionReason(Enum):
 @dataclass
 class PairResult:
     """Outcome of pairing one interrogation with one reply."""
+
     data: dict | None
     rejection: RejectionReason | None = None
 
@@ -69,7 +80,10 @@ def _validate_pair(
 
     range_original = float(reply.tt) + float(reply.tat)
     calc_return = float(interrogation.pingTime) + range_original
-    if abs(calc_return - float(reply.returnTime)) >= rules.return_time_tolerance_seconds:
+    if (
+        abs(calc_return - float(reply.returnTime))
+        >= rules.return_time_tolerance_seconds
+    ):
         return PairResult(data=None, rejection=RejectionReason.RETURN_TIME_MISMATCH)
 
     return PairResult(data=dict(interrogation) | dict(reply))
@@ -146,7 +160,11 @@ def build_shotdata(
         if result.data is not None:
             processed.append(result.data)
         else:
-            logger.debug("Rejected pair [%s] for transponder %s", result.rejection, reply.transponderID)
+            logger.debug(
+                "Rejected pair [%s] for transponder %s",
+                result.rejection,
+                reply.transponderID,
+            )
 
     if not processed:
         logger.error("No valid pairs found")
@@ -214,7 +232,11 @@ def novatel_reply_to_garpos_reply(novatel_reply: NovatelRangeEvent) -> SV3ReplyD
         float(novatel_reply.observations.GNSS.longitude),
         float(novatel_reply.observations.GNSS.hae),
     )
-    travel_time = float(novatel_reply.range.range) - float(novatel_reply.range.tat) - TRIGGER_DELAY_SV3
+    travel_time = (
+        float(novatel_reply.range.range)
+        - float(novatel_reply.range.tat)
+        - TRIGGER_DELAY_SV3
+    )
     return SV3ReplyData(
         transponderID=novatel_reply.range.cn,
         head1=novatel_reply.observations.AHRS.h,
@@ -299,7 +321,9 @@ def parse_dfop00_lines(
     return build_shotdata(pair_events(parse_jsonl_lines(lines)), logger, rules)
 
 
-def dfop00_to_shotdata(source: str | Path, logger: logging.Logger) -> "DataFrame[GARPOSShotDataFrame] | None":
+def dfop00_to_shotdata(
+    source: str | Path, logger: logging.Logger
+) -> "DataFrame[GARPOSShotDataFrame] | None":
     """Parse a DFOP00 JSONL log file into a validated shot-data DataFrame.
 
     Thin I/O wrapper around :func:`parse_dfop00_lines`.

@@ -81,7 +81,10 @@ class SonardynePositionType(Enum):
 
 class TimeData(BaseModel):
     """Timestamp block from a Sonardyne SV3 event JSON."""
-    common: Decimal = Field(description="TZ unaware UNIX time", ge=GNSS_START_TIME.timestamp())
+
+    common: Decimal = Field(
+        description="TZ unaware UNIX time", ge=GNSS_START_TIME.timestamp()
+    )
     instrument: Decimal = Field(description="Instrument time in seconds", ge=0)
     start_count: int = Field(description="Start count for the time", ge=0)
     status: str = Field(description="Status of the time data")
@@ -95,11 +98,19 @@ class SonardyneHeadingData(BaseModel):
     p: Decimal = Field(description="GNSS Computed Pitch in degrees", ge=-90, le=90)
     position_type: SonardynePositionType = Field(description="Type of position data")
     receiver_status: str = Field(description="Status of the receiver")
-    sdh: Decimal | None = Field(description="Standard deviation of heading in degrees", ge=0)
-    sdp: Decimal | None = Field(description="Standard deviation of pitch in degrees", ge=0)
-    solution_type: SonardyneSolutionStatus = Field(description="Solution type of the heading data")
+    sdh: Decimal | None = Field(
+        description="Standard deviation of heading in degrees", ge=0
+    )
+    sdp: Decimal | None = Field(
+        description="Standard deviation of pitch in degrees", ge=0
+    )
+    solution_type: SonardyneSolutionStatus = Field(
+        description="Solution type of the heading data"
+    )
     sv_used: int = Field(description="Number of satellites used in the solution", ge=0)
-    sv_visible: int = Field(description="Number of satellites visible", ge=0, alias="sv_visable")
+    sv_visible: int = Field(
+        description="Number of satellites visible", ge=0, alias="sv_visable"
+    )
     time: TimeData = Field(description="Time data associated with the log")
 
 
@@ -111,11 +122,19 @@ class SonardyneINSData(BaseModel):
     p: Decimal = Field(description="SPAN INS Computed Pitch in degrees", ge=-90, le=90)
     r: Decimal = Field(description="SPAN INS Computed Roll in degrees", ge=-180, le=180)
     receiver_status: str = Field(description="Status of the receiver")
-    solution_type: SonardyneSolutionStatus = Field(description="Solution type of the INS data")
+    solution_type: SonardyneSolutionStatus = Field(
+        description="Solution type of the INS data"
+    )
     time: TimeData = Field(description="Time data associated with the log")
-    velx: Decimal = Field(description="SPAN INS measured acceleration X axis in m/s^2", alias="vx")
-    vely: Decimal = Field(description="SPAN INS measured acceleration Y axis in m/s^2", alias="vy")
-    velz: Decimal = Field(description="SPAN INS measured acceleration Z axis in m/s^2", alias="vz")
+    velx: Decimal = Field(
+        description="SPAN INS measured acceleration X axis in m/s^2", alias="vx"
+    )
+    vely: Decimal = Field(
+        description="SPAN INS measured acceleration Y axis in m/s^2", alias="vy"
+    )
+    velz: Decimal = Field(
+        description="SPAN INS measured acceleration Z axis in m/s^2", alias="vz"
+    )
 
 
 class SonardyneRangeData(BaseModel):
@@ -128,7 +147,9 @@ class SonardyneRangeData(BaseModel):
 class SonardyneGNSSData(BaseModel):
     """GNSS position fix and standard deviations from a Sonardyne event log."""
 
-    hae: Decimal = Field(description="Height above ellipsoid in meters", ge=-1000, le=1000)
+    hae: Decimal = Field(
+        description="Height above ellipsoid in meters", ge=-1000, le=1000
+    )
     latitude: Decimal = Field(description="Latitude in degrees", ge=-90, le=90)
     longitude: Decimal = Field(description="Longitude in degrees", ge=-180, le=180)
     q: SV3GPSQuality = Field(description="Quality indicator")
@@ -146,7 +167,9 @@ class SonardyneAHRSData(BaseModel):
     acy: Decimal = Field(description="Acceleration Y axis in m/s^2")
     acz: Decimal = Field(description="Acceleration Z axis in m/s^2")
     h: Decimal = Field(description="Heading in degrees", ge=Decimal(0), le=Decimal(360))
-    h_mag: Decimal | None = Field(description="Magnetic heading in degrees", ge=Decimal(0), le=Decimal(360))
+    h_mag: Decimal | None = Field(
+        description="Magnetic heading in degrees", ge=Decimal(0), le=Decimal(360)
+    )
     p: Decimal = Field(description="Pitch in degrees", ge=Decimal(-90), le=Decimal(90))
     r: Decimal = Field(description="Roll in degrees", ge=Decimal(-180), le=Decimal(180))
     time: TimeData = Field(description="Time data associated with the log")
@@ -186,7 +209,9 @@ class SonardyneObservations(BaseModel):
 
     AHRS: SonardyneAHRSData | None = Field(description="AHRS data")
     GNSS: SonardyneGNSSData | None = Field(description="GNSS data")
-    NOV_HEADING: SonardyneHeadingData | None = Field(description="Sonardyne heading data")
+    NOV_HEADING: SonardyneHeadingData | None = Field(
+        description="Sonardyne heading data"
+    )
     NOV_INS: SonardyneINSData | None = Field(description="Sonardyne INS data")
     NOV_RANGE: SonardyneRangeData | None = Field(description="Sonardyne range data")
 

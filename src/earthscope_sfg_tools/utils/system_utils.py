@@ -1,5 +1,6 @@
 import platform
 
+
 def get_system_architecture() -> tuple[str, str]:
     """Return the normalised OS name and CPU architecture.
 
@@ -24,6 +25,7 @@ def get_system_architecture() -> tuple[str, str]:
 
     return system, arch
 
+
 class DYLDLibraryException(Exception):
     """Exception raised when the DYLD_LIBRARY_PATH environment variable is not set."""
 
@@ -42,6 +44,7 @@ class LDLibraryException(Exception):
         message="\nLibrary not loaded: @rpath/libtiledb.dylib \nLD_LIBRARY_PATH does not include TileDB tile.h file. Hint: $ export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH",
     ):
         super().__init__(message)
+
 
 EXCEPTIONS_DICT_LINUX = {
     "Library not loaded: @rpath/libtiledb.dylib ": LDLibraryException

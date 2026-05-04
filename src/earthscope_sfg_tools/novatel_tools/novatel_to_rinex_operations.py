@@ -22,7 +22,10 @@ def nov0002rnx(
     """Convert NovAtel NOV000 binary logs to RINEX files using the Go utility."""
     binary = find_binary("nov0002rnx")
 
-    files = [Path(f) for f in ([input_files] if isinstance(input_files, str) else list(input_files))]
+    files = [
+        Path(f)
+        for f in ([input_files] if isinstance(input_files, str) else list(input_files))
+    ]
     for file in files:
         assert file.exists(), f"Input file {file} does not exist."
 
@@ -38,7 +41,9 @@ def nov0002rnx(
     cmd.extend([str(file) for file in files])
 
     logger.info(f"Running nov0002rnx: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=output_dir)
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, check=False, cwd=output_dir
+    )
     parse_cli_logs(result, logger)
     return result
 
@@ -120,7 +125,9 @@ def novatel_binary_2rinex(
             case ".raw":
                 raw_files.append(file)
             case _:
-                raise ValueError(f"Unsupported file extension: {suffix} for file {file}")
+                raise ValueError(
+                    f"Unsupported file extension: {suffix} for file {file}"
+                )
 
     all_rinex_paths: list[Path] = []
 
@@ -147,7 +154,7 @@ def novatel_binary_2rinex(
             )
 
     if raw_files:
-        binary_path = find_binary("novb2rnxo")
+        binary_path = find_binary("novb2rnx")
         if writedir is None:
             write_dirs: dict[Path, list[Path]] = defaultdict(list)
             for file in raw_files:
@@ -172,6 +179,8 @@ def novatel_binary_2rinex(
         counted_paths[rinex_path] += 1
     overlapping = "\n".join(str(p) for p, count in counted_paths.items() if count > 1)
     if overlapping:
-        logger.warning(f"The following RINEX files were generated multiple times:\n{overlapping}")
+        logger.warning(
+            f"The following RINEX files were generated multiple times:\n{overlapping}"
+        )
 
     return all_rinex_paths

@@ -16,6 +16,7 @@ class SV3InterrogationData(BaseModel):
     ping time, position standard deviations, and the outgoing ping
     timestamp in GPS seconds.
     """
+
     head0: Decimal
     pitch0: Decimal
     roll0: Decimal
@@ -36,6 +37,7 @@ class SV3ReplyData(BaseModel):
     dBV, cross-correlation), hardware turnaround time (TAT), one-way
     travel time, and return timestamp in GPS seconds.
     """
+
     head1: Decimal
     pitch1: Decimal
     roll1: Decimal

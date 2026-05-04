@@ -1,5 +1,5 @@
 from pandera.typing import Series
-import pandera as pa
+import pandera.pandas as pa
 import pandas as pd
 
 

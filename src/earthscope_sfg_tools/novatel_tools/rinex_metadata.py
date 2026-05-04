@@ -36,8 +36,12 @@ class RinexMetadata(BaseModel):
     receiver_firmware: str | None = Field(default="0.0.0")
     antenna_model: str | None = Field(default="NOV850 NONE")
     antenna_serial: str | None = Field(default="987654321")
-    antenna_position: list[float] | None = Field(default_factory=lambda: [0.0, 0.0, 0.0])
-    antenna_offsetHEN: list[float] | None = Field(default_factory=lambda: [0.0, 0.0, 0.0])
+    antenna_position: list[float] | None = Field(
+        default_factory=lambda: [0.0, 0.0, 0.0]
+    )
+    antenna_offsetHEN: list[float] | None = Field(
+        default_factory=lambda: [0.0, 0.0, 0.0]
+    )
 
     @classmethod
     def load(

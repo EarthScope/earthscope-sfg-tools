@@ -9,7 +9,10 @@ import pandas as pd
 from pandera.typing import DataFrame
 
 from ..datamodels.observationdata.garpos.observables import GARPOSShotDataFrame
-from ..datamodels.observationdata.parsing.sv3_models import NovatelInterrogationEvent, NovatelRangeEvent
+from ..datamodels.observationdata.parsing.sv3_models import (
+    NovatelInterrogationEvent,
+    NovatelRangeEvent,
+)
 
 from .sv3_operations import (
     build_shotdata,
@@ -43,7 +46,9 @@ def parse_qcjson_dict(
 
     try:
         interrogation_event = NovatelInterrogationEvent(**interrogation_raw)
-        interrogation_parsed = novatel_interrogation_to_garpos_interrogation(interrogation_event)
+        interrogation_parsed = novatel_interrogation_to_garpos_interrogation(
+            interrogation_event
+        )
     except Exception as e:
         logger.error(f"Failed to parse interrogation block: {e}")
         return None
@@ -63,7 +68,9 @@ def parse_qcjson_dict(
     return build_shotdata(_pairs(), logger)
 
 
-def qcjson_to_shotdata(source: str | Path, logger: logging.Logger) -> "DataFrame[GARPOSShotDataFrame] | None":
+def qcjson_to_shotdata(
+    source: str | Path, logger: logging.Logger
+) -> "DataFrame[GARPOSShotDataFrame] | None":
     """Parse a Sonardyne QC JSON file into a validated shot-data DataFrame.
 
     Thin I/O wrapper around :func:`parse_qcjson_dict`.  Tries UTF-8 first,
@@ -128,7 +135,9 @@ def batch_qc_by_day(
             continue
 
         df = df.copy()
-        df["date"] = pd.to_datetime(df[date_column].apply(lambda x: x * 1e9), utc=True).dt.date
+        df["date"] = pd.to_datetime(
+            df[date_column].apply(lambda x: x * 1e9), utc=True
+        ).dt.date
 
         for date, group in df.groupby("date"):
             batched_data[str(date)].append(group.drop(columns=["date"]))

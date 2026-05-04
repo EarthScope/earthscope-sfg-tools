@@ -43,10 +43,11 @@ def nova2rnx(
     cmd.extend([str(file) for file in files])
 
     logger.info(f"Running nova2rnx: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=output_dir)
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, check=False, cwd=output_dir
+    )
     parse_cli_logs(result, logger)
     return result
-
 
 
 def novatel_ascii_2rinex(
@@ -142,13 +143,17 @@ def novatel_ascii_2rinex(
         parse_cli_logs(result, logger)
 
         rinex_file_paths = list(Path(workdir).rglob(f"*{site}*"))
-        logger.info(f"Converted {files} to {rinex_file_paths} Daily RINEX files", stacklevel=2)
+        logger.info(
+            f"Converted {files} to {rinex_file_paths} Daily RINEX files", stacklevel=2
+        )
         outpaths = []
         for rinex_file in rinex_file_paths:
             logger.debug(f" RINEX file: {str(rinex_file)}")
             new_rinex_path = writedir / rinex_file.name
             shutil.move(src=rinex_file, dst=new_rinex_path)
-            logger.info(f"Generated Daily RINEX file {str(new_rinex_path)}", stacklevel=2)
+            logger.info(
+                f"Generated Daily RINEX file {str(new_rinex_path)}", stacklevel=2
+            )
             outpaths.append(new_rinex_path)
 
     return outpaths

@@ -1,5 +1,6 @@
 from pydantic import BaseModel
-import datetime 
+import datetime
+
 
 class SFGDTSFSite(BaseModel):
     """Community-standard site metadata for a GNSS-A seafloor site.
@@ -15,11 +16,10 @@ class SFGDTSFSite(BaseModel):
         ATDoffset: ``[dEast, dNorth, dUp]`` antenna-to-transducer
             offset in metres. Defaults to ``[0, 0, 0]``.
     """
+
     Campaign: str
     TimeOrigin: datetime.datetime
     RefFrame: str = "ITRF20"
     MTlist: list[str] = []
     MT_appPos: dict[str, list[float]] = {}
     ATDoffset: list[float] = [0.0, 0.0, 0.0]
-
-

@@ -16,7 +16,6 @@ except ImportError as e:
     ) from e
 
 
-
 __all__ = [
     "TileDBService",
     "TileDBOperationResult",

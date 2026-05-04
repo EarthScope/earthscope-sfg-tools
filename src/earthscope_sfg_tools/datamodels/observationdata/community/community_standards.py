@@ -19,6 +19,7 @@ class SFGDSTFSeafloorAcousticData(pa.DataFrameModel):
     columns (SNR, dBV, cross-correlation, attitude, position
     uncertainties) for data exchange between GNSS-A processing systems.
     """
+
     MT_ID: Series[str] = pa.Field(description="ID of mirror transponder")
     TravelTime: Series[float] = pa.Field(description="Observed travel time [s]", ge=0)
     T_transmit: Series[float] = pa.Field(description="Transmission time [s]", ge=0)

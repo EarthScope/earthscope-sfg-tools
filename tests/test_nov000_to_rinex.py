@@ -95,7 +95,9 @@ class TestNov000FileRouting:
             mock_find.return_value = Path("/fake/nov0002rnx")
             mock_wrap.return_value = []
 
-            novatel_binary_2rinex(files=[FIXTURE_BIN], writedir=tmp_path, metadata=metadata)
+            novatel_binary_2rinex(
+                files=[FIXTURE_BIN], writedir=tmp_path, metadata=metadata
+            )
 
             mock_find.assert_called_once_with("nov0002rnx")
             assert mock_wrap.call_args.kwargs["binary_path"] == Path("/fake/nov0002rnx")
@@ -115,7 +117,10 @@ class TestNov000FileRouting:
         with patch(FIND), patch(WRAP) as mock_wrap:
             mock_wrap.return_value = []
             novatel_binary_2rinex(
-                files=[FIXTURE_BIN], writedir=tmp_path, metadata=metadata, modulo_millis=30000
+                files=[FIXTURE_BIN],
+                writedir=tmp_path,
+                metadata=metadata,
+                modulo_millis=30000,
             )
         assert mock_wrap.call_args.kwargs["modulo_millis"] == 30000
 
@@ -155,7 +160,7 @@ class TestNov000FileRouting:
                 files=[FIXTURE_BIN, fixture_raw], writedir=tmp_path, metadata=metadata
             )
 
-        # find_binary called twice: once for nov0002rnx, once for novb2rnxo
+        # find_binary called twice: once for nov0002rnx, once for novb2rnx
         assert mock_find.call_count == 2
         called_with = {c.args[0] for c in mock_find.call_args_list}
-        assert called_with == {"nov0002rnx", "novb2rnxo"}
+        assert called_with == {"nov0002rnx", "novb2rnx"}
