@@ -1,28 +1,55 @@
-# earthscope-sfg-tools
+# EarthScope Seafloor Geodesy Tools
+[![Read the Docs](https://readthedocs.org/projects/es-sfgtools/badge/?version=latest)](https://es-sfgtools.readthedocs.io/en/latest/)
 
-Standalone EarthScope seafloor geodesy tooling with a layered architecture for:
+`es_sfgtools` is a Python library designed to support preprocessing and GNSS-A processing workflows for Seafloor Geodesy using data from Liquid Robotics SV2/SV3 Wave Gliders.
 
-- parser/model workflows (NovAtel, Sonardyne, sound speed)
-- optional Go-backed high-performance conversions
-- optional TileDB integration surfaces
+The toolkit also integrates with the [**GARPOS**](https://github.com/s-watanabe-jhod/garpos) GNSS-A processing.
 
-## TileDB integration architecture
 
-TileDB functionality is now exposed through a dedicated integration boundary:
 
-- `earthscope_sfg_tools.tiledb_integration.TileDBService`: high-level facade
-- `earthscope_sfg_tools.tiledb_integration.GoBinaryTileDBBackend`: adapter backed by compiled Go binaries
-- `earthscope_sfg_tools.tiledb_integration.TileDBOperationResult`: structured operation result
-- `earthscope_sfg_tools.tiledb_integration.TileDBBinaryExecutionError`: structured failure mode
+## Installation
 
-This deepens the previous shallow subprocess wrappers into a single service boundary with explicit error policy.
+### Prerequisites
 
-### Migration-safe legacy helpers
+- [pixi](https://pixi.sh) (recommended) or conda/mamba
 
-Legacy return-code-style calls are supported through:
+### Quick Start
 
-- `earthscope_sfg_tools.tiledb_integration.nova2tile`
-- `earthscope_sfg_tools.tiledb_integration.nov0002tile`
-- `earthscope_sfg_tools.tiledb_integration.tdb2rnx`
+```bash
+git clone https://github.com/EarthScope/es_sfgtools.git
+cd es_sfgtools
 
-These compatibility helpers preserve return-code behavior while routing through the new architecture.
+# Install environment and all packages
+pixi install
+
+# Build external dependencies (GARPOS, PRIDE-PPPAR, Go binaries)
+pixi run setup
+
+# Verify the setup
+pixi run test-setup
+```
+
+### Development
+
+```bash
+# Lint and format
+pixi run lint
+pixi run format
+
+# Run tests
+pixi run pytest tests/ -v
+
+# Build documentation
+pixi run docs
+```
+
+## Documentation
+
+Documentation (in development) is available on ReadTheDocs:
+
+[ReadTheDocs](https://es-sfgtools.readthedocs.io/en/latest/)
+
+---
+
+**Maintainers**: Mike Gottlieb, Franklyn Dunbar, Rachel Akie
+**Organization**: [EarthScope](https://www.earthscope.org/)
