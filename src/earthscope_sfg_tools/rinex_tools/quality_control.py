@@ -8,7 +8,7 @@ from earthscope_sfg_tools.utils.go_runner import GoBinaryRunner
 
 logger = logging.getLogger(__name__)
 
-_runner = GoBinaryRunner("rnxqc", log=logger)
+_runner: GoBinaryRunner | None = None
 
 
 def rnxqc(
@@ -26,6 +26,9 @@ def rnxqc(
     Raises:
         FileNotFoundError: If ``input_file`` does not exist.
     """
+    global _runner
+    if _runner is None:
+        _runner = GoBinaryRunner("rnxqc", log=logger)
     input_file = Path(input_file)
     if not input_file.exists():
         raise FileNotFoundError(f"Input file {input_file} does not exist.")
