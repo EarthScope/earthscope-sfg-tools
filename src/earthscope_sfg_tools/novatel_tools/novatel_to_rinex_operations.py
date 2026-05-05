@@ -4,7 +4,10 @@ from collections import defaultdict
 from pathlib import Path
 
 from ..utils.go_runner import GoBinaryRunner
-from ..utils.go_utils import find_binary, parse_cli_logs  # find_binary used in nov0002rnx()
+from ..utils.go_utils import (
+    find_binary,
+    parse_cli_logs,
+)  # find_binary used in nov0002rnx()
 from .rinex_metadata import RinexMetadata
 from .utils import MetadataModel  # re-exported alias for backward compat
 

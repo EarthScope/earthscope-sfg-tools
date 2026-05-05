@@ -1,4 +1,4 @@
-from .benchmark import Benchmark
+from .benchmark import Benchmark, Transponder
 from .campaign import Campaign, Survey, SurveyType, classify_survey_type
 from .catalogs import CatalogType, MetaDataCatalog, NetworkData, StationData
 from .site import Site, import_site
@@ -6,6 +6,7 @@ from .vessel import Vessel, import_vessel
 
 __all__ = [
     "Benchmark",
+    "Transponder",
     "Campaign",
     "CatalogType",
     "MetaDataCatalog",

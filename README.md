@@ -1,55 +1,41 @@
 # EarthScope Seafloor Geodesy Tools
-[![Read the Docs](https://readthedocs.org/projects/es-sfgtools/badge/?version=latest)](https://es-sfgtools.readthedocs.io/en/latest/)
 
-`es_sfgtools` is a Python library designed to support preprocessing and GNSS-A processing workflows for Seafloor Geodesy using data from Liquid Robotics SV2/SV3 Wave Gliders.
+`earthscope-sfg-tools` contains **parsing and core data primitives** for
+Seafloor Geodesy processing.
 
-The toolkit also integrates with the [**GARPOS**](https://github.com/s-watanabe-jhod/garpos) GNSS-A processing.
+## Scope of this repository
 
+This repo is the home for:
 
+- NovAtel parsing/conversion (`novatel_tools`, `rinex_tools`)
+- Sonardyne parsing (`sonardyne_tools`)
+- Shared data models (`datamodels`)
+- TileDB schema/array integration (`tiledb_integration`)
+- Shared utility helpers used by downstream workflows
+
+This repo intentionally does **not** own orchestration logic (pipeline
+coordination, catalog orchestration, ingest workflows, campaign-level run
+management). That functionality lives in `earthscope-sfg-workflows`.
 
 ## Installation
 
 ### Prerequisites
 
-- [pixi](https://pixi.sh) (recommended) or conda/mamba
+- [pixi](https://pixi.sh) (recommended)
 
 ### Quick Start
 
 ```bash
-git clone https://github.com/EarthScope/es_sfgtools.git
-cd es_sfgtools
-
-# Install environment and all packages
 pixi install
-
-# Build external dependencies (GARPOS, PRIDE-PPPAR, Go binaries)
-pixi run setup
-
-# Verify the setup
-pixi run test-setup
+pixi run test
 ```
 
 ### Development
 
 ```bash
-# Lint and format
 pixi run lint
-pixi run format
-
-# Run tests
-pixi run pytest tests/ -v
-
-# Build documentation
-pixi run docs
+pixi run format-check
+pixi run test
 ```
 
-## Documentation
-
-Documentation (in development) is available on ReadTheDocs:
-
-[ReadTheDocs](https://es-sfgtools.readthedocs.io/en/latest/)
-
----
-
-**Maintainers**: Mike Gottlieb, Franklyn Dunbar, Rachel Akie
-**Organization**: [EarthScope](https://www.earthscope.org/)
+See `PIXI.md` for environment and task details.

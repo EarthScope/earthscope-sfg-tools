@@ -158,3 +158,8 @@ def interpolate_svp(svp: pd.DataFrame, additional_depth: float = 200.0) -> pd.Da
     svp = pd.concat([svp, new_svp], ignore_index=True)
     logger.info(f"Extended SVP to {additional_depth} m depth with interpolation.")
     return svp
+
+
+# Backward-compatible aliases for legacy CamelCase names.
+CTD_to_svp_v1 = ctd_to_svp_v1
+CTD_to_svp_v2 = ctd_to_svp_v2

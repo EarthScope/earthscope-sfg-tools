@@ -55,6 +55,10 @@ def get_metadatav2(
     ).model_dump()
 
 
+# Backward-compatible alias for legacy callers using ``get_metadata``.
+get_metadata = get_metadatav2
+
+
 def check_metadata_path(metadata_path: Path | str) -> str:
     """Validate a JSON metadata file path and return it as a string.
 

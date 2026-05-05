@@ -143,7 +143,11 @@ class GoBinaryRunner:
             dynamic_flags = setup_fn(workdir) if setup_fn else []
             all_flags = dynamic_flags + (extra_flags or [])
 
-            cmd = [str(self._binary), self._subcommand] + all_flags + [str(f) for f in files]
+            cmd = (
+                [str(self._binary), self._subcommand]
+                + all_flags
+                + [str(f) for f in files]
+            )
             self._log.info("Running: %s (cwd=%s)", " ".join(cmd), workdir)
 
             result = self._runner(cmd, cwd=workdir, capture_output=True, text=True)
@@ -178,7 +182,11 @@ class GoBinaryRunner:
             The raw ``subprocess.CompletedProcess`` from the binary.
         """
         files = _coerce_files(input_files)
-        cmd = [str(self._binary), self._subcommand] + (extra_flags or []) + [str(f) for f in files]
+        cmd = (
+            [str(self._binary), self._subcommand]
+            + (extra_flags or [])
+            + [str(f) for f in files]
+        )
         return self._runner(cmd, cwd=cwd or Path("."), capture_output=True, text=True)
 
     # ------------------------------------------------------------------
