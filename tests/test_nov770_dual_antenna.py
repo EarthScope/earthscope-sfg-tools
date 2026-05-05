@@ -22,13 +22,13 @@ def metadata():
 
 @pytest.fixture
 def novb2rnxo_available():
-    """Skip if the novb2rnxo Go binary is not present."""
+    """Skip if the sfg Go binary is not present."""
     from earthscope_sfg_tools.utils.go_utils import find_binary
 
     try:
-        find_binary("novb2rnx")
+        find_binary()
     except BinaryNotFoundError:
-        pytest.skip("novb2rnx binary not available")
+        pytest.skip("sfg binary not available")
 
 
 # ---------------------------------------------------------------------------
@@ -78,38 +78,29 @@ class TestNov770DualAntennaIntegration:
 
 class TestNov770FileRouting:
     def test_raw_file_routed_to_novb2rnxo(self, tmp_path, metadata):
-        """A .raw file should invoke novb2rnx, not nov0002rnx."""
-        with (
-            patch(FIND) as mock_find,
-            patch(WRAP) as mock_wrap,
-        ):
-            mock_find.return_value = Path("/fake/novb2rnx")
+        """A .raw file should invoke the novb2rnx subcommand."""
+        with patch(WRAP) as mock_wrap:
             mock_wrap.return_value = []
 
             novatel_binary_2rinex(
                 files=[FIXTURE_RAW], writedir=tmp_path, metadata=metadata
             )
 
-            mock_find.assert_called_once_with("novb2rnx")
-            assert mock_wrap.call_args.kwargs["binary_path"] == Path("/fake/novb2rnx")
+            assert mock_wrap.call_args.kwargs["subcommand"] == "novb2rnx"
 
     def test_bin_file_routed_to_nov0002rnx(self, tmp_path, metadata):
-        """A .bin file should invoke nov0002rnx, not novb2rnxo."""
+        """A .bin file should invoke the nov0002rnx subcommand."""
         fake_bin = tmp_path / "fake.bin"
         fake_bin.touch()
 
-        with (
-            patch(FIND) as mock_find,
-            patch(WRAP) as mock_wrap,
-        ):
-            mock_find.return_value = Path("/fake/nov0002rnx")
+        with patch(WRAP) as mock_wrap:
             mock_wrap.return_value = []
 
             novatel_binary_2rinex(
                 files=[fake_bin], writedir=tmp_path, metadata=metadata
             )
 
-            mock_find.assert_called_once_with("nov0002rnx")
+            assert mock_wrap.call_args.kwargs["subcommand"] == "nov0002rnx"
 
     def test_modulo_millis_forwarded_to_wrapper(self, tmp_path, metadata):
         """modulo_millis should be passed through to _novatel_2rinex_wrapper."""
@@ -157,8 +148,9 @@ class TestNov770FileRouting:
             novatel_binary_2rinex(files=[FIXTURE_RAW], writedir=tmp_path)
 
     def test_binary_not_found_propagates(self, tmp_path, metadata):
-        """BinaryNotFoundError from find_binary should propagate to the caller."""
-        with patch(FIND, side_effect=BinaryNotFoundError("not found")):
+        """BinaryNotFoundError from GoBinaryRunner should propagate to the caller."""
+        runner_find = "earthscope_sfg_tools.utils.go_runner.find_binary"
+        with patch(runner_find, side_effect=BinaryNotFoundError("not found")):
             with pytest.raises(BinaryNotFoundError):
                 novatel_binary_2rinex(
                     files=[FIXTURE_RAW], writedir=tmp_path, metadata=metadata

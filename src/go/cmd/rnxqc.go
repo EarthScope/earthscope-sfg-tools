@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"math"
@@ -11,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
 	"gitlab.com/earthscope/gnsstools/codecs/rinex"
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 )
@@ -31,7 +31,7 @@ const (
 	GapMinSec    = 10.0 * 60.0
 )
 
-type Header struct {
+type rinexHeader struct {
 	FileName       string
 	Version        string
 	Receiver       string
@@ -41,15 +41,15 @@ type Header struct {
 	ObsTypes       []string
 }
 
-type ObsRecord struct {
+type obsRecord struct {
 	Epoch  time.Time
 	SV     string
 	Values map[string]float64
 }
 
-type RinexObs struct {
-	Header  Header
-	Records []ObsRecord
+type rinexObs struct {
+	Header  rinexHeader
+	Records []obsRecord
 }
 
 type svStats struct {
@@ -89,7 +89,7 @@ type timeVal struct {
 	V float64
 }
 
-func parseRinexObs(path string) (*RinexObs, error) {
+func parseRinexObs(path string) (*rinexObs, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -101,9 +101,8 @@ func parseRinexObs(path string) (*RinexObs, error) {
 		return nil, fmt.Errorf("failed to create RINEX scanner: %w", err)
 	}
 
-	h := Header{FileName: filepath.Base(path), IntervalSec: 30.0}
+	h := rinexHeader{FileName: filepath.Base(path), IntervalSec: 30.0}
 
-	// Extract header info
 	if ver, err := scanner.Header.GetRinexVersion(); err == nil {
 		h.Version = ver.String()
 	}
@@ -117,8 +116,7 @@ func parseRinexObs(path string) (*RinexObs, error) {
 		h.ApproxPosition = [3]float64{pos[0], pos[1], pos[2]}
 	}
 
-	// Read all observation epochs
-	var records []ObsRecord
+	var records []obsRecord
 	for {
 		epoch, err := scanner.NextEpoch()
 		if err != nil {
@@ -135,7 +133,6 @@ func parseRinexObs(path string) (*RinexObs, error) {
 			vals := map[string]float64{}
 			for _, obs := range sat.Observations {
 				freq := obs.Code.Frequency
-				// Map frequency bands to RINEX 2-style obs codes
 				bandSuffix := ""
 				switch freq {
 				case observation.GPS_L1, observation.Galileo_E1, observation.SBAS_L1, observation.QZSS_L1:
@@ -155,7 +152,6 @@ func parseRinexObs(path string) (*RinexObs, error) {
 					vals["L"+bandSuffix] = obs.Phase
 				}
 				if obs.Pseudorange != 0 {
-					// Use C1/P1 convention for band 1, C2/P2 for band 2
 					if bandSuffix == "1" {
 						vals["C1"] = obs.Pseudorange
 					} else if bandSuffix == "2" {
@@ -169,11 +165,10 @@ func parseRinexObs(path string) (*RinexObs, error) {
 					vals["D"+bandSuffix] = obs.Doppler
 				}
 			}
-			records = append(records, ObsRecord{Epoch: epoch.Time, SV: sv, Values: vals})
+			records = append(records, obsRecord{Epoch: epoch.Time, SV: sv, Values: vals})
 		}
 	}
 
-	// Estimate interval from data if we have enough epochs
 	if len(records) > 1 {
 		epochTimes := map[time.Time]bool{}
 		for _, r := range records {
@@ -189,11 +184,11 @@ func parseRinexObs(path string) (*RinexObs, error) {
 		}
 	}
 
-	return &RinexObs{Header: h, Records: records}, nil
+	return &rinexObs{Header: h, Records: records}, nil
 }
 
-func groupBySV(records []ObsRecord) map[string][]ObsRecord {
-	out := map[string][]ObsRecord{}
+func groupBySV(records []obsRecord) map[string][]obsRecord {
+	out := map[string][]obsRecord{}
 	for _, r := range records {
 		out[r.SV] = append(out[r.SV], r)
 	}
@@ -205,7 +200,7 @@ func groupBySV(records []ObsRecord) map[string][]ObsRecord {
 	return out
 }
 
-func epochSummaryCalc(records []ObsRecord, intervalSec float64) (epochSummary, map[time.Time]int) {
+func epochSummaryCalc(records []obsRecord, intervalSec float64) (epochSummary, map[time.Time]int) {
 	epochCounts := map[time.Time]int{}
 	for _, r := range records {
 		epochCounts[r.Epoch]++
@@ -252,7 +247,7 @@ func epochSummaryCalc(records []ObsRecord, intervalSec float64) (epochSummary, m
 	}, epochCounts
 }
 
-func computeMultipath(records []ObsRecord, intervalSec float64) map[string]mpStats {
+func computeMultipath(records []obsRecord, intervalSec float64) map[string]mpStats {
 	bySV := groupBySV(records)
 	res := map[string]mpStats{}
 	gapThreshold := math.Max(intervalSec*2.0, 900.0)
@@ -273,7 +268,6 @@ func computeMultipath(records []ObsRecord, intervalSec float64) map[string]mpSta
 				v := c1 - (1.0+MP1Coeff)*LAM_L1*l1 + MP1Coeff*LAM_L2*l2
 				mp1Series = append(mp1Series, timeVal{T: r.Epoch, V: v})
 			}
-
 			if p2, ok := r.Values["P2"]; ok {
 				v := p2 - MP2Coeff*LAM_L1*l1 + (MP2Coeff-1.0)*LAM_L2*l2
 				mp2Series = append(mp2Series, timeVal{T: r.Epoch, V: v})
@@ -339,7 +333,7 @@ func computeMultipath(records []ObsRecord, intervalSec float64) map[string]mpSta
 	return res
 }
 
-func detectIONSlips(records []ObsRecord) (int, int) {
+func detectIONSlips(records []obsRecord) (int, int) {
 	bySV := groupBySV(records)
 	slipCount := 0
 	nObs := 0
@@ -366,7 +360,7 @@ func detectIONSlips(records []ObsRecord) (int, int) {
 	return slipCount, nObs
 }
 
-func computeSNRStats(records []ObsRecord) map[string]map[string]svStats {
+func computeSNRStats(records []obsRecord) map[string]map[string]svStats {
 	bands := []string{"S1", "S2", "S5"}
 	out := map[string]map[string]svStats{}
 	for _, b := range bands {
@@ -396,20 +390,20 @@ func computeSNRStats(records []ObsRecord) map[string]map[string]svStats {
 					mx = v
 				}
 			}
-			mean := sum / float64(len(vals))
+			avg := sum / float64(len(vals))
 			varsq := 0.0
 			for _, v := range vals {
-				d := v - mean
+				d := v - avg
 				varsq += d * d
 			}
 			std := math.Sqrt(varsq / float64(len(vals)))
-			out[b][sv] = svStats{Mean: mean, Std: std, Min: mn, Max: mx, N: len(vals)}
+			out[b][sv] = svStats{Mean: avg, Std: std, Min: mn, Max: mx, N: len(vals)}
 		}
 	}
 	return out
 }
 
-func detectGaps(records []ObsRecord, gapMinSec float64) map[string][]gapEntry {
+func detectGaps(records []obsRecord, gapMinSec float64) map[string][]gapEntry {
 	bySV := groupBySV(records)
 	out := map[string][]gapEntry{}
 	for sv, arr := range bySV {
@@ -436,7 +430,7 @@ func sortedKeys[K ~string, V any](m map[K]V) []K {
 	return keys
 }
 
-func formatReport(h Header, es epochSummary, mp map[string]mpStats, snr map[string]map[string]svStats, ionObs, slipCount int, gaps map[string][]gapEntry) string {
+func formatReport(h rinexHeader, es epochSummary, mp map[string]mpStats, snr map[string]map[string]svStats, ionObs, slipCount int, gaps map[string][]gapEntry) string {
 	var b strings.Builder
 	w := func(s string, a ...any) { fmt.Fprintf(&b, s, a...) }
 
@@ -481,22 +475,22 @@ func formatReport(h Header, es epochSummary, mp map[string]mpStats, snr map[stri
 		totalObs := 0
 		for _, sv := range keys {
 			s := mp[sv]
-			mp1 := "n/a"
-			mp2 := "n/a"
+			mp1str := "n/a"
+			mp2str := "n/a"
 			if s.MP1RMS != nil {
-				mp1 = fmt.Sprintf("%.4f", *s.MP1RMS)
+				mp1str = fmt.Sprintf("%.4f", *s.MP1RMS)
 				all1 = append(all1, *s.MP1RMS)
 			}
 			if s.MP2RMS != nil {
-				mp2 = fmt.Sprintf("%.4f", *s.MP2RMS)
+				mp2str = fmt.Sprintf("%.4f", *s.MP2RMS)
 				all2 = append(all2, *s.MP2RMS)
 			}
 			totalObs += s.NObs
-			w("  %-8s %12s %12s %8d\n", sv, mp1, mp2, s.NObs)
+			w("  %-8s %12s %12s %8d\n", sv, mp1str, mp2str, s.NObs)
 		}
 		w("  ------------------------------------------------------------\n")
 		if len(all1) > 0 && len(all2) > 0 {
-			w("  %-8s %12.4f %12.4f %8d\n", "Overall", mean(all1), mean(all2), totalObs)
+			w("  %-8s %12.4f %12.4f %8d\n", "Overall", floatMean(all1), floatMean(all2), totalObs)
 		}
 		w("\n")
 	}
@@ -530,7 +524,7 @@ func formatReport(h Header, es epochSummary, mp map[string]mpStats, snr map[stri
 		}
 		w("  -------------------------------------------------------\n")
 		if len(means) > 0 {
-			w("  %-8s %8.1f\n", "Overall", mean(means))
+			w("  %-8s %8.1f\n", "Overall", floatMean(means))
 		}
 		w("\n")
 	}
@@ -560,7 +554,7 @@ func formatReport(h Header, es epochSummary, mp map[string]mpStats, snr map[stri
 	return b.String()
 }
 
-func mean(v []float64) float64 {
+func floatMean(v []float64) float64 {
 	if len(v) == 0 {
 		return 0
 	}
@@ -578,33 +572,20 @@ func maxInt(a, b int) int {
 	return b
 }
 
-func main() {
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s <obs_file> [nav_file]\n", filepath.Base(os.Args[0]))
-		fmt.Fprintln(os.Stderr, "Example:")
-		fmt.Fprintf(os.Stderr, "  %s data/rinex/onof.03o data/rinex/onof.03n\n", filepath.Base(os.Args[0]))
-	}
-	flag.Parse()
-
-	if flag.NArg() < 1 {
-		flag.Usage()
-		os.Exit(2)
-	}
-	obsPath := flag.Arg(0)
+func runRnxqc(cmd *cobra.Command, args []string) error {
+	obsPath := args[0]
 	if _, err := os.Stat(obsPath); err != nil {
-		fmt.Fprintf(os.Stderr, "error: observation file not found: %s\n", obsPath)
-		os.Exit(1)
+		return fmt.Errorf("observation file not found: %s", obsPath)
 	}
 
 	fmt.Printf("Reading %s...\n", obsPath)
 	obs, err := parseRinexObs(obsPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error parsing RINEX OBS: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("parsing RINEX OBS: %w", err)
 	}
 
-	if flag.NArg() >= 2 {
-		navPath := flag.Arg(1)
+	if len(args) >= 2 {
+		navPath := args[1]
 		if _, err := os.Stat(navPath); err == nil {
 			fmt.Printf("Navigation file provided: %s (currently not required for this QC output)\n", navPath)
 		}
@@ -621,8 +602,15 @@ func main() {
 
 	reportPath := obsPath + ".S"
 	if err := os.WriteFile(reportPath, []byte(report), 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "error writing report: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("writing report: %w", err)
 	}
 	fmt.Printf("\nReport saved to: %s\n", reportPath)
+	return nil
+}
+
+var rnxqcCmd = &cobra.Command{
+	Use:   "rnxqc <obs_file> [nav_file]",
+	Short: "GNSS RINEX observation quality check",
+	Args:  cobra.RangeArgs(1, 2),
+	RunE:  runRnxqc,
 }

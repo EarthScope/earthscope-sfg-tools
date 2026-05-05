@@ -4,7 +4,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from ..utils.go_runner import GoBinaryRunner
-from ..utils.go_utils import find_binary, parse_cli_logs
+from ..utils.go_utils import find_binary, parse_cli_logs  # find_binary used in nov0002rnx()
 from .rinex_metadata import RinexMetadata
 from .utils import MetadataModel  # re-exported alias for backward compat
 
@@ -20,7 +20,7 @@ def nov0002rnx(
     logger: logging.Logger = logger,
 ) -> subprocess.CompletedProcess:
     """Convert NovAtel NOV000 binary logs to RINEX files using the Go utility."""
-    binary = find_binary("nov0002rnx")
+    binary = find_binary()
 
     files = [
         Path(f)
@@ -35,9 +35,9 @@ def nov0002rnx(
         output_dir = Path(output_dir)
         assert output_dir.exists(), f"Output directory {output_dir} does not exist."
 
-    cmd = [str(binary), "-settings", str(settings_file)]
+    cmd = [str(binary), "nov0002rnx", "--settings", str(settings_file)]
     if modulo is not None:
-        cmd.extend(["-modulo", str(modulo)])
+        cmd.extend(["--modulo", str(modulo)])
     cmd.extend([str(file) for file in files])
 
     logger.info(f"Running nov0002rnx: {' '.join(cmd)}")
@@ -52,13 +52,13 @@ def _novatel_2rinex_wrapper(
     files: list[Path] | list[str],
     writedir: Path,
     metadata: RinexMetadata,
-    binary_path: Path,
+    subcommand: str,
     modulo_millis: int = 0,
     num_routines: int = 1,
     antindex: int = 0,
     logger: logging.Logger = logger,
 ) -> list[Path]:
-    """Internal helper: run a NovAtel-to-RINEX Go binary via GoBinaryRunner."""
+    """Internal helper: run a NovAtel-to-RINEX sfg subcommand via GoBinaryRunner."""
     if not files:
         raise ValueError("No input files provided to _novatel_2rinex_wrapper")
 
@@ -66,19 +66,18 @@ def _novatel_2rinex_wrapper(
 
     def _setup(workdir: Path) -> list[str]:
         meta_path = metadata.write(workdir / f"{site}_metadata.json")
-        flags = ["-settings", str(meta_path)]
+        flags = ["--settings", str(meta_path)]
         if modulo_millis > 0:
-            flags += ["-modulo", str(modulo_millis)]
+            flags += ["--modulo", str(modulo_millis)]
         if num_routines > 1:
-            flags += ["-numroutines", str(num_routines)]
+            flags += ["--numroutines", str(num_routines)]
         if antindex > 0:
-            flags += ["-antindex", str(antindex)]
+            flags += ["--antindex", str(antindex)]
         return flags
 
     runner = GoBinaryRunner(
-        binary_path.name,
+        subcommand,
         output_glob=lambda s: f"*{s}*",
-        binary_path=binary_path,
         log=logger,
     )
     return runner.run(
@@ -132,7 +131,6 @@ def novatel_binary_2rinex(
     all_rinex_paths: list[Path] = []
 
     if bin_files:
-        binary_path = find_binary("nov0002rnx")
         if writedir is None:
             write_dirs: dict[Path, list[Path]] = defaultdict(list)
             for file in bin_files:
@@ -145,7 +143,7 @@ def novatel_binary_2rinex(
                     files=files_to_process,
                     writedir=write_dir,
                     metadata=meta,
-                    binary_path=binary_path,
+                    subcommand="nov0002rnx",
                     modulo_millis=modulo_millis,
                     num_routines=num_routines,
                     antindex=antindex,
@@ -154,7 +152,6 @@ def novatel_binary_2rinex(
             )
 
     if raw_files:
-        binary_path = find_binary("novb2rnx")
         if writedir is None:
             write_dirs: dict[Path, list[Path]] = defaultdict(list)
             for file in raw_files:
@@ -167,7 +164,7 @@ def novatel_binary_2rinex(
                     files=files_to_process,
                     writedir=write_dir,
                     metadata=meta,
-                    binary_path=binary_path,
+                    subcommand="novb2rnx",
                     modulo_millis=modulo_millis,
                     num_routines=num_routines,
                     logger=logger,

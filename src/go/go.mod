@@ -6,7 +6,7 @@ require (
 	github.com/labstack/gommon v0.4.2
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.10.2
-	gitlab.com/earthscope/gnsstools v0.59.6
+	gitlab.com/earthscope/gnsstools v0.60.0
 	gitlab.com/earthscope/gnsstools/geodata v0.58.0
 )
 

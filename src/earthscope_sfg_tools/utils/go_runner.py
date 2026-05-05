@@ -42,7 +42,7 @@ def _real_runner(
 
 
 class GoBinaryRunner:
-    """Run a single Go binary that consumes input files and emits output files.
+    """Run a subcommand of the ``sfg`` Go binary.
 
     Hides: binary discovery, temp-workdir lifecycle, subprocess execution,
     stdout/stderr log parsing, non-zero exit handling, output file collection,
@@ -50,9 +50,9 @@ class GoBinaryRunner:
 
     Parameters
     ----------
-    binary_name:
-        Logical binary name (e.g. ``"nov0002rnx"``).  ``find_binary()``
-        resolves the platform-specific path at construction time so
+    subcommand:
+        The ``sfg`` subcommand to invoke (e.g. ``"nov0002rnx"``).
+        The binary is located via ``find_binary()`` at construction time so
         ``BinaryNotFoundError`` surfaces immediately.
     output_glob:
         Shell glob used to discover output files inside the temp workdir
@@ -68,16 +68,15 @@ class GoBinaryRunner:
 
     def __init__(
         self,
-        binary_name: str,
+        subcommand: str,
         output_glob: str | Callable[[str], str] = "*",
         *,
         binary_path: Path | None = None,
         runner: SubprocessRunner | None = None,
         log: logging.Logger | None = None,
     ) -> None:
-        self._binary: Path = (
-            binary_path if binary_path is not None else find_binary(binary_name)
-        )
+        self._binary: Path = binary_path if binary_path is not None else find_binary()
+        self._subcommand = subcommand
         self._output_glob = output_glob
         self._runner: SubprocessRunner = runner or _real_runner
         self._log = log or logger
@@ -144,7 +143,7 @@ class GoBinaryRunner:
             dynamic_flags = setup_fn(workdir) if setup_fn else []
             all_flags = dynamic_flags + (extra_flags or [])
 
-            cmd = [str(self._binary)] + all_flags + [str(f) for f in files]
+            cmd = [str(self._binary), self._subcommand] + all_flags + [str(f) for f in files]
             self._log.info("Running: %s (cwd=%s)", " ".join(cmd), workdir)
 
             result = self._runner(cmd, cwd=workdir, capture_output=True, text=True)
@@ -152,7 +151,7 @@ class GoBinaryRunner:
 
             if result.returncode != 0:
                 raise RuntimeError(
-                    f"{self._binary.name} exited {result.returncode}.\n"
+                    f"sfg {self._subcommand} exited {result.returncode}.\n"
                     f"stdout: {result.stdout}\nstderr: {result.stderr}"
                 )
 
@@ -179,7 +178,7 @@ class GoBinaryRunner:
             The raw ``subprocess.CompletedProcess`` from the binary.
         """
         files = _coerce_files(input_files)
-        cmd = [str(self._binary)] + (extra_flags or []) + [str(f) for f in files]
+        cmd = [str(self._binary), self._subcommand] + (extra_flags or []) + [str(f) for f in files]
         return self._runner(cmd, cwd=cwd or Path("."), capture_output=True, text=True)
 
     # ------------------------------------------------------------------
@@ -193,25 +192,24 @@ class GoBinaryRunner:
 
     @classmethod
     def available_binaries(cls, names: list[str]) -> dict[str, Path | None]:
-        """Probe binary names and return a mapping of name to resolved path.
+        """Probe whether the ``sfg`` binary is available for the given subcommands.
 
-        Useful for health-checks and CI pre-flight checks.
+        All subcommands are part of a single ``sfg`` binary, so this resolves
+        ``sfg`` once and maps that path (or ``None``) to every requested name.
 
         Args:
-            names: List of logical binary names to probe (e.g.
+            names: List of subcommand names to probe (e.g.
                 ``['nova2rnx', 'nov0002rnx']``).
 
         Returns:
-            Dict mapping each name to its resolved ``Path``, or ``None``
+            Dict mapping each name to the resolved ``sfg`` ``Path``, or ``None``
             if the binary is not found.
         """
-        result: dict[str, Path | None] = {}
-        for name in names:
-            try:
-                result[name] = find_binary(name)
-            except BinaryNotFoundError:
-                result[name] = None
-        return result
+        try:
+            sfg_path = find_binary()
+        except BinaryNotFoundError:
+            sfg_path = None
+        return {name: sfg_path for name in names}
 
 
 # ---------------------------------------------------------------------------

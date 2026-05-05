@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,51 +13,47 @@ import (
 	"time"
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/sfg_utils"
+	"github.com/spf13/cobra"
 	log "github.com/sirupsen/logrus"
 	"gitlab.com/earthscope/gnsstools/codecs/rinex"
 	"gitlab.com/earthscope/gnsstools/geodata/gnsstiledb"
 )
 
-type BodyParameters struct {
+type tdb2rnxBodyParameters struct {
 	URI         string                    `json:"uri"`
 	Region      string                    `json:"region"`
 	QueryParams gnsstiledb.ObsQueryParams `json:"query"`
 }
 
-// Helper function to parse metadata from the JSON file
-func ParseSettings(path string) (*rinex.Settings, error) {
+func parseTdb2rnxSettings(path string) (*rinex.Settings, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed opening settings file: %s", err)
+		return nil, fmt.Errorf("failed opening settings file: %w", err)
 	}
 	defer file.Close()
 	bytes, err := io.ReadAll(file)
 	if err != nil {
-		return nil, fmt.Errorf("failed reading settings file: %s", err)
+		return nil, fmt.Errorf("failed reading settings file: %w", err)
 	}
 	var settings = &rinex.Settings{}
 	if err := json.Unmarshal(bytes, settings); err != nil {
-		return nil, fmt.Errorf("failed parsing settings file: %s", err)
+		return nil, fmt.Errorf("failed parsing settings file: %w", err)
 	}
 	return settings, nil
 }
 
-func GetHourSlice(daySlice gnsstiledb.TimeRange, interval int) []gnsstiledb.TimeRange {
+func getHourSlice(daySlice gnsstiledb.TimeRange, interval int) []gnsstiledb.TimeRange {
 	if interval < 1 {
-		log.Warn("Invalid interval (%d), defaulting to 1 hour from ", interval)
+		log.Warn("Invalid interval, defaulting to 1 hour")
 		interval = 1
 	} else if interval > 24 {
-		log.Warn("Invalid interval (%d), defaulting to 24 hour from ", interval)
+		log.Warn("Invalid interval, defaulting to 24 hours")
 		interval = 24
 	}
-	// break daySlice into 1 hour slices
 	hourSlices := []gnsstiledb.TimeRange{}
 	prevTime := daySlice.Start
 	for i := interval; i <= 24; i += interval {
-		log.Debugf("PrevTime: %s, Interval: %d", prevTime, i)
-
 		endTime := prevTime.Add(time.Duration(interval) * time.Hour)
-		// If the end time is exactly a day after the start time, set the end time to the end of the day
 		if endTime.After(daySlice.End) {
 			endTime = daySlice.End
 		}
@@ -68,34 +63,30 @@ func GetHourSlice(daySlice gnsstiledb.TimeRange, interval int) []gnsstiledb.Time
 	return hourSlices
 }
 
-func FilterDaySlices(daySlices []gnsstiledb.TimeRange, year int) (daySlicesModified []gnsstiledb.TimeRange, err error) {
+func filterDaySlices(daySlices []gnsstiledb.TimeRange, year int) ([]gnsstiledb.TimeRange, error) {
 	if len(daySlices) == 0 {
-		log.Warn("No Day Slices Found")
-		return nil, fmt.Errorf("No Day Slices Found")
+		return nil, fmt.Errorf("no day slices found")
 	}
 	if year <= 0 {
 		log.Warn("Year not specified, generating daily RINEX for all years")
 		return daySlices, nil
 	}
-	daySlicesModified = []gnsstiledb.TimeRange{}
+	filtered := []gnsstiledb.TimeRange{}
 	for _, slice := range daySlices {
 		if slice.Start.Year() == year {
-			daySlicesModified = append(daySlicesModified, slice)
+			filtered = append(filtered, slice)
 		}
 	}
-	if len(daySlicesModified) == 0 {
-		err = fmt.Errorf("No Day Slices Found For The Year %d", year)
-		return nil, err
+	if len(filtered) == 0 {
+		return nil, fmt.Errorf("no day slices found for year %d", year)
 	}
-	return daySlicesModified, nil
+	return filtered, nil
 }
 
-func ProcessDaySlice(ctx context.Context, client *gnsstiledb.Client, daySlice gnsstiledb.TimeRange, tdbPath string, interval int, settings *rinex.Settings, moduloMillis int64) {
-	// break daySlice into 1 hour slices
-	hourSlices := GetHourSlice(daySlice, interval)
+func processDaySlice(ctx context.Context, client *gnsstiledb.Client, daySlice gnsstiledb.TimeRange, tdbPath string, interval int, settings *rinex.Settings, moduloMillis int64) {
+	hourSlices := getHourSlice(daySlice, interval)
 	batchNum := 0
 	for _, hourSlice := range hourSlices {
-		// Read the epochs from the TDB
 		queryParams := gnsstiledb.ObsQueryParams{
 			Time: []gnsstiledb.TimeRange{hourSlice},
 		}
@@ -103,14 +94,12 @@ func ProcessDaySlice(ctx context.Context, client *gnsstiledb.Client, daySlice gn
 		if err != nil {
 			log.Debug("Error Reading TDB: ", err)
 		}
-
 		if len(epochs) == 0 {
 			log.Debug("No epochs found for the given time slice")
 			continue
 		}
 		log.Infof("Found %d Epochs From Array Within Timespan: %s", len(epochs), hourSlice)
 
-		// Apply decimation if modulo is specified
 		if moduloMillis > 0 {
 			epochs = sfg_utils.DecimateEpochs(epochs, moduloMillis)
 			if len(epochs) == 0 {
@@ -118,109 +107,111 @@ func ProcessDaySlice(ctx context.Context, client *gnsstiledb.Client, daySlice gn
 				continue
 			}
 		}
+
 		var obsWriter *rinex.ObsWriter
 		if batchNum == 0 {
 			settings.TimeOfFirst = epochs[0].Time
-			settings.TimeOfLast = daySlice.End // TODO find a way to update time of last OBS
+			settings.TimeOfLast = daySlice.End
 			if settings.RinexVersion.Major == rinex.MajorVersion3 || settings.RinexVersion.Major == rinex.MajorVersion4 {
-				// Write the RINEX header
 				for _, epoch := range epochs {
-
 					settings.ObservationsBySystem.AddEpoch(epoch)
 				}
 			}
 
 			startYear, startMonth, startDay := epochs[0].Time.Date()
-
 			currentDate := time.Date(startYear, startMonth, startDay, 0, 0, 0, 0, time.UTC)
 			dayOfYear := currentDate.YearDay()
-		
 			yy := startYear % 100
 			filename := fmt.Sprintf("%s%03d0.%02do", settings.MarkerName, dayOfYear, yy)
 			log.Infof("Generating Daily RINEX File For Year %d, Month %d, Day %d To %s", startYear, startMonth, startDay, filename)
 
-			// Check if the file already exists
 			if _, err := os.Stat(filename); err == nil {
 				log.Warnf("File Already Exists: %s", filename)
-				// delete the file
-				err := os.Remove(filename)
-				if err != nil {
+				if err := os.Remove(filename); err != nil {
 					log.Errorf("failed deleting existing file: %s", err)
 				}
 			}
 			outFile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
-			defer outFile.Close()
 			if err != nil {
 				log.Errorf("failed creating output file: %s", err)
+				continue
 			}
 			defer outFile.Close()
 			writer := bufio.NewWriter(outFile)
 			defer writer.Flush()
 			obsWriter = rinex.NewObsWriter(writer, settings)
-			
+		}
 
-		} 
-	
 		for _, epoch := range epochs {
-			_, err = obsWriter.Write(epoch)
-
-			if err != nil {
+			if _, err := obsWriter.Write(epoch); err != nil {
 				log.Warnf("failed writing observation: %s", err)
 			}
-
 		}
 		batchNum++
 	}
 	log.Infof("==================== COMPLETE ====================")
-
 }
 
-func main() {
-	log.Println("Starting TDB2Rnx")
-	sfg_utils.LoadEnv()
-	tdbPathPtr := flag.String("tdb", "", "Path to the TileDB array")
-	metaPtr := flag.String("settings", "", "settings file")
-	timeIntervals := flag.Int("timeint", 1, "Break array queries into intervals of N hours")
-	processingYear := flag.Int("year", 0, "If set, only process data for the given year")
-	moduloPtr := flag.Int64("modulo", 0, "decimation modulo in milliseconds (e.g., 1000 for 1 Hz, 15000 for 15s intervals). If 0, no decimation is applied.")
+var tdb2rnxCmd = &cobra.Command{
+	Use:   "tdb2rnx",
+	Short: "Export observations from a TileDB array to RINEX files",
+	RunE:  runTdb2rnx,
+}
 
-	flag.Parse()
+func runTdb2rnx(cmd *cobra.Command, args []string) error {
+	log.Println("Starting tdb2rnx")
+	sfg_utils.LoadEnv()
+
+	tdbPath, _ := cmd.Flags().GetString("tdb")
+	metaPath, _ := cmd.Flags().GetString("settings")
+	timeInterval, _ := cmd.Flags().GetInt("timeint")
+	processingYear, _ := cmd.Flags().GetInt("year")
+	modulo, _ := cmd.Flags().GetInt64("modulo")
+
+	if tdbPath == "" {
+		return fmt.Errorf("--tdb is required")
+	}
+	if metaPath == "" {
+		return fmt.Errorf("--settings is required")
+	}
+
 	log.SetOutput(os.Stdout)
 
-	if *moduloPtr > 0 {
-		slog.Info("Decimation enabled", "modulo_ms", *moduloPtr)
+	if modulo > 0 {
+		slog.Info("Decimation enabled", "modulo_ms", modulo)
 	}
 
-	// Parse settings from JSON
-	settings, err := ParseSettings(*metaPtr)
+	settings, err := parseTdb2rnxSettings(metaPath)
 	if err != nil {
-		log.Fatalf("failed parsing settings: %s", err)
+		return fmt.Errorf("parsing settings: %w", err)
 	}
-	// check if tdbPathPtr points to an existing file
-	if _, err := os.Stat(*tdbPathPtr); err != nil {
-		log.Fatalf("TileDB array not found at %s: %v", *tdbPathPtr, err)
+
+	if _, err := os.Stat(tdbPath); err != nil {
+		return fmt.Errorf("TileDB array not found at %s: %w", tdbPath, err)
 	}
 
 	ctx := context.Background()
 	client, err := gnsstiledb.NewClient(ctx, nil, "us-east-2")
 	if err != nil {
-		log.Fatalf("error creating gnsstiledb client: %v", err)
+		return fmt.Errorf("creating gnsstiledb client: %w", err)
 	}
 	defer client.Close()
 
-	timeStart, timeEnd, err := client.NonEmptyTimeDomain(ctx, *tdbPathPtr)
+	timeStart, timeEnd, err := client.NonEmptyTimeDomain(ctx, tdbPath)
 	if err != nil {
-		log.Fatalln(err)
+		return fmt.Errorf("getting time domain: %w", err)
 	}
-	log.Infof("Time Range: %s - %s Found At %s", timeStart, timeEnd, *tdbPathPtr)
+	log.Infof("Time Range: %s - %s Found At %s", timeStart, timeEnd, tdbPath)
+
 	daySlices := gnsstiledb.SplitTimeRangeCalendar(timeStart, timeEnd, gnsstiledb.PeriodDaily)
-	daySlices, err = FilterDaySlices(daySlices, *processingYear)
+	daySlices, err = filterDaySlices(daySlices, processingYear)
 	if err != nil {
-		log.Warnf("Error Filtering Day Slices: %s", err)
-		return
+		log.Warnf("Error filtering day slices: %s", err)
+		return nil
 	}
+
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 10) // Limit to 10 concurrent goroutines
+	sem := make(chan struct{}, 10)
 
 	for _, daySlice := range daySlices {
 		wg.Add(1)
@@ -228,8 +219,17 @@ func main() {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			ProcessDaySlice(ctx, client, daySlice, *tdbPathPtr, *timeIntervals, settings, *moduloPtr)
-	}	(daySlice)
-}
+			processDaySlice(ctx, client, daySlice, tdbPath, timeInterval, settings, modulo)
+		}(daySlice)
+	}
 	wg.Wait()
+	return nil
+}
+
+func init() {
+	tdb2rnxCmd.Flags().String("tdb", "", "path to the TileDB array (required)")
+	tdb2rnxCmd.Flags().String("settings", "", "settings file (required)")
+	tdb2rnxCmd.Flags().Int("timeint", 1, "break array queries into intervals of N hours")
+	tdb2rnxCmd.Flags().Int("year", 0, "if set, only process data for the given year")
+	tdb2rnxCmd.Flags().Int64("modulo", 0, "decimation modulo in milliseconds (e.g., 1000 for 1 Hz, 15000 for 15s). 0 disables decimation.")
 }

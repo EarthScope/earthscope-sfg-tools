@@ -38,13 +38,13 @@ def nova2tile(
     BinaryNotFoundError
         If the nova2tile binary cannot be found.
     """
-    binary = find_binary("nova2tile")
+    binary = find_binary()
 
     files = listify(input_files)
-    cmd = [str(binary), "-tdb", tdb_path, "-procs", str(num_procs)]
+    cmd = [str(binary), "nova2tile", "--tdb", tdb_path, "--procs", str(num_procs)]
     cmd.extend(files)
 
-    logger.info(f"Running nova2tile: {' '.join(cmd)}")
+    logger.info(f"Running sfg nova2tile: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     parse_cli_logs(result, logger)
     return result
@@ -76,13 +76,13 @@ def novb2tile(
     BinaryNotFoundError
         If the novb2tile binary cannot be found.
     """
-    binary = find_binary("novb2tile")
+    binary = find_binary()
 
     files = listify(input_files)
-    cmd = [str(binary), "-tdb", tdb_path, "-procs", str(num_procs)]
+    cmd = [str(binary), "novab2tile", "--tdb", tdb_path, "--procs", str(num_procs)]
     cmd.extend(files)
 
-    logger.info(f"Running novb2tile: {' '.join(cmd)}")
+    logger.info(f"Running sfg novab2tile: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     parse_cli_logs(result, logger)
     return result
@@ -111,13 +111,13 @@ def nov0002tile(
     BinaryNotFoundError
         If the nov0002tile binary cannot be found.
     """
-    binary = find_binary("nov0002tile")
+    binary = find_binary()
 
     files = listify(input_files)
-    cmd = [str(binary), "-tdb", tdb_path]
+    cmd = [str(binary), "nov0002tile", "--tdb", tdb_path]
     cmd.extend(files)
 
-    logger.info(f"Running nov0002tile: {' '.join(cmd)}")
+    logger.info(f"Running sfg nov0002tile: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     parse_cli_logs(result, logger)
     return result
@@ -155,23 +155,24 @@ def tdb2rnx(
     BinaryNotFoundError
         If the tdb2rnx binary cannot be found.
     """
-    binary = find_binary("tdb2rnx")
+    binary = find_binary()
 
     cmd = [
         str(binary),
-        "-tdb",
+        "tdb2rnx",
+        "--tdb",
         tdb_path,
-        "-settings",
+        "--settings",
         settings_file,
-        "-timeint",
+        "--timeint",
         str(time_interval),
-        "-year",
+        "--year",
         str(processing_year),
     ]
     if modulo_millis > 0:
-        cmd.extend(["-modulo", str(modulo_millis)])
+        cmd.extend(["--modulo", str(modulo_millis)])
 
-    logger.info(f"Running tdb2rnx: {' '.join(cmd)}")
+    logger.info(f"Running sfg tdb2rnx: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     parse_cli_logs(result, logger)
     return result

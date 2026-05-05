@@ -24,13 +24,13 @@ def metadata():
 
 @pytest.fixture
 def nov0002rnx_available():
-    """Skip if the nov0002rnx Go binary is not present."""
+    """Skip if the sfg Go binary is not present."""
     from earthscope_sfg_tools.utils.go_utils import find_binary
 
     try:
-        find_binary("nov0002rnx")
+        find_binary()
     except BinaryNotFoundError:
-        pytest.skip("nov0002rnx binary not available")
+        pytest.skip("sfg binary not available")
 
 
 # ---------------------------------------------------------------------------
@@ -87,20 +87,15 @@ class TestNov000ToRinexIntegration:
 
 class TestNov000FileRouting:
     def test_bin_file_routed_to_nov0002rnx(self, tmp_path, metadata):
-        """A .bin file must invoke nov0002rnx, not novb2rnxo."""
-        with (
-            patch(FIND) as mock_find,
-            patch(WRAP) as mock_wrap,
-        ):
-            mock_find.return_value = Path("/fake/nov0002rnx")
+        """A .bin file must invoke the nov0002rnx subcommand."""
+        with patch(WRAP) as mock_wrap:
             mock_wrap.return_value = []
 
             novatel_binary_2rinex(
                 files=[FIXTURE_BIN], writedir=tmp_path, metadata=metadata
             )
 
-            mock_find.assert_called_once_with("nov0002rnx")
-            assert mock_wrap.call_args.kwargs["binary_path"] == Path("/fake/nov0002rnx")
+            assert mock_wrap.call_args.kwargs["subcommand"] == "nov0002rnx"
 
     def test_returns_wrapper_output(self, tmp_path, metadata):
         """novatel_binary_2rinex should pass through whatever the wrapper returns."""
@@ -140,27 +135,26 @@ class TestNov000FileRouting:
             )
 
     def test_binary_not_found_propagates(self, tmp_path, metadata):
-        """BinaryNotFoundError should propagate to the caller."""
-        with patch(FIND, side_effect=BinaryNotFoundError("not found")):
+        """BinaryNotFoundError from GoBinaryRunner should propagate to the caller."""
+        runner_find = "earthscope_sfg_tools.utils.go_runner.find_binary"
+        with patch(runner_find, side_effect=BinaryNotFoundError("not found")):
             with pytest.raises(BinaryNotFoundError):
                 novatel_binary_2rinex(
                     files=[FIXTURE_BIN], writedir=tmp_path, metadata=metadata
                 )
 
     def test_raw_and_bin_mixed_both_run(self, tmp_path, metadata):
-        """Mixing .raw and .bin files should invoke both binaries."""
+        """Mixing .raw and .bin files should invoke both subcommands."""
         fixture_raw = (
             Path(__file__).parent / "data" / "test_20260331_174553_00030_NOV770.raw"
         )
-        with patch(FIND) as mock_find, patch(WRAP) as mock_wrap:
-            mock_find.return_value = Path("/fake/binary")
+        with patch(WRAP) as mock_wrap:
             mock_wrap.return_value = []
 
             novatel_binary_2rinex(
                 files=[FIXTURE_BIN, fixture_raw], writedir=tmp_path, metadata=metadata
             )
 
-        # find_binary called twice: once for nov0002rnx, once for novb2rnx
-        assert mock_find.call_count == 2
-        called_with = {c.args[0] for c in mock_find.call_args_list}
-        assert called_with == {"nov0002rnx", "novb2rnx"}
+        assert mock_wrap.call_count == 2
+        subcommands = {c.kwargs["subcommand"] for c in mock_wrap.call_args_list}
+        assert subcommands == {"nov0002rnx", "novb2rnx"}

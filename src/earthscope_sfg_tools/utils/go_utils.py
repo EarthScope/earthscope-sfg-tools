@@ -20,42 +20,41 @@ class BinaryNotFoundError(Exception):
     pass
 
 
-def find_binary(name: str) -> Path:
-    """Find a Go binary by name.
+def find_binary(name: str = "sfg") -> Path:
+    """Find the ``sfg`` Go binary.
 
     Parameters
     ----------
     name : str
-        Binary name (e.g., 'nova2rnx')
+        Ignored — retained for backward compatibility.  All subcommands
+        are now part of the single ``sfg`` binary.
 
     Returns
     -------
     Path
-        Full path to the binary.
+        Full path to the ``sfg`` binary.
 
     Raises
     ------
     BinaryNotFoundError
-        If binary cannot be found.
+        If the binary cannot be found.
     """
-    # Determine platform-specific binary name
     os_name, arch = get_system_architecture()
-
-    binary_name = f"{name}_{os_name}_{arch}"
+    binary_name = f"sfg_{os_name}_{arch}"
 
     # Check package's go/build/ directory first
     if GO_BINARY_BUILD_DIR.exists():
         binary_path = GO_BINARY_BUILD_DIR / binary_name
         if binary_path.exists() and binary_path.is_file():
             return binary_path
-
     else:
         logger.warning(
             f"Go binary build directory {GO_BINARY_BUILD_DIR} does not exist. "
             f"Please ensure Go tools are built and available in PATH or {GO_BINARY_BUILD_DIR}",
             stacklevel=2,
         )
-    # Try to find in PATH (plain name)
+
+    # Try to find in PATH
     try:
         result = subprocess.run(
             ["which", binary_name],

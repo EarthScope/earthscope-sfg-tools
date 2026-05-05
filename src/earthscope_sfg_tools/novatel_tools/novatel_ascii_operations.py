@@ -25,7 +25,7 @@ def nova2rnx(
     logger: logging.Logger = logger,
 ) -> subprocess.CompletedProcess:
     """Convert NovAtel ASCII logs to RINEX files using the Go utility."""
-    binary = find_binary("nova2rnx")
+    binary = find_binary()
 
     settings_file = Path(settings_file)
     assert settings_file.exists(), f"Settings file {settings_file} does not exist."
@@ -37,9 +37,9 @@ def nova2rnx(
     for file in files:
         assert file.exists(), f"Input file {file} does not exist."
 
-    cmd = [str(binary), "-settings", str(settings_file)]
+    cmd = [str(binary), "nova2rnx", "--settings", str(settings_file)]
     if modulo is not None:
-        cmd.extend(["-modulo", str(modulo)])
+        cmd.extend(["--modulo", str(modulo)])
     cmd.extend([str(file) for file in files])
 
     logger.info(f"Running nova2rnx: {' '.join(cmd)}")
@@ -125,15 +125,15 @@ def novatel_ascii_2rinex(
         writedir = Path(writedir)
 
     meta = RinexMetadata.load(metadata, site=site)
-    binary_path = find_binary("nova2rnx")
+    binary_path = find_binary()
 
     logger.info(f"Converting and merging {files} ascii Novatel to RINEX", stacklevel=2)
 
     with tempfile.TemporaryDirectory() as workdir:
         metadata_path = meta.write(Path(workdir) / f"{meta.marker_name}_metadata.json")
-        cmd = [str(binary_path), "-settings", str(metadata_path)]
+        cmd = [str(binary_path), "nova2rnx", "--settings", str(metadata_path)]
         if modulo_millis > 0:
-            cmd.extend(["-modulo", str(modulo_millis)])
+            cmd.extend(["--modulo", str(modulo_millis)])
         for file in files:
             cmd.append(str(file))
         cmd_str = " ".join(cmd)
