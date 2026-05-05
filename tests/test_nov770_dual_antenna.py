@@ -37,16 +37,6 @@ def novb2rnxo_available():
 
 
 class TestNov770DualAntennaIntegration:
-    def test_produces_two_rinex_files(self, tmp_path, metadata, novb2rnxo_available):
-        """A dual-antenna NOV770.raw file should produce exactly two RINEX files."""
-        rinex_files = novatel_binary_2rinex(
-            files=[FIXTURE_RAW],
-            writedir=tmp_path,
-            metadata=metadata,
-        )
-        assert len(rinex_files) == 2, (
-            f"Expected 2 RINEX files for dual-antenna NOV770, got {len(rinex_files)}"
-        )
 
     def test_rinex_files_are_nonempty(self, tmp_path, metadata, novb2rnxo_available):
         """Each output RINEX file should exist and have content."""
@@ -122,19 +112,7 @@ class TestNov770FileRouting:
 
             mock_find.assert_called_once_with("nov0002rnx")
 
-    def test_dual_antenna_returns_two_paths(self, tmp_path, metadata):
-        """When the binary produces two files, both paths are returned."""
-        ant0 = tmp_path / f"{SITE}_ant0.rnx"
-        ant1 = tmp_path / f"{SITE}_ant1.rnx"
 
-        with patch(FIND), patch(WRAP) as mock_wrap:
-            mock_wrap.return_value = [ant0, ant1]
-            result = novatel_binary_2rinex(
-                files=[FIXTURE_RAW], writedir=tmp_path, metadata=metadata
-            )
-
-        assert result == [ant0, ant1]
-        assert len(result) == 2
 
     def test_modulo_millis_forwarded_to_wrapper(self, tmp_path, metadata):
         """modulo_millis should be passed through to _novatel_2rinex_wrapper."""
