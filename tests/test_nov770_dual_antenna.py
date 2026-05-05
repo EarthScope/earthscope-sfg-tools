@@ -102,7 +102,7 @@ class TestNov770FileRouting:
             )
 
             mock_find.assert_called_once_with("novb2rnx")
-            assert mock_wrap.call_args.kwargs["binary_path"] == Path("/fake/novb2rnxo")
+            assert mock_wrap.call_args.kwargs["binary_path"] == Path("/fake/novb2rnx")
 
     def test_bin_file_routed_to_nov0002rnx(self, tmp_path, metadata):
         """A .bin file should invoke nov0002rnx, not novb2rnxo."""

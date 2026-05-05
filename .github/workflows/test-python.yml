@@ -32,5 +32,5 @@ jobs:
         run: pixi run -e tiledb build-go
         
       - name: Run tests
-        run: pixi run test
+        run: pixi run -e tiledb test
 
