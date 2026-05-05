@@ -37,7 +37,6 @@ def novb2rnxo_available():
 
 
 class TestNov770DualAntennaIntegration:
-
     def test_rinex_files_are_nonempty(self, tmp_path, metadata, novb2rnxo_available):
         """Each output RINEX file should exist and have content."""
         rinex_files = novatel_binary_2rinex(
@@ -111,8 +110,6 @@ class TestNov770FileRouting:
             )
 
             mock_find.assert_called_once_with("nov0002rnx")
-
-
 
     def test_modulo_millis_forwarded_to_wrapper(self, tmp_path, metadata):
         """modulo_millis should be passed through to _novatel_2rinex_wrapper."""
