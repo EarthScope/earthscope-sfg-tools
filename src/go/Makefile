@@ -9,6 +9,11 @@ BUILD_DIR=build
 COMMANDS=$(wildcard cmd/*)
 # Use existing CONDA_PREFIX (from conda or micromamba); avoid calling `conda` directly
 CONDA_PREFIX := $(shell echo $$CONDA_PREFIX)
+# Optional override for CI or manual builds
+SFG_TILEDB_PREFIX := $(shell echo $$SFG_TILEDB_PREFIX)
+
+# Resolve TileDB prefix used for headers/libs
+PREFIX := $(or $(SFG_TILEDB_PREFIX),$(CONDA_PREFIX))
 
 # Derive build PREFIX:
 #   On macOS: DYLD_LIBRARY_PATH takes priority when explicitly set (e.g. by the pixi
