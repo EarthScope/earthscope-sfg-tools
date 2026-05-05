@@ -37,5 +37,8 @@ jobs:
       - name: Set up pixi
         uses: prefix-dev/setup-pixi@v0.8.3
 
+      - name: compile Go binaries
+        run: pixi run build-go
+        
       - name: Run tests
         run: pixi run test
