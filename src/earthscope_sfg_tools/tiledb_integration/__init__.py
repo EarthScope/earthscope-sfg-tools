@@ -25,6 +25,12 @@ from .arrays import (  # noqa: E402
     TDBKinPositionArray,
     TDBShotDataArray,
 )
+from .novatel_tools.go_binaries import (  # noqa: E402
+    nov0002tile as _nov0002tile_impl,
+    nova2tile,
+    novb2tile,
+    tdb2rnx,
+)
 from .schemas import (  # noqa: E402
     AcousticArraySchema,
     GNSSObsSchema,
@@ -35,6 +41,30 @@ from .schemas import (  # noqa: E402
     ctx,
     filters,
 )
+
+
+def novatel_770_2tile(files, gnss_obs_tdb, n_procs: int = 10, **kwargs):
+    """Workflow-facing wrapper around :func:`novb2tile` for NovAtel NOV770 logs.
+
+    Translates the workflow-side kwargs (``files``, ``gnss_obs_tdb``,
+    ``n_procs``) to the underlying ``sfg novab2tile`` call.
+    """
+    return novb2tile(input_files=files, tdb_path=gnss_obs_tdb, num_procs=n_procs)
+
+
+def nov0002tile(files, gnss_obs_tdb, position_tdb=None, n_procs: int = 10, **kwargs):
+    """Workflow-facing wrapper around the underlying ``sfg nov0002tile`` call.
+
+    Translates the workflow-side kwargs (``files``, ``gnss_obs_tdb``,
+    ``position_tdb``, ``n_procs``) to the binary's ``--tdb`` / ``--tdbpos`` /
+    ``--procs`` flags.
+    """
+    return _nov0002tile_impl(
+        input_files=files,
+        tdb_path=gnss_obs_tdb,
+        tdb_position=position_tdb,
+        num_procs=n_procs,
+    )
 
 
 def _not_yet_implemented(name: str):
@@ -57,7 +87,6 @@ def _not_yet_implemented(name: str):
 # TODO(earthscope-sfg-tools): implement these parser/converter helpers.
 tile2rinex = _not_yet_implemented("tile2rinex")
 rinex_qc = _not_yet_implemented("rinex_qc")
-novatel_770_2tile = _not_yet_implemented("novatel_770_2tile")
 
 
 __all__ = [
