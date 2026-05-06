@@ -1,3 +1,5 @@
+"""Vessel metadata model and supporting equipment/sensor sub-models."""
+
 import json
 from datetime import datetime
 from enum import StrEnum
@@ -15,6 +17,8 @@ from .utils import (
 
 
 class EquipmentType(StrEnum):
+    """Identifiers for vessel equipment collections (used for generic CRUD)."""
+
     IMU_SENSORS = "imuSensors"
     ATD_OFFSETS = "atdOffsets"
     GNSS_ANTENNAS = "gnssAntennas"
@@ -44,6 +48,8 @@ class AtdOffset(AttributeUpdater, BaseModel):
 
 
 class GnssAntenna(AttributeUpdater, BaseModel):
+    """GNSS antenna mounted on the vessel for a given time interval."""
+
     # Required
     type: str
     serialNumber: str
@@ -64,6 +70,8 @@ class GnssAntenna(AttributeUpdater, BaseModel):
 
 
 class GnssReceiver(AttributeUpdater, BaseModel):
+    """GNSS receiver installed on the vessel for a given time interval."""
+
     # Required
     type: str
     serialNumber: str
@@ -85,6 +93,8 @@ class GnssReceiver(AttributeUpdater, BaseModel):
 
 
 class AcousticTransducer(AttributeUpdater, BaseModel):
+    """Acoustic transducer (transmit/receive element) deployed on the vessel."""
+
     # Required
     type: str
     serialNumber: str
@@ -103,6 +113,8 @@ class AcousticTransducer(AttributeUpdater, BaseModel):
 
 
 class AcousticTransceiver(AttributeUpdater, BaseModel):
+    """Acoustic transceiver (modem electronics) used to drive the transducer."""
+
     # Required
     type: str
     serialNumber: str
@@ -133,6 +145,8 @@ class AcousticTransceiver(AttributeUpdater, BaseModel):
 
 
 class ImuSensor(AttributeUpdater, BaseModel):
+    """Inertial measurement unit installed on the vessel."""
+
     # Required
     type: str
     serialNumber: str
@@ -151,6 +165,8 @@ class ImuSensor(AttributeUpdater, BaseModel):
 
 
 class Vessel(AttributeUpdater, BaseModel):
+    """Vessel metadata: identity, deployment dates, and onboard equipment lists."""
+
     # Required
     name: str = Field(..., description="The 4 digit name of the vessel")
     type: str = Field(..., description="The type of the vessel. e.g. waveglider")
@@ -192,6 +208,7 @@ class Vessel(AttributeUpdater, BaseModel):
 
     @field_validator("name", "type", "model")
     def check_required_fields(cls, value):
+        """Reject empty strings for the required identity fields."""
         if not value:
             raise ValueError(f"Required field {value} is empty")
         return value

@@ -1,3 +1,5 @@
+"""Benchmark and transponder metadata models for seafloor reference points."""
+
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
@@ -12,6 +14,8 @@ from .utils import (
 
 
 class ExtraSensors(AttributeUpdater, BaseModel):
+    """Auxiliary sensor (e.g. pressure, temperature) attached to a transponder."""
+
     # Required
     type: str = Field(..., description="The type of the extra sensor")
     serialNumber: str = Field(..., description="The serial number of the extra sensor")
@@ -19,6 +23,8 @@ class ExtraSensors(AttributeUpdater, BaseModel):
 
 
 class BatteryVoltage(AttributeUpdater, BaseModel):
+    """Single battery-voltage reading for a transponder, with timestamp."""
+
     # Required
     date: datetime = Field(
         ...,
@@ -31,6 +37,8 @@ class BatteryVoltage(AttributeUpdater, BaseModel):
 
 
 class TAT(AttributeUpdater, BaseModel):
+    """Turn-around-time (TAT) value for a transponder, valid over a date interval."""
+
     # Required
     value: float = Field(..., description="Turn around time (TAT) in ms", ge=0, le=1000)
     start: datetime | None = Field(
@@ -49,6 +57,8 @@ class TAT(AttributeUpdater, BaseModel):
 
 
 class Transponder(AttributeUpdater, BaseModel):
+    """Acoustic transponder deployed at a benchmark, with TAT history and metadata."""
+
     # Required
     address: str = Field(..., description="The address of the transponder")
     tat: list[TAT] = Field(
@@ -119,6 +129,8 @@ class Transponder(AttributeUpdater, BaseModel):
 
 
 class Benchmark(AttributeUpdater, BaseModel):
+    """Seafloor benchmark: a survey-marked location hosting one or more transponders."""
+
     # Required
     name: str = Field(..., description="The name of the benchmark")
     benchmarkID: str | None = Field("", description="The benchmark ID")

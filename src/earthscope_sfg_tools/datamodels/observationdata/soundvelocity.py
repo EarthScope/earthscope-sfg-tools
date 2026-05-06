@@ -1,3 +1,5 @@
+"""Pandera schema for sound-velocity profile DataFrames."""
+
 from pandera.typing import Series
 import pandera.pandas as pa
 

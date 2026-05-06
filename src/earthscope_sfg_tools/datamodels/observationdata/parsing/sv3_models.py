@@ -185,6 +185,7 @@ class SonardyneRangeDiagnosticData(BaseModel):
     @field_validator("dbv", "snr", "xc", mode="before")
     @classmethod
     def convert_from_list(cls, value: list[int | float] | int | float):
+        """Unwrap single-element lists and coerce numeric inputs to ``Decimal``."""
         if isinstance(value, list) and len(value) == 1:
             return Decimal(value[0])
         return Decimal(value)
@@ -201,6 +202,7 @@ class SonardyneRangeReplyData(BaseModel):
     @field_validator("tat", mode="after")
     @classmethod
     def convert_tat(cls, value: Decimal):
+        """Convert TAT from milliseconds (raw log units) to seconds as ``float``."""
         return float(value) / 1000.0
 
 

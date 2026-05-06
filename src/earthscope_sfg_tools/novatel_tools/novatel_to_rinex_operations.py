@@ -1,3 +1,5 @@
+"""Novatel binary log → RINEX conversion via the bundled ``nov0002rnx`` Go binary."""
+
 import logging
 import subprocess
 from collections import defaultdict

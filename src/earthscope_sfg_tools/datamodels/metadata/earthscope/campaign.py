@@ -1,3 +1,5 @@
+"""Campaign and survey metadata models with survey-type classification."""
+
 from datetime import datetime
 from enum import StrEnum
 
@@ -59,6 +61,8 @@ def campaign_checks(campaign_year, campaign_interval, vessel_code):
 
 
 class SurveyType(StrEnum):
+    """Enumeration of supported GNSS-A survey patterns."""
+
     CIRCLE = "circledrive"
     FIXED_POINT = "fixedpoint"
     MIXED = "mixed"
