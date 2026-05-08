@@ -31,6 +31,8 @@ platforms = ["osx-arm64", "osx-64", "linux-64", "win-64"]
 [tool.pixi.dependencies]
 pytest = ">=8"
 ruff = ">=0.4"
+matplotlib = ">=3.10.9,<4"
+cloudpathlib = ">=0.24.0,<0.25"
 
 [tool.pixi.pypi-dependencies]
 earthscope_sfg_tools = { path = ".", editable = true }
@@ -56,6 +58,8 @@ test = { cmd = "pytest tests/ -v", description = "Run the test suite" }
 lint = { cmd = "ruff check src/ tests/", description = "Lint with ruff" }
 format-check = { cmd = "ruff format --check src/ tests/", description = "Check formatting" }
 format = { cmd = "ruff format src/ tests/", description = "Auto-format source" }
+docs = { cmd = "myst start", description = "Serve docs locally with live reload" }
+docs-build = { cmd = "myst build --html", description = "Build docs as static HTML" }
 
 # =============================================================================
 # Activation - environment variables
