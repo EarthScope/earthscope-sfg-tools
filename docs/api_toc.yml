@@ -1,14 +1,14 @@
-  - title: API Reference
+  - title: Tools
     children:
       - file: docs/api/index.md
-      - title: datamodels
+      - title: Data Models
         children:
-          - title: community
+          - title: Community
             children:
               - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.community.community_standards.md
               - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.community.posfilter_models.md
               - file: docs/api/earthscope_sfg_tools.datamodels.metadata.community.site.md
-          - title: earthscope
+          - title: Earthscope
             children:
               - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.benchmark.md
               - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.campaign.md
@@ -16,55 +16,55 @@
               - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.site.md
               - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.utils.md
               - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.vessel.md
-          - title: garpos
+          - title: Garpos
             children:
               - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.garpos.observables.md
-          - title: observationdata
+          - title: Observationdata
             children:
               - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.soundvelocity.md
-          - title: parsing
+          - title: Parsing
             children:
               - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.parsing.log_models.md
               - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.parsing.ppp.md
               - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.parsing.sv3_models.md
-      - title: novatel_tools
+      - title: NovAtel Tools
         children:
-          - title: general
+          - title: General
             children:
               - file: docs/api/earthscope_sfg_tools.novatel_tools.novatel_ascii_operations.md
               - file: docs/api/earthscope_sfg_tools.novatel_tools.novatel_to_rinex_operations.md
               - file: docs/api/earthscope_sfg_tools.novatel_tools.rangea_parser.md
               - file: docs/api/earthscope_sfg_tools.novatel_tools.rinex_metadata.md
               - file: docs/api/earthscope_sfg_tools.novatel_tools.utils.md
-      - title: rinex_tools
+      - title: RINEX Tools
         children:
-          - title: general
+          - title: General
             children:
               - file: docs/api/earthscope_sfg_tools.rinex_tools.metadata.md
               - file: docs/api/earthscope_sfg_tools.rinex_tools.quality_control.md
-      - title: seafloor_site_tools
+      - title: Seafloor Site Tools
         children:
-          - title: general
+          - title: General
             children:
               - file: docs/api/earthscope_sfg_tools.seafloor_site_tools.soundspeed_operations.md
-      - title: sonardyne_tools
+      - title: Sonardyne Tools
         children:
-          - title: general
+          - title: General
             children:
               - file: docs/api/earthscope_sfg_tools.sonardyne_tools.sv3_operations.md
               - file: docs/api/earthscope_sfg_tools.sonardyne_tools.sv3_qc_operations.md
-      - title: tiledb_integration
+      - title: TileDB Integration
         children:
-          - title: general
+          - title: General
             children:
               - file: docs/api/earthscope_sfg_tools.tiledb_integration.arrays.md
               - file: docs/api/earthscope_sfg_tools.tiledb_integration.md
-          - title: novatel_tools
+          - title: NovAtel Tools
             children:
               - file: docs/api/earthscope_sfg_tools.tiledb_integration.novatel_tools.go_binaries.md
-      - title: utils
+      - title: Utilities
         children:
-          - title: general
+          - title: General
             children:
               - file: docs/api/earthscope_sfg_tools.utils.go_runner.md
               - file: docs/api/earthscope_sfg_tools.utils.go_utils.md

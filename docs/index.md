@@ -13,7 +13,7 @@ Seafloor Geodesy (SFG) processing at EarthScope.
 | `datamodels` | Pydantic/Pandera data models and validation for SFG data |
 | `seafloor_site_tools` | Sound speed profile utilities |
 | `tiledb_integration` | Optional TileDB array schema and storage integration |
-| `utils` | Shared helpers including wrappers for Go binaries |
+| `utils` | Shared utility helpers used by downstream workflows |
 
 ## What this package does NOT own
 
@@ -27,6 +27,8 @@ pixi install
 pixi run test
 ```
 
-See [Installation](installation.md) for full setup instructions and
-[Development](development.md) for the contributor workflow.
-[Code Documentation](api.md) for X.
+## Doc Contents
+
+ * See [Installation](installation.md) for full setup instructions.
+ * See [Development](development.md) for the contributor workflow.
+ * See [Tools Reference](api/index.md) for detailed code functionaility.

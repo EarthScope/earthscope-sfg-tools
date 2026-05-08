@@ -16,5 +16,5 @@ duplicate rows from breaking interpolation.
 
 | Name | Type | Description |
 |---|---|---|
-| `depth` | `<pandera.common.AnnotationInfo object at 0x168dc2df0>` |  |
-| `speed` | `<pandera.common.AnnotationInfo object at 0x168dc23f0>` |  |
+| `depth` | `<pandera.common.AnnotationInfo object at 0x156ec6df0>` |  |
+| `speed` | `<pandera.common.AnnotationInfo object at 0x156ec63f0>` |  |

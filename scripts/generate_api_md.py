@@ -275,6 +275,25 @@ def render_module_page(module) -> list[str]:
 
     return lines
 
+def humanize_title(value: str) -> str:
+    """Convert snake_case or module names into readable titles."""
+
+    custom_titles = {
+        "datamodels": "Data Models",
+        "novatel_tools": "NovAtel Tools",
+        "rinex_tools": "RINEX Tools",
+        "seafloor_site_tools": "Seafloor Site Tools",
+        "sonardyne_tools": "Sonardyne Tools",
+        "tiledb_integration": "TileDB Integration",
+        "utils": "Utilities",
+        "observationdata": "Observation Data",
+    }
+
+    if value in custom_titles:
+        return custom_titles[value]
+
+    return value.replace("_", " ").title()
+
 
 def main() -> None:
     """Generate API Markdown pages, an API index page, and a MyST TOC snippet."""
@@ -374,7 +393,7 @@ def main() -> None:
     #   not ./api/<stem>.
     # -------------------------------------------------------------------------
     index_lines = [
-        "# API Reference",
+        "# Tools",
         "",
         "Click a file below to open its API page.",
         "",
@@ -382,13 +401,13 @@ def main() -> None:
 
     for group in sorted(grouped_modules):
         index_lines += [
-            f"## `{group}`",
+            f"## {humanize_title(group)}",
             "",
         ]
 
         for subgroup in sorted(grouped_modules[group]):
             index_lines += [
-                f"### `{subgroup}`",
+                f"### {humanize_title(subgroup)}",
                 "",
             ]
 
@@ -415,20 +434,20 @@ def main() -> None:
     #   MyST warnings recommend including .md extensions explicitly.
     # -------------------------------------------------------------------------
     toc_lines = [
-        "  - title: API Reference",
+        "  - title: Tools",
         "    children:",
         "      - file: docs/api/index.md",
     ]
 
     for group in sorted(grouped_modules):
         toc_lines += [
-            f"      - title: {group}",
+            f"      - title: {humanize_title(group)}",
             "        children:",
         ]
 
         for subgroup in sorted(grouped_modules[group]):
             toc_lines += [
-                f"          - title: {subgroup}",
+                f"          - title: {humanize_title(subgroup)}",
                 "            children:",
             ]
 
