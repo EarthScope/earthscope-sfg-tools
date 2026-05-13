@@ -48,9 +48,12 @@ class TestDfop00Parsing:
         assert len(shotdata) > 0
 
     def test_row_count(self, shotdata):
-        """Fixture has 44 interrogation / 135 range events; 40 valid pairs survive
-        (IR5210 and IR5211 only appear with range=0 and are rejected)."""
-        assert len(shotdata) == 40
+        """Fixture has 44 interrogation / 135 range events; 42 valid pairs survive
+        (IR5210 and IR5211 only appear with range=0 and are rejected).
+        Two previously-rejected rows are now accepted after fixing the
+        SonardyneGNSSData validator to coerce -1.0 sdx/sdy sentinel values
+        to None rather than raising a ValidationError."""
+        assert len(shotdata) == 42
 
     def test_only_ir5209_survives(self, shotdata):
         """IR5210 and IR5211 have range=0 in this fixture and are filtered out."""
