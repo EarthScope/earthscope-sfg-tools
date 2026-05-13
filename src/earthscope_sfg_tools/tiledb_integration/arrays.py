@@ -21,6 +21,7 @@ from ..datamodels.observationdata.garpos.observables import (
 from ..datamodels.observationdata.parsing.ppp import KinPositionDataFrame
 from ..novatel_tools import novatel_ascii_operations as nova_ops
 from ..novatel_tools.rangea_parser import GNSSEpoch
+from .novatel_tools.go_binaries import nova2tile
 from .schemas import (
     AcousticArraySchema,
     GNSSObsSchema,
@@ -502,9 +503,8 @@ class TDBGNSSObsArray(TBDArray):
             for line in rangea_strings:
                 tmp_file.write(line + "\n")
             tmp_file.flush()
-            nova_ops.novatel_ascii_2tile(
-                files=[tmp_file.name],
-                gnss_obs_tdb=str(self.uri),
-                n_procs=1,
-                verbose=verbose,
+            nova2tile(
+                input_files=[tmp_file.name],
+                tdb_path=str(self.uri),
+                num_procs=1,
             )
