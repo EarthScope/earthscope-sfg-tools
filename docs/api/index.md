@@ -23,7 +23,7 @@ Click a file below to open its API page.
 
 - [observables](./earthscope_sfg_tools.datamodels.observationdata.garpos.observables)
 
-### Observationdata
+### Observation Data
 
 - [soundvelocity](./earthscope_sfg_tools.datamodels.observationdata.soundvelocity)
 
@@ -62,17 +62,6 @@ Click a file below to open its API page.
 
 - [sv3_operations](./earthscope_sfg_tools.sonardyne_tools.sv3_operations)
 - [sv3_qc_operations](./earthscope_sfg_tools.sonardyne_tools.sv3_qc_operations)
-
-## TileDB Integration
-
-### General
-
-- [arrays](./earthscope_sfg_tools.tiledb_integration.arrays)
-- [tiledb_integration](./earthscope_sfg_tools.tiledb_integration)
-
-### NovAtel Tools
-
-- [go_binaries](./earthscope_sfg_tools.tiledb_integration.novatel_tools.go_binaries)
 
 ## Utilities
 

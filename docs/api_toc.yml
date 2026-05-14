@@ -1,72 +1,63 @@
-  - title: Tools
-    children:
-      - file: docs/api/index.md
-      - title: Data Models
-        children:
-          - title: Community
-            children:
-              - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.community.community_standards.md
-              - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.community.posfilter_models.md
-              - file: docs/api/earthscope_sfg_tools.datamodels.metadata.community.site.md
-          - title: Earthscope
-            children:
-              - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.benchmark.md
-              - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.campaign.md
-              - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.catalogs.md
-              - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.site.md
-              - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.utils.md
-              - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.vessel.md
-          - title: Garpos
-            children:
-              - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.garpos.observables.md
-          - title: Observationdata
-            children:
-              - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.soundvelocity.md
-          - title: Parsing
-            children:
-              - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.parsing.log_models.md
-              - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.parsing.ppp.md
-              - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.parsing.sv3_models.md
-      - title: NovAtel Tools
-        children:
-          - title: General
-            children:
-              - file: docs/api/earthscope_sfg_tools.novatel_tools.novatel_ascii_operations.md
-              - file: docs/api/earthscope_sfg_tools.novatel_tools.novatel_to_rinex_operations.md
-              - file: docs/api/earthscope_sfg_tools.novatel_tools.rangea_parser.md
-              - file: docs/api/earthscope_sfg_tools.novatel_tools.rinex_metadata.md
-              - file: docs/api/earthscope_sfg_tools.novatel_tools.utils.md
-      - title: RINEX Tools
-        children:
-          - title: General
-            children:
-              - file: docs/api/earthscope_sfg_tools.rinex_tools.metadata.md
-              - file: docs/api/earthscope_sfg_tools.rinex_tools.quality_control.md
-      - title: Seafloor Site Tools
-        children:
-          - title: General
-            children:
-              - file: docs/api/earthscope_sfg_tools.seafloor_site_tools.soundspeed_operations.md
-      - title: Sonardyne Tools
-        children:
-          - title: General
-            children:
-              - file: docs/api/earthscope_sfg_tools.sonardyne_tools.sv3_operations.md
-              - file: docs/api/earthscope_sfg_tools.sonardyne_tools.sv3_qc_operations.md
-      - title: TileDB Integration
-        children:
-          - title: General
-            children:
-              - file: docs/api/earthscope_sfg_tools.tiledb_integration.arrays.md
-              - file: docs/api/earthscope_sfg_tools.tiledb_integration.md
-          - title: NovAtel Tools
-            children:
-              - file: docs/api/earthscope_sfg_tools.tiledb_integration.novatel_tools.go_binaries.md
-      - title: Utilities
-        children:
-          - title: General
-            children:
-              - file: docs/api/earthscope_sfg_tools.utils.go_runner.md
-              - file: docs/api/earthscope_sfg_tools.utils.go_utils.md
-              - file: docs/api/earthscope_sfg_tools.utils.misc.md
-              - file: docs/api/earthscope_sfg_tools.utils.system_utils.md
+    - title: Tools
+      children:
+        - file: docs/api/index.md
+        - title: Data Models
+          children:
+            - title: Community
+              children:
+                - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.community.community_standards.md
+                - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.community.posfilter_models.md
+                - file: docs/api/earthscope_sfg_tools.datamodels.metadata.community.site.md
+            - title: Earthscope
+              children:
+                - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.benchmark.md
+                - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.campaign.md
+                - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.catalogs.md
+                - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.site.md
+                - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.utils.md
+                - file: docs/api/earthscope_sfg_tools.datamodels.metadata.earthscope.vessel.md
+            - title: Garpos
+              children:
+                - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.garpos.observables.md
+            - title: Observation Data
+              children:
+                - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.soundvelocity.md
+            - title: Parsing
+              children:
+                - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.parsing.log_models.md
+                - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.parsing.ppp.md
+                - file: docs/api/earthscope_sfg_tools.datamodels.observationdata.parsing.sv3_models.md
+        - title: NovAtel Tools
+          children:
+            - title: General
+              children:
+                - file: docs/api/earthscope_sfg_tools.novatel_tools.novatel_ascii_operations.md
+                - file: docs/api/earthscope_sfg_tools.novatel_tools.novatel_to_rinex_operations.md
+                - file: docs/api/earthscope_sfg_tools.novatel_tools.rangea_parser.md
+                - file: docs/api/earthscope_sfg_tools.novatel_tools.rinex_metadata.md
+                - file: docs/api/earthscope_sfg_tools.novatel_tools.utils.md
+        - title: RINEX Tools
+          children:
+            - title: General
+              children:
+                - file: docs/api/earthscope_sfg_tools.rinex_tools.metadata.md
+                - file: docs/api/earthscope_sfg_tools.rinex_tools.quality_control.md
+        - title: Seafloor Site Tools
+          children:
+            - title: General
+              children:
+                - file: docs/api/earthscope_sfg_tools.seafloor_site_tools.soundspeed_operations.md
+        - title: Sonardyne Tools
+          children:
+            - title: General
+              children:
+                - file: docs/api/earthscope_sfg_tools.sonardyne_tools.sv3_operations.md
+                - file: docs/api/earthscope_sfg_tools.sonardyne_tools.sv3_qc_operations.md
+        - title: Utilities
+          children:
+            - title: General
+              children:
+                - file: docs/api/earthscope_sfg_tools.utils.go_runner.md
+                - file: docs/api/earthscope_sfg_tools.utils.go_utils.md
+                - file: docs/api/earthscope_sfg_tools.utils.misc.md
+                - file: docs/api/earthscope_sfg_tools.utils.system_utils.md

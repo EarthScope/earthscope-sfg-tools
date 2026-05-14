@@ -295,6 +295,28 @@ def humanize_title(value: str) -> str:
     return value.replace("_", " ").title()
 
 
+def write_myst_yml(api_toc_lines: list[str]) -> None:
+    """Render myst.yml from myst.yml.template with the generated API TOC."""
+
+    template_path = ROOT / "docs/myst.yml.template"
+    output_path = ROOT / "myst.yml"
+
+    template = template_path.read_text(encoding="utf-8")
+
+    placeholder = "{{ API_TOC }}"
+
+    if placeholder not in template:
+        raise RuntimeError(
+            f"{template_path} is missing the {placeholder} placeholder."
+        )
+
+    api_toc = "\n".join(api_toc_lines)
+
+    output = template.replace(placeholder, api_toc)
+
+    output_path.write_text(output, encoding="utf-8")
+
+
 def main() -> None:
     """Generate API Markdown pages, an API index page, and a MyST TOC snippet."""
 
@@ -434,34 +456,37 @@ def main() -> None:
     #   MyST warnings recommend including .md extensions explicitly.
     # -------------------------------------------------------------------------
     toc_lines = [
-        "  - title: Tools",
-        "    children:",
-        "      - file: docs/api/index.md",
+    "    - title: Tools",
+    "      children:",
+    "        - file: docs/api/index.md",
     ]
 
     for group in sorted(grouped_modules):
         toc_lines += [
-            f"      - title: {humanize_title(group)}",
-            "        children:",
+            f"        - title: {humanize_title(group)}",
+            "          children:",
         ]
 
         for subgroup in sorted(grouped_modules[group]):
             toc_lines += [
-                f"          - title: {humanize_title(subgroup)}",
-                "            children:",
+                f"            - title: {humanize_title(subgroup)}",
+                "              children:",
             ]
 
             for label, filename in sorted(grouped_modules[group][subgroup]):
                 stem = Path(filename).stem
 
                 toc_lines.append(
-                    f"              - file: docs/api/{stem}.md"
+                    f"                - file: docs/api/{stem}.md"
                 )
 
     toc_path = ROOT / "docs" / "api_toc.yml"
     toc_path.write_text("\n".join(toc_lines), encoding="utf-8")
-
     print(f"Wrote {toc_path}")
+    write_myst_yml(toc_lines)
+    print("Wrote myst.yml from myst.yml.template")
+
+    
 
 
 if __name__ == "__main__":

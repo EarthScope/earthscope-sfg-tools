@@ -21,7 +21,6 @@ project:
       children:
         - file: docs/installation.md
         - file: docs/development.md
-
     - title: Tools
       children:
         - file: docs/api/index.md
@@ -60,7 +59,7 @@ project:
                 - file: docs/api/earthscope_sfg_tools.novatel_tools.rangea_parser.md
                 - file: docs/api/earthscope_sfg_tools.novatel_tools.rinex_metadata.md
                 - file: docs/api/earthscope_sfg_tools.novatel_tools.utils.md
-        - title: Rinex Tools
+        - title: RINEX Tools
           children:
             - title: General
               children:
@@ -77,15 +76,6 @@ project:
               children:
                 - file: docs/api/earthscope_sfg_tools.sonardyne_tools.sv3_operations.md
                 - file: docs/api/earthscope_sfg_tools.sonardyne_tools.sv3_qc_operations.md
-        - title: TileDB Integration
-          children:
-            - title: General
-              children:
-                - file: docs/api/earthscope_sfg_tools.tiledb_integration.arrays.md
-                - file: docs/api/earthscope_sfg_tools.tiledb_integration.md
-            - title: NovAtel Tools
-              children:
-                - file: docs/api/earthscope_sfg_tools.tiledb_integration.novatel_tools.go_binaries.md
         - title: Utilities
           children:
             - title: General

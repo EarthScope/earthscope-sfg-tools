@@ -14,13 +14,13 @@ Columns match KinPositionArraySchema; time is the sparse dimension index.
 
 | Name | Type | Description |
 |---|---|---|
-| `time` | `<pandera.common.AnnotationInfo object at 0x156ec6350>` |  |
-| `latitude` | `<pandera.common.AnnotationInfo object at 0x156ec62b0>` |  |
-| `longitude` | `<pandera.common.AnnotationInfo object at 0x156ec6490>` |  |
-| `height` | `<pandera.common.AnnotationInfo object at 0x156ec6530>` |  |
-| `east` | `<pandera.common.AnnotationInfo object at 0x156ec65d0>` |  |
-| `north` | `<pandera.common.AnnotationInfo object at 0x156ec6670>` |  |
-| `up` | `<pandera.common.AnnotationInfo object at 0x156ec6710>` |  |
-| `number_of_satellites` | `<pandera.common.AnnotationInfo object at 0x156ec67b0>` |  |
-| `pdop` | `<pandera.common.AnnotationInfo object at 0x156ec6850>` |  |
-| `wrms` | `<pandera.common.AnnotationInfo object at 0x156ec68f0>` |  |
+| `time` | `<pandera.common.AnnotationInfo object at 0x13eaf6530>` |  |
+| `latitude` | `<pandera.common.AnnotationInfo object at 0x13eaf6490>` |  |
+| `longitude` | `<pandera.common.AnnotationInfo object at 0x13eaf6670>` |  |
+| `height` | `<pandera.common.AnnotationInfo object at 0x13eaf6710>` |  |
+| `east` | `<pandera.common.AnnotationInfo object at 0x13eaf67b0>` |  |
+| `north` | `<pandera.common.AnnotationInfo object at 0x13eaf6850>` |  |
+| `up` | `<pandera.common.AnnotationInfo object at 0x13eaf68f0>` |  |
+| `number_of_satellites` | `<pandera.common.AnnotationInfo object at 0x13eaf6990>` |  |
+| `pdop` | `<pandera.common.AnnotationInfo object at 0x13eaf6a30>` |  |
+| `wrms` | `<pandera.common.AnnotationInfo object at 0x13eaf6ad0>` |  |
