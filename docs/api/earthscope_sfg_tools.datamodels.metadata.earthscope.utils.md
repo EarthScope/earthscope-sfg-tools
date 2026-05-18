@@ -47,9 +47,9 @@ _No docstring._
 
 | Name | Type | Description |
 |---|---|---|
-| `latitude` | `Union` | The latitude of the location. |
-| `longitude` | `Union` | The longitude of the location. |
-| `elevation` | `Union` | The elevation of the location. |
+| `latitude` | `float \| None` | The latitude of the location. |
+| `longitude` | `float \| None` | The longitude of the location. |
+| `elevation` | `float \| None` | The elevation of the location. |
 
 **Methods**
 

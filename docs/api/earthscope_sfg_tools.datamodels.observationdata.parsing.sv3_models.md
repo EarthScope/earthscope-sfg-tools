@@ -33,7 +33,7 @@ Full Sonardyne range (reply) event parsed from a DFOP00 JSONL log.
 | `range` | `SonardyneRangeReplyData` | Range reply data |
 | `sequence` | `int` | Sequence ID |
 | `time` | `TimeData` | Event time |
-| `uid` | `Union` | Unique identifier |
+| `uid` | `str \| None` | Unique identifier |
 
 ## class `SV3GPSQuality`
 
@@ -51,7 +51,7 @@ AHRS attitude (heading, pitch, roll) and acceleration from a Sonardyne event log
 | `acy` | `Decimal` | Acceleration Y axis in m/s^2 |
 | `acz` | `Decimal` | Acceleration Z axis in m/s^2 |
 | `h` | `Decimal` | Heading in degrees |
-| `h_mag` | `Union` | Magnetic heading in degrees |
+| `h_mag` | `decimal.Decimal \| None` | Magnetic heading in degrees |
 | `p` | `Decimal` | Pitch in degrees |
 | `r` | `Decimal` | Roll in degrees |
 | `time` | `TimeData` | Time data associated with the log |
@@ -68,10 +68,10 @@ GNSS position fix and standard deviations from a Sonardyne event log.
 | `latitude` | `Decimal` | Latitude in degrees |
 | `longitude` | `Decimal` | Longitude in degrees |
 | `q` | `SV3GPSQuality` | Quality indicator |
-| `sdx` | `Union` | Standard deviation east [m] |
-| `sdy` | `Union` | Standard deviation north [m] |
-| `sdz` | `Union` | Standard deviation up [m] |
-| `separation` | `Union` | Separation |
+| `sdx` | `decimal.Decimal \| None` | Standard deviation east [m] |
+| `sdy` | `decimal.Decimal \| None` | Standard deviation north [m] |
+| `sdz` | `decimal.Decimal \| None` | Standard deviation up [m] |
+| `separation` | `decimal.Decimal \| None` | Separation |
 | `time` | `TimeData` | Time data associated with the log |
 
 ## class `SonardyneHeadingData`
@@ -87,8 +87,8 @@ GNSS dual-antenna heading solution from a Sonardyne event log.
 | `p` | `Decimal` | GNSS Computed Pitch in degrees |
 | `position_type` | `SonardynePositionType` | Type of position data |
 | `receiver_status` | `str` | Status of the receiver |
-| `sdh` | `Union` | Standard deviation of heading in degrees |
-| `sdp` | `Union` | Standard deviation of pitch in degrees |
+| `sdh` | `decimal.Decimal \| None` | Standard deviation of heading in degrees |
+| `sdp` | `decimal.Decimal \| None` | Standard deviation of pitch in degrees |
 | `solution_type` | `SonardyneSolutionStatus` | Solution type of the heading data |
 | `sv_used` | `int` | Number of satellites used in the solution |
 | `sv_visible` | `int` | Number of satellites visible |
@@ -136,11 +136,11 @@ Bundle of all sensor observations attached to one Sonardyne event.
 
 | Name | Type | Description |
 |---|---|---|
-| `AHRS` | `Union` | AHRS data |
-| `GNSS` | `Union` | GNSS data |
-| `NOV_HEADING` | `Union` | Sonardyne heading data |
-| `NOV_INS` | `Union` | Sonardyne INS data |
-| `NOV_RANGE` | `Union` | Sonardyne range data |
+| `AHRS` | `earthscope_sfg_tools.datamodels.observationdata.parsing.sv3_models.SonardyneAHRSData \| None` | AHRS data |
+| `GNSS` | `earthscope_sfg_tools.datamodels.observationdata.parsing.sv3_models.SonardyneGNSSData \| None` | GNSS data |
+| `NOV_HEADING` | `earthscope_sfg_tools.datamodels.observationdata.parsing.sv3_models.SonardyneHeadingData \| None` | Sonardyne heading data |
+| `NOV_INS` | `earthscope_sfg_tools.datamodels.observationdata.parsing.sv3_models.SonardyneINSData \| None` | Sonardyne INS data |
+| `NOV_RANGE` | `earthscope_sfg_tools.datamodels.observationdata.parsing.sv3_models.SonardyneRangeData \| None` | Sonardyne range data |
 
 ## class `SonardynePositionType`
 
@@ -183,7 +183,7 @@ Full Sonardyne range (reply) event parsed from a DFOP00 JSONL log.
 | `range` | `SonardyneRangeReplyData` | Range reply data |
 | `sequence` | `int` | Sequence ID |
 | `time` | `TimeData` | Event time |
-| `uid` | `Union` | Unique identifier |
+| `uid` | `str \| None` | Unique identifier |
 
 ## class `SonardyneRangeReplyData`
 

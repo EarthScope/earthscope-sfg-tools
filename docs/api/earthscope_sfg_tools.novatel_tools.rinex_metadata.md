@@ -18,23 +18,23 @@ needed on disk (e.g. to pass to a Go binary via ``-settings``).
 | Name | Type | Description |
 |---|---|---|
 | `marker_name` | `str` | Site name |
-| `rinex_version` | `Union` |  |
-| `rinex_type` | `Union` |  |
-| `rinex_system` | `Union` |  |
-| `marker_number` | `Union` |  |
-| `marker_type` | `Union` |  |
-| `observer` | `Union` |  |
-| `agency` | `Union` |  |
-| `program` | `Union` |  |
-| `run_by` | `Union` |  |
-| `date` | `Union` |  |
-| `receiver_model` | `Union` |  |
-| `receiver_serial` | `Union` |  |
-| `receiver_firmware` | `Union` |  |
-| `antenna_model` | `Union` |  |
-| `antenna_serial` | `Union` |  |
-| `antenna_position` | `Union` |  |
-| `antenna_offsetHEN` | `Union` |  |
+| `rinex_version` | `str \| None` |  |
+| `rinex_type` | `str \| None` |  |
+| `rinex_system` | `str \| None` |  |
+| `marker_number` | `str \| None` |  |
+| `marker_type` | `str \| None` |  |
+| `observer` | `str \| None` |  |
+| `agency` | `str \| None` |  |
+| `program` | `str \| None` |  |
+| `run_by` | `str \| None` |  |
+| `date` | `str \| None` |  |
+| `receiver_model` | `str \| None` |  |
+| `receiver_serial` | `str \| None` |  |
+| `receiver_firmware` | `str \| None` |  |
+| `antenna_model` | `str \| None` |  |
+| `antenna_serial` | `str \| None` |  |
+| `antenna_position` | `list[float] \| None` |  |
+| `antenna_offsetHEN` | `list[float] \| None` |  |
 
 **Methods**
 

@@ -17,13 +17,13 @@ Represents a campaign, which is a collection of surveys.
 | `vesselCode` | `str` | The 4 digit vessel code, associated with a vessel metadata file |
 | `start` | `datetime` | The start date & time of the campaign |
 | `end` | `datetime` | The end date & time of the campaign |
-| `vessel` | `Union` | Instatiate Vessel object |
-| `principalInvestigator` | `Union` |  |
-| `launchVesselName` | `Union` |  |
-| `recoveryVesselName` | `Union` |  |
-| `cruiseName` | `Union` |  |
-| `technicianName` | `Union` |  |
-| `technicianContact` | `Union` |  |
+| `vessel` | `earthscope_sfg_tools.datamodels.metadata.earthscope.vessel.Vessel \| None` | Instatiate Vessel object |
+| `principalInvestigator` | `str \| None` |  |
+| `launchVesselName` | `str \| None` |  |
+| `recoveryVesselName` | `str \| None` |  |
+| `cruiseName` | `str \| None` |  |
+| `technicianName` | `str \| None` |  |
+| `technicianContact` | `str \| None` |  |
 | `surveys` | `list` |  |
 
 **Methods**
@@ -66,12 +66,12 @@ Represents a single survey within a campaign.
 | Name | Type | Description |
 |---|---|---|
 | `id` | `str` | The unique ID of the survey |
-| `type` | `Union` | The type of the survey (e.g. circle \| fixed point \| mixed) |
+| `type` | `str \| earthscope_sfg_tools.datamodels.metadata.earthscope.campaign.SurveyType` | The type of the survey (e.g. circle \| fixed point \| mixed) |
 | `benchmarkIDs` | `list` | Benchmark IDs associated with the survey |
 | `start` | `datetime` | The start date & time of the survey |
 | `end` | `datetime` | The end date & time of the survey |
-| `notes` | `Union` | Any additional notes about the survey |
-| `commands` | `Union` | Log of commands |
+| `notes` | `str \| None` | Any additional notes about the survey |
+| `commands` | `str \| None` | Log of commands |
 
 ## class `SurveyType`
 
