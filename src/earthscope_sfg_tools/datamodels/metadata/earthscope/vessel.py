@@ -71,20 +71,34 @@ class GnssReceiver(AttributeUpdater, BaseModel):
     start: datetime = Field(..., gt=datetime(1901, 1, 1))
 
     # Optional
-    satelliteSystem: str | None = Field(default=None, description="The satellite systems logged on the receiver")
+    satelliteSystem: str | None = Field(
+        default=None, description="The satellite systems logged on the receiver"
+    )
     firmwareVersion: str | None = Field(
         default=None, description="The firmware version of the receiver"
     )
     end: datetime | None = Field(default=None, gt=datetime(1901, 1, 1))
-    elevationCutoff: str | None = Field(default=None, description="The elevation cutoff (deg) for the receiver")
-    temperatureStabilization: str | None = Field(default=None, description="(none or tolerance in degrees C)")
-    additionalInformation: str | None = Field(default=None, description="Any additional information about the receiver")
+    elevationCutoff: str | None = Field(
+        default=None, description="The elevation cutoff (deg) for the receiver"
+    )
+    temperatureStabilization: str | None = Field(
+        default=None, description="(none or tolerance in degrees C)"
+    )
+    additionalInformation: str | None = Field(
+        default=None, description="Any additional information about the receiver"
+    )
 
     # Validators
     _parse_datetime = field_validator("start", "end", mode="before")(parse_datetime)
     _check_dates = field_validator("end")(check_dates)
     _check_strings = field_validator(
-       "firmwareVersion", "type", "serialNumber", "elevationCutoff", "satelliteSystem", "temperatureStabilization", "additionalInformation"
+        "firmwareVersion",
+        "type",
+        "serialNumber",
+        "elevationCutoff",
+        "satelliteSystem",
+        "temperatureStabilization",
+        "additionalInformation",
     )(check_fields_for_empty_strings)
 
 
