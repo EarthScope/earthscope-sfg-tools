@@ -187,6 +187,7 @@ class Campaign(AttributeUpdater, BaseModel):
         description="Instatiate Vessel object",
     )
     principalInvestigator: str | None = Field(default=None)
+    agency: str | None = Field(default=None)
     launchVesselName: str | None = Field(default=None)
     recoveryVesselName: str | None = Field(default=None)
     cruiseName: str | None = Field(default=None)
@@ -198,6 +199,7 @@ class Campaign(AttributeUpdater, BaseModel):
     _check_dates = field_validator("end", mode="after")(check_dates)
     _check_for_empty_strings = field_validator(
         "principalInvestigator",
+        "agency",
         "launchVesselName",
         "recoveryVesselName",
         "cruiseName",
