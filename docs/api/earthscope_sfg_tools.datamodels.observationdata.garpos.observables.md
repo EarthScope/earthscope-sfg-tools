@@ -16,14 +16,14 @@ one-way travel time, signal diagnostics, TAT, and SNR.
 
 | Name | Type | Description |
 |---|---|---|
-| `transponderID` | `<pandera.common.AnnotationInfo object at 0x13eadedf0>` |  |
-| `pingTime` | `<pandera.common.AnnotationInfo object at 0x13eadee90>` |  |
-| `returnTime` | `<pandera.common.AnnotationInfo object at 0x13eadef30>` |  |
-| `tt` | `<pandera.common.AnnotationInfo object at 0x13eadefd0>` |  |
-| `dbv` | `<pandera.common.AnnotationInfo object at 0x13eadf070>` |  |
-| `xc` | `<pandera.common.AnnotationInfo object at 0x13eadf110>` |  |
-| `snr` | `<pandera.common.AnnotationInfo object at 0x13eadf1b0>` |  |
-| `tat` | `<pandera.common.AnnotationInfo object at 0x13eadf250>` |  |
+| `transponderID` | `<pandera.common.AnnotationInfo object at 0x7ff6a5b81070>` |  |
+| `pingTime` | `<pandera.common.AnnotationInfo object at 0x7ff6a5b567b0>` |  |
+| `returnTime` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a1afc0>` |  |
+| `tt` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a19370>` |  |
+| `dbv` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a1af30>` |  |
+| `xc` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a1b050>` |  |
+| `snr` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a1b080>` |  |
+| `tat` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a1ac00>` |  |
 
 ## class `GARPOSShotDataFrame`
 
@@ -37,32 +37,32 @@ epochs, plus optional position standard deviations.
 
 | Name | Type | Description |
 |---|---|---|
-| `transponderID` | `<pandera.common.AnnotationInfo object at 0x13eadf930>` |  |
-| `pingTime` | `<pandera.common.AnnotationInfo object at 0x13eadf9d0>` |  |
-| `returnTime` | `<pandera.common.AnnotationInfo object at 0x13eadfa70>` |  |
-| `tt` | `<pandera.common.AnnotationInfo object at 0x13eadfb10>` |  |
-| `dbv` | `<pandera.common.AnnotationInfo object at 0x13eadfbb0>` |  |
-| `xc` | `<pandera.common.AnnotationInfo object at 0x13eadfc50>` |  |
-| `snr` | `<pandera.common.AnnotationInfo object at 0x13eadfcf0>` |  |
-| `tat` | `<pandera.common.AnnotationInfo object at 0x13eadfd90>` |  |
-| `head0` | `<pandera.common.AnnotationInfo object at 0x13eadfe30>` |  |
-| `pitch0` | `<pandera.common.AnnotationInfo object at 0x13eadfed0>` |  |
-| `roll0` | `<pandera.common.AnnotationInfo object at 0x13eadff70>` |  |
-| `east0` | `<pandera.common.AnnotationInfo object at 0x13eaf4050>` |  |
-| `north0` | `<pandera.common.AnnotationInfo object at 0x13eaf40f0>` |  |
-| `up0` | `<pandera.common.AnnotationInfo object at 0x13eaf4190>` |  |
-| `head1` | `<pandera.common.AnnotationInfo object at 0x13eaf4230>` |  |
-| `pitch1` | `<pandera.common.AnnotationInfo object at 0x13eaf42d0>` |  |
-| `roll1` | `<pandera.common.AnnotationInfo object at 0x13eaf4370>` |  |
-| `east1` | `<pandera.common.AnnotationInfo object at 0x13eaf4410>` |  |
-| `north1` | `<pandera.common.AnnotationInfo object at 0x13eaf44b0>` |  |
-| `up1` | `<pandera.common.AnnotationInfo object at 0x13eaf4550>` |  |
-| `east_std0` | `<pandera.common.AnnotationInfo object at 0x13eaf45f0>` |  |
-| `north_std0` | `<pandera.common.AnnotationInfo object at 0x13eaf4690>` |  |
-| `up_std0` | `<pandera.common.AnnotationInfo object at 0x13eaf4730>` |  |
-| `east_std1` | `<pandera.common.AnnotationInfo object at 0x13eaf47d0>` |  |
-| `north_std1` | `<pandera.common.AnnotationInfo object at 0x13eaf4870>` |  |
-| `up_std1` | `<pandera.common.AnnotationInfo object at 0x13eaf4910>` |  |
+| `transponderID` | `<pandera.common.AnnotationInfo object at 0x7ff6a63a0d70>` |  |
+| `pingTime` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a1b110>` |  |
+| `returnTime` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a1b410>` |  |
+| `tt` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a1b3e0>` |  |
+| `dbv` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a85100>` |  |
+| `xc` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a84fb0>` |  |
+| `snr` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a85040>` |  |
+| `tat` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a85160>` |  |
+| `head0` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a851c0>` |  |
+| `pitch0` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a85220>` |  |
+| `roll0` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a85280>` |  |
+| `east0` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a852e0>` |  |
+| `north0` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a852b0>` |  |
+| `up0` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a850a0>` |  |
+| `head1` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a85310>` |  |
+| `pitch1` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a85340>` |  |
+| `roll1` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a85370>` |  |
+| `east1` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a853a0>` |  |
+| `north1` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a853d0>` |  |
+| `up1` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a85400>` |  |
+| `east_std0` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a85430>` |  |
+| `north_std0` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a85460>` |  |
+| `up_std0` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a85490>` |  |
+| `east_std1` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a854c0>` |  |
+| `north_std1` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a854f0>` |  |
+| `up_std1` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a85520>` |  |
 
 ## class `IMUPositionDataFrame`
 
@@ -75,22 +75,22 @@ Std-dev fields are nullable because they may not be populated by all receivers.
 
 | Name | Type | Description |
 |---|---|---|
-| `time` | `<pandera.common.AnnotationInfo object at 0x13ea47b10>` |  |
-| `azimuth` | `<pandera.common.AnnotationInfo object at 0x13eaf4cd0>` |  |
-| `pitch` | `<pandera.common.AnnotationInfo object at 0x13eaf4d70>` |  |
-| `roll` | `<pandera.common.AnnotationInfo object at 0x13eaf4e10>` |  |
-| `latitude` | `<pandera.common.AnnotationInfo object at 0x13eaf4eb0>` |  |
-| `longitude` | `<pandera.common.AnnotationInfo object at 0x13eaf4f50>` |  |
-| `height` | `<pandera.common.AnnotationInfo object at 0x13eaf4ff0>` |  |
-| `northVelocity` | `<pandera.common.AnnotationInfo object at 0x13eaf5090>` |  |
-| `eastVelocity` | `<pandera.common.AnnotationInfo object at 0x13eaf5130>` |  |
-| `upVelocity` | `<pandera.common.AnnotationInfo object at 0x13eaf51d0>` |  |
-| `latitude_std` | `<pandera.common.AnnotationInfo object at 0x13eaf5270>` |  |
-| `longitude_std` | `<pandera.common.AnnotationInfo object at 0x13eaf5310>` |  |
-| `height_std` | `<pandera.common.AnnotationInfo object at 0x13eaf53b0>` |  |
-| `northVelocity_std` | `<pandera.common.AnnotationInfo object at 0x13eaf5450>` |  |
-| `eastVelocity_std` | `<pandera.common.AnnotationInfo object at 0x13eaf54f0>` |  |
-| `upVelocity_std` | `<pandera.common.AnnotationInfo object at 0x13eaf5590>` |  |
-| `roll_std` | `<pandera.common.AnnotationInfo object at 0x13eaf5630>` |  |
-| `pitch_std` | `<pandera.common.AnnotationInfo object at 0x13eaf56d0>` |  |
-| `azimuth_std` | `<pandera.common.AnnotationInfo object at 0x13eaf5770>` |  |
+| `time` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a85550>` |  |
+| `azimuth` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a876b0>` |  |
+| `pitch` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a85c10>` |  |
+| `roll` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a85be0>` |  |
+| `latitude` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a87fb0>` |  |
+| `longitude` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a90110>` |  |
+| `height` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a90140>` |  |
+| `northVelocity` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a900b0>` |  |
+| `eastVelocity` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a901d0>` |  |
+| `upVelocity` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a901a0>` |  |
+| `latitude_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a90170>` |  |
+| `longitude_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a90200>` |  |
+| `height_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a90230>` |  |
+| `northVelocity_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a90260>` |  |
+| `eastVelocity_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a90290>` |  |
+| `upVelocity_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a902c0>` |  |
+| `roll_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a902f0>` |  |
+| `pitch_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a90320>` |  |
+| `azimuth_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a90350>` |  |

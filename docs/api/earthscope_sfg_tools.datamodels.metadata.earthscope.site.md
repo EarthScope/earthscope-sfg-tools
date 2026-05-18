@@ -13,8 +13,8 @@ _No docstring._
 | Name | Type | Description |
 |---|---|---|
 | `name` | `str` | The name of the reference frame |
-| `start` | `Union` | The start date of the reference frame used for the site |
-| `end` | `Union` | The end date of the reference frame used for the site |
+| `start` | `datetime.datetime \| None` | The start date of the reference frame used for the site |
+| `end` | `datetime.datetime \| None` | The end date of the reference frame used for the site |
 
 ## class `Site`
 
@@ -27,8 +27,8 @@ _No docstring._
 | `names` | `list` | The names of the site, including the 4 character ID |
 | `networks` | `list` | A list networks the site is part of |
 | `timeOrigin` | `datetime` | The time origin of the site |
-| `localGeoidHeight` | `Union` | The local geoid height of the site |
-| `arrayCenter` | `Union` | The array center of the site |
+| `localGeoidHeight` | `float \| None` | The local geoid height of the site |
+| `arrayCenter` | `earthscope_sfg_tools.datamodels.metadata.earthscope.utils.Location \| None` | The array center of the site |
 | `campaigns` | `list` | The campaigns associated with the site |
 | `benchmarks` | `list` | The benchmarks associated with the site |
 | `referenceFrames` | `list` | The reference frames used for the site |
@@ -43,7 +43,7 @@ _No docstring._
 
 _No docstring._
 
-### `Site.return_tats_for_campaign(self, campaign_name: str) -> list[dict[str, Any]] | None`
+### `Site.return_tats_for_campaign(self, campaign_name: str) -> list[dict[str, typing.Any]] | None`
 
 Return all TATs for a given campaign
 

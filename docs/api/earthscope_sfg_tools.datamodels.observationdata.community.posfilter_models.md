@@ -18,25 +18,25 @@ _No docstring._
 
 | Name | Type | Description |
 |---|---|---|
-| `time` | `<pandera.common.AnnotationInfo object at 0x13ea47bb0>` |  |
-| `azimuth` | `<pandera.common.AnnotationInfo object at 0x13ea46030>` |  |
-| `pitch` | `<pandera.common.AnnotationInfo object at 0x13ea47c50>` |  |
-| `roll` | `<pandera.common.AnnotationInfo object at 0x13ea47cf0>` |  |
-| `latitude` | `<pandera.common.AnnotationInfo object at 0x13ea47d90>` |  |
-| `longitude` | `<pandera.common.AnnotationInfo object at 0x13ea47e30>` |  |
-| `height` | `<pandera.common.AnnotationInfo object at 0x13ea47ed0>` |  |
-| `latitude_std` | `<pandera.common.AnnotationInfo object at 0x13ea47f70>` |  |
-| `longitude_std` | `<pandera.common.AnnotationInfo object at 0x13eadc050>` |  |
-| `height_std` | `<pandera.common.AnnotationInfo object at 0x13eadc0f0>` |  |
-| `northVelocity` | `<pandera.common.AnnotationInfo object at 0x13eadc190>` |  |
-| `eastVelocity` | `<pandera.common.AnnotationInfo object at 0x13eadc230>` |  |
-| `upVelocity` | `<pandera.common.AnnotationInfo object at 0x13eadc2d0>` |  |
-| `northVelocity_std` | `<pandera.common.AnnotationInfo object at 0x13eadc370>` |  |
-| `eastVelocity_std` | `<pandera.common.AnnotationInfo object at 0x13eadc410>` |  |
-| `upVelocity_std` | `<pandera.common.AnnotationInfo object at 0x13eadc4b0>` |  |
-| `roll_std` | `<pandera.common.AnnotationInfo object at 0x13eadc550>` |  |
-| `pitch_std` | `<pandera.common.AnnotationInfo object at 0x13eadc5f0>` |  |
-| `azimuth_std` | `<pandera.common.AnnotationInfo object at 0x13eadc690>` |  |
+| `time` | `<pandera.common.AnnotationInfo object at 0x7ff6a5b56030>` |  |
+| `azimuth` | `<pandera.common.AnnotationInfo object at 0x7ff6a5bc7bc0>` |  |
+| `pitch` | `<pandera.common.AnnotationInfo object at 0x7ff6a5bc7ef0>` |  |
+| `roll` | `<pandera.common.AnnotationInfo object at 0x7ff6a5b12a80>` |  |
+| `latitude` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a277d0>` |  |
+| `longitude` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a27860>` |  |
+| `height` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a27890>` |  |
+| `latitude_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a241a0>` |  |
+| `longitude_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a27920>` |  |
+| `height_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a278f0>` |  |
+| `northVelocity` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a278c0>` |  |
+| `eastVelocity` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a27950>` |  |
+| `upVelocity` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a27980>` |  |
+| `northVelocity_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a279b0>` |  |
+| `eastVelocity_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a279e0>` |  |
+| `upVelocity_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a27a10>` |  |
+| `roll_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a27a40>` |  |
+| `pitch_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a27a70>` |  |
+| `azimuth_std` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a27aa0>` |  |
 
 ## class `INSPVAASchema`
 
@@ -49,18 +49,18 @@ Specification: https://docs.novatel.com/OEM7/Content/SPAN_Logs/INSPVA.htm
 
 | Name | Type | Description |
 |---|---|---|
-| `week` | `<pandera.common.AnnotationInfo object at 0x13eadcf50>` |  |
-| `seconds` | `<pandera.common.AnnotationInfo object at 0x13eadcff0>` |  |
-| `lat` | `<pandera.common.AnnotationInfo object at 0x13eadd090>` |  |
-| `lon` | `<pandera.common.AnnotationInfo object at 0x13eadd130>` |  |
-| `alt` | `<pandera.common.AnnotationInfo object at 0x13eadd1d0>` |  |
-| `north` | `<pandera.common.AnnotationInfo object at 0x13eadd270>` |  |
-| `east` | `<pandera.common.AnnotationInfo object at 0x13eadd310>` |  |
-| `up` | `<pandera.common.AnnotationInfo object at 0x13eadd3b0>` |  |
-| `roll` | `<pandera.common.AnnotationInfo object at 0x13eadd450>` |  |
-| `pitch` | `<pandera.common.AnnotationInfo object at 0x13eadd4f0>` |  |
-| `heading` | `<pandera.common.AnnotationInfo object at 0x13eadd590>` |  |
-| `time` | `<pandera.common.AnnotationInfo object at 0x13eadd630>` |  |
+| `week` | `<pandera.common.AnnotationInfo object at 0x7ff6a6aa90d0>` |  |
+| `seconds` | `<pandera.common.AnnotationInfo object at 0x7ff6a5b80b90>` |  |
+| `lat` | `<pandera.common.AnnotationInfo object at 0x7ff6a7dd9400>` |  |
+| `lon` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a27c80>` |  |
+| `alt` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a2dfa0>` |  |
+| `north` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a2e030>` |  |
+| `east` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a2e060>` |  |
+| `up` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a2d970>` |  |
+| `roll` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a2e0f0>` |  |
+| `pitch` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a2e0c0>` |  |
+| `heading` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a2e090>` |  |
+| `time` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a2e120>` |  |
 
 ## class `INSSTDEVSchema`
 
@@ -73,17 +73,17 @@ Specification: https://docs.novatel.com/OEM7/Content/SPAN_Logs/INSSTDEV.htm
 
 | Name | Type | Description |
 |---|---|---|
-| `week` | `<pandera.common.AnnotationInfo object at 0x13eadde50>` |  |
-| `seconds` | `<pandera.common.AnnotationInfo object at 0x13eaddef0>` |  |
-| `lat_sig` | `<pandera.common.AnnotationInfo object at 0x13eaddf90>` |  |
-| `lon_sig` | `<pandera.common.AnnotationInfo object at 0x13eade030>` |  |
-| `alt_sig` | `<pandera.common.AnnotationInfo object at 0x13eade0d0>` |  |
-| `north_sig` | `<pandera.common.AnnotationInfo object at 0x13eade170>` |  |
-| `east_sig` | `<pandera.common.AnnotationInfo object at 0x13eade210>` |  |
-| `up_sig` | `<pandera.common.AnnotationInfo object at 0x13eade2b0>` |  |
-| `cov_rr` | `<pandera.common.AnnotationInfo object at 0x13eade350>` |  |
-| `cov_pp` | `<pandera.common.AnnotationInfo object at 0x13eade3f0>` |  |
-| `cov_hh` | `<pandera.common.AnnotationInfo object at 0x13eade490>` |  |
-| `ext_sol_stat` | `<pandera.common.AnnotationInfo object at 0x13eade530>` |  |
-| `time_since_update` | `<pandera.common.AnnotationInfo object at 0x13eade5d0>` |  |
-| `time` | `<pandera.common.AnnotationInfo object at 0x13eade670>` |  |
+| `week` | `<pandera.common.AnnotationInfo object at 0x7ff6a6dccce0>` |  |
+| `seconds` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a2e540>` |  |
+| `lat_sig` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a2e150>` |  |
+| `lon_sig` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a2e510>` |  |
+| `alt_sig` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a19160>` |  |
+| `north_sig` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a191f0>` |  |
+| `east_sig` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a19220>` |  |
+| `up_sig` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a18a40>` |  |
+| `cov_rr` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a192b0>` |  |
+| `cov_pp` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a19280>` |  |
+| `cov_hh` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a19250>` |  |
+| `ext_sol_stat` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a192e0>` |  |
+| `time_since_update` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a19310>` |  |
+| `time` | `<pandera.common.AnnotationInfo object at 0x7ff6a5a19340>` |  |

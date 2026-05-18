@@ -22,9 +22,9 @@ timestamp in GPS seconds.
 | `east0` | `Decimal` |  |
 | `north0` | `Decimal` |  |
 | `up0` | `Decimal` |  |
-| `east_std0` | `Union` |  |
-| `north_std0` | `Union` |  |
-| `up_std0` | `Union` |  |
+| `east_std0` | `decimal.Decimal \| None` |  |
+| `north_std0` | `decimal.Decimal \| None` |  |
+| `up_std0` | `decimal.Decimal \| None` |  |
 | `pingTime` | `Decimal` |  |
 
 ## class `SV3ReplyData`
@@ -53,6 +53,6 @@ travel time, and return timestamp in GPS seconds.
 | `tt` | `Decimal` |  |
 | `tat` | `Decimal` |  |
 | `returnTime` | `Decimal` |  |
-| `east_std1` | `Union` |  |
-| `north_std1` | `Union` |  |
-| `up_std1` | `Union` |  |
+| `east_std1` | `decimal.Decimal \| None` |  |
+| `north_std1` | `decimal.Decimal \| None` |  |
+| `up_std1` | `decimal.Decimal \| None` |  |

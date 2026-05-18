@@ -16,9 +16,9 @@ _No docstring._
 | `serialNumber` | `str` |  |
 | `frequency` | `str` | The frequency of the transceiver, e.g MF/LMF |
 | `start` | `datetime` |  |
-| `triggerDelay` | `Union` | The trigger delay in seconds |
-| `delayIncludedInTWTT` | `Union` | Whether the delay is included in the TWTT |
-| `end` | `Union` | The end date of the transceiver usage |
+| `triggerDelay` | `float \| None` | The trigger delay in seconds |
+| `delayIncludedInTWTT` | `bool \| None` | Whether the delay is included in the TWTT |
+| `end` | `datetime.datetime \| None` | The end date of the transceiver usage |
 
 ## class `AcousticTransducer`
 
@@ -32,7 +32,7 @@ _No docstring._
 | `serialNumber` | `str` |  |
 | `frequency` | `str` |  |
 | `start` | `datetime` |  |
-| `end` | `Union` |  |
+| `end` | `datetime.datetime \| None` |  |
 
 ## class `AtdOffset`
 
@@ -42,7 +42,7 @@ The offset of the transducer from the GNSS antenna
 
 | Name | Type | Description |
 |---|---|---|
-| `serialNumber` | `Union` | The transducer serial number associated with the offset |
+| `serialNumber` | `str \| None` | The transducer serial number associated with the offset |
 | `x` | `float` | X offset: Relative position of the transducer to the GNSS antenna |
 | `y` | `float` | Y offset: Relative position of the transducer to the GNSS antenna |
 | `z` | `float` | Z offset: Relative position of the transducer to the GNSS antenna |
@@ -62,10 +62,10 @@ _No docstring._
 | `type` | `str` |  |
 | `serialNumber` | `str` |  |
 | `start` | `datetime` |  |
-| `order` | `Union` |  |
-| `model` | `Union` |  |
-| `radomeSerialNumber` | `Union` |  |
-| `end` | `Union` |  |
+| `order` | `str \| None` |  |
+| `model` | `str \| None` |  |
+| `radomeSerialNumber` | `str \| None` |  |
+| `end` | `datetime.datetime \| None` |  |
 
 ## class `GnssReceiver`
 
@@ -78,9 +78,9 @@ _No docstring._
 | `type` | `str` |  |
 | `serialNumber` | `str` |  |
 | `start` | `datetime` |  |
-| `model` | `Union` | The model of the receiver |
-| `firmwareVersion` | `Union` | The firmware version of the receiver |
-| `end` | `Union` |  |
+| `model` | `str \| None` | The model of the receiver |
+| `firmwareVersion` | `str \| None` | The firmware version of the receiver |
+| `end` | `datetime.datetime \| None` |  |
 
 ## class `ImuSensor`
 
@@ -93,8 +93,8 @@ _No docstring._
 | `type` | `str` |  |
 | `serialNumber` | `str` |  |
 | `start` | `datetime` |  |
-| `model` | `Union` |  |
-| `end` | `Union` |  |
+| `model` | `str \| None` |  |
+| `end` | `datetime.datetime \| None` |  |
 
 ## class `Vessel`
 
@@ -107,9 +107,9 @@ _No docstring._
 | `name` | `str` | The 4 digit name of the vessel |
 | `type` | `str` | The type of the vessel. e.g. waveglider |
 | `model` | `str` | The model of the vessel |
-| `serialNumber` | `Union` |  |
-| `start` | `Union` |  |
-| `end` | `Union` |  |
+| `serialNumber` | `str \| None` |  |
+| `start` | `datetime.datetime \| None` |  |
+| `end` | `datetime.datetime \| None` |  |
 | `imuSensors` | `list` |  |
 | `atdOffsets` | `list` |  |
 | `gnssAntennas` | `list` |  |
