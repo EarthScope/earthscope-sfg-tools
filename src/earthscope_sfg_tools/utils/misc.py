@@ -1,3 +1,6 @@
+"""Miscellaneous lightweight utility functions."""
+
+
 def listify(value):
     """Wrap a non-list value in a list, or return it unchanged.
 

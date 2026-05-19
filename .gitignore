@@ -225,3 +225,6 @@ __marimo__/
 .plans/*
 .claude/*
 CLAUDE.md
+
+# MyST build output
+_build/

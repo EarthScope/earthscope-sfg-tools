@@ -1,3 +1,5 @@
+"""Novatel receiver tooling: ASCII/binary log parsing and RINEX conversion."""
+
 from .novatel_ascii_operations import nova2rnx, novatel_ascii_2rinex
 from .novatel_to_rinex_operations import (
     nov0002rnx,

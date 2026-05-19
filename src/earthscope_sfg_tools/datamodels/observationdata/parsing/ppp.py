@@ -1,3 +1,5 @@
+"""Pandera schema for PPP/RTK kinematic position solutions (.kin output)."""
+
 from pandera.typing import Series
 import pandera.pandas as pa
 import pandas as pd

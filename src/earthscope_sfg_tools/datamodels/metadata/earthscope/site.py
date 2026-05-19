@@ -1,3 +1,5 @@
+"""Site metadata model: top-level container for benchmarks, campaigns, and references."""
+
 import json
 from datetime import datetime
 from enum import StrEnum
@@ -24,12 +26,16 @@ from .utils import (
 
 
 class TopLevelSiteGroups(StrEnum):
+    """Top-level collection names within a ``Site`` (used for generic CRUD)."""
+
     REFERENCE_FRAMES = "referenceFrames"
     BENCHMARKS = "benchmarks"
     CAMPAIGNS = "campaigns"
 
 
 class SubLevelSiteGroups(StrEnum):
+    """Nested collection names within ``Site`` children (campaigns/benchmarks)."""
+
     SURVEYS = "surveys"
     TRANSPONDERS = "transponders"
 
@@ -41,6 +47,8 @@ def import_site(filepath: str):
 
 
 class ReferenceFrame(AttributeUpdater, BaseModel):
+    """Geodetic reference frame used at a site over a time interval."""
+
     # Required
     name: str = Field(..., description="The name of the reference frame")
 
@@ -61,6 +69,8 @@ class ReferenceFrame(AttributeUpdater, BaseModel):
 
 
 class Site(BaseModel):
+    """GNSS-A site: container for benchmarks, campaigns, and reference frames."""
+
     # Required
     names: list[str] = Field(
         ..., description="The names of the site, including the 4 character ID"
@@ -101,15 +111,18 @@ class Site(BaseModel):
     _parse_datetime = field_validator("timeOrigin")(parse_datetime)
 
     def export_site(self, filepath: str):
+        """Write this site to ``filepath`` as indented JSON."""
         with open(filepath, "w") as file:
             json.dump(self.model_dump(mode="json"), file, indent=4)
 
     @classmethod
     def from_json(cls, filepath: str) -> "Site":
+        """Load a ``Site`` from a JSON file at ``filepath``."""
         with open(filepath) as file:
             return cls(**json.load(file))
 
     def print_json(self):
+        """Pretty-print this site as indented JSON to stdout."""
         print(self.model_dump_json(indent=2))
 
     def validate_components(self):

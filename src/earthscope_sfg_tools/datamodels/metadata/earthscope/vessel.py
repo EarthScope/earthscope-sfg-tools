@@ -1,11 +1,14 @@
+"""Vessel metadata model and supporting equipment/sensor sub-models."""
+
 import json
 from datetime import datetime
+from pathlib import Path
 from enum import StrEnum
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from .utils import (
+from earthscope_sfg_tools.datamodels.metadata.earthscope.utils import (
     AttributeUpdater,
     check_dates,
     check_fields_for_empty_strings,
@@ -15,6 +18,8 @@ from .utils import (
 
 
 class EquipmentType(StrEnum):
+    """Identifiers for vessel equipment collections (used for generic CRUD)."""
+
     IMU_SENSORS = "imuSensors"
     ATD_OFFSETS = "atdOffsets"
     GNSS_ANTENNAS = "gnssAntennas"
@@ -44,6 +49,8 @@ class AtdOffset(AttributeUpdater, BaseModel):
 
 
 class GnssAntenna(AttributeUpdater, BaseModel):
+    """GNSS antenna mounted on the vessel for a given time interval."""
+
     # Required
     type: str
     serialNumber: str
@@ -64,27 +71,48 @@ class GnssAntenna(AttributeUpdater, BaseModel):
 
 
 class GnssReceiver(AttributeUpdater, BaseModel):
+    """GNSS receiver installed on the vessel for a given time interval."""
+
     # Required
     type: str
     serialNumber: str
     start: datetime = Field(..., gt=datetime(1901, 1, 1))
 
     # Optional
-    model: str | None = Field(default=None, description="The model of the receiver")
+    satelliteSystem: str | None = Field(
+        default=None, description="The satellite systems logged on the receiver"
+    )
     firmwareVersion: str | None = Field(
         default=None, description="The firmware version of the receiver"
     )
     end: datetime | None = Field(default=None, gt=datetime(1901, 1, 1))
+    elevationCutoff: str | None = Field(
+        default=None, description="The elevation cutoff (deg) for the receiver"
+    )
+    temperatureStabilization: str | None = Field(
+        default=None, description="(none or tolerance in degrees C)"
+    )
+    additionalInformation: str | None = Field(
+        default=None, description="Any additional information about the receiver"
+    )
 
     # Validators
     _parse_datetime = field_validator("start", "end", mode="before")(parse_datetime)
     _check_dates = field_validator("end")(check_dates)
     _check_strings = field_validator(
-        "model", "firmwareVersion", "type", "serialNumber"
+        "firmwareVersion",
+        "type",
+        "serialNumber",
+        "elevationCutoff",
+        "satelliteSystem",
+        "temperatureStabilization",
+        "additionalInformation",
     )(check_fields_for_empty_strings)
 
 
 class AcousticTransducer(AttributeUpdater, BaseModel):
+    """Acoustic transducer (transmit/receive element) deployed on the vessel."""
+
     # Required
     type: str
     serialNumber: str
@@ -103,6 +131,8 @@ class AcousticTransducer(AttributeUpdater, BaseModel):
 
 
 class AcousticTransceiver(AttributeUpdater, BaseModel):
+    """Acoustic transceiver (modem electronics) used to drive the transducer."""
+
     # Required
     type: str
     serialNumber: str
@@ -133,6 +163,8 @@ class AcousticTransceiver(AttributeUpdater, BaseModel):
 
 
 class ImuSensor(AttributeUpdater, BaseModel):
+    """Inertial measurement unit installed on the vessel."""
+
     # Required
     type: str
     serialNumber: str
@@ -151,6 +183,8 @@ class ImuSensor(AttributeUpdater, BaseModel):
 
 
 class Vessel(AttributeUpdater, BaseModel):
+    """Vessel metadata: identity, deployment dates, and onboard equipment lists."""
+
     # Required
     name: str = Field(..., description="The 4 digit name of the vessel")
     type: str = Field(..., description="The type of the vessel. e.g. waveglider")
@@ -192,6 +226,7 @@ class Vessel(AttributeUpdater, BaseModel):
 
     @field_validator("name", "type", "model")
     def check_required_fields(cls, value):
+        """Reject empty strings for the required identity fields."""
         if not value:
             raise ValueError(f"Required field {value} is empty")
         return value
@@ -404,6 +439,6 @@ def import_vessel(filepath: str) -> Vessel:
 
 
 if __name__ == "__main__":
-    vessel_json_file_path = "json_schemas/vessel_example.json"
+    vessel_json_file_path = Path(__file__).parent / "vessel_example.json"
     vessel_class = import_vessel(vessel_json_file_path)
     vessel_class.print_json()

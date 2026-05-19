@@ -103,6 +103,8 @@ class INSSTDEVSchema(pa.DataFrameModel):
 
 
 class IMUPositionDataFrame(pa.DataFrameModel):
+    """Combined IMU + GNSS position/velocity/attitude solution (community schema)."""
+
     time: Series[pd.Timestamp] = pa.Field(
         ge=GNSS_START_TIME.replace(tzinfo=None),
         coerce=True,
@@ -206,4 +208,5 @@ class IMUPositionDataFrame(pa.DataFrameModel):
 
     @pa.parser("time")
     def parse_time(cls, series: pd.Series) -> pd.Series:
+        """Coerce integer/float epoch-millisecond ``time`` values to ``datetime64[ns]``."""
         return pd.to_datetime(series, unit="ms")

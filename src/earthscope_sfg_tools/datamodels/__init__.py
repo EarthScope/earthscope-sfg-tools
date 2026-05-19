@@ -1,3 +1,5 @@
+"""Pydantic and Pandera data models for SFG metadata and observation data."""
+
 from . import metadata, observationdata
 from .metadata import (
     Benchmark,

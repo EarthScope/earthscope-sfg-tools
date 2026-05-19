@@ -1,3 +1,5 @@
+"""Quality-control operations for Sonardyne SV3 logs: per-day batching and shot-data extraction."""
+
 from __future__ import annotations
 
 import json
