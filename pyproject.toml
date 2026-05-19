@@ -41,6 +41,8 @@ platforms = ["osx-arm64", "osx-64", "linux-64", "win-64"]
 [tool.pixi.dependencies]
 pytest = ">=8"
 ruff = ">=0.4"
+go = ">=1.25.7"
+go-cgo = ">=1.25.7"
 
 [tool.pixi.pypi-dependencies]
 earthscope_sfg_tools = { path = ".", editable = true }
