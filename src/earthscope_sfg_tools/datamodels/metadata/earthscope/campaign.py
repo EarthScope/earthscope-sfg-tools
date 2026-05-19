@@ -1,3 +1,5 @@
+"""Campaign and survey metadata models with survey-type classification."""
+
 from datetime import datetime
 from enum import StrEnum
 
@@ -59,6 +61,8 @@ def campaign_checks(campaign_year, campaign_interval, vessel_code):
 
 
 class SurveyType(StrEnum):
+    """Enumeration of supported GNSS-A survey patterns."""
+
     CIRCLE = "circledrive"
     FIXED_POINT = "fixedpoint"
     MIXED = "mixed"
@@ -187,6 +191,7 @@ class Campaign(AttributeUpdater, BaseModel):
         description="Instatiate Vessel object",
     )
     principalInvestigator: str | None = Field(default=None)
+    agency: str | None = Field(default=None)
     launchVesselName: str | None = Field(default=None)
     recoveryVesselName: str | None = Field(default=None)
     cruiseName: str | None = Field(default=None)
@@ -198,6 +203,7 @@ class Campaign(AttributeUpdater, BaseModel):
     _check_dates = field_validator("end", mode="after")(check_dates)
     _check_for_empty_strings = field_validator(
         "principalInvestigator",
+        "agency",
         "launchVesselName",
         "recoveryVesselName",
         "cruiseName",

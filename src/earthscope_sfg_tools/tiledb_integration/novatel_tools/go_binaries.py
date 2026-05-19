@@ -40,8 +40,8 @@ def nova2tile(
     """
     binary = find_binary()
 
-    files = listify(input_files)
-    cmd = [str(binary), "nova2tile", "--tdb", tdb_path, "--procs", str(num_procs)]
+    files = [str(f) for f in listify(input_files)]
+    cmd = [str(binary), "nova2tile", "--tdb", str(tdb_path), "--procs", str(num_procs)]
     cmd.extend(files)
 
     logger.info(f"Running sfg nova2tile: {' '.join(cmd)}")
@@ -78,8 +78,8 @@ def novb2tile(
     """
     binary = find_binary()
 
-    files = listify(input_files)
-    cmd = [str(binary), "novab2tile", "--tdb", tdb_path, "--procs", str(num_procs)]
+    files = [str(f) for f in listify(input_files)]
+    cmd = [str(binary), "novab2tile", "--tdb", str(tdb_path), "--procs", str(num_procs)]
     cmd.extend(files)
 
     logger.info(f"Running sfg novab2tile: {' '.join(cmd)}")
@@ -91,6 +91,8 @@ def novb2tile(
 def nov0002tile(
     input_files: list[str] | str,
     tdb_path: str,
+    tdb_position: Optional[str] = None,
+    num_procs: int = 10,
     logger: logging.Logger = logger,
 ) -> subprocess.CompletedProcess:
     """Convert NovAtel NOV000 binary logs to a TileDB array.
@@ -100,7 +102,12 @@ def nov0002tile(
     input_files : str or list[str]
         NovAtel NOV000 (``.bin``) input file(s).
     tdb_path : str
-        S3 or local path to the target TileDB array.
+        S3 or local path to the target TileDB GNSS observation array.
+    tdb_position : str, optional
+        Path to a secondary TileDB array for INS / position records
+        (``--tdbpos``). When ``None`` the flag is omitted.
+    num_procs : int, optional
+        Number of parallel goroutines (``--procs``). Defaults to 10.
 
     Returns
     -------
@@ -113,8 +120,17 @@ def nov0002tile(
     """
     binary = find_binary()
 
-    files = listify(input_files)
-    cmd = [str(binary), "nov0002tile", "--tdb", tdb_path]
+    files = [str(f) for f in listify(input_files)]
+    cmd = [
+        str(binary),
+        "nov0002tile",
+        "--tdb",
+        str(tdb_path),
+        "--procs",
+        str(num_procs),
+    ]
+    if tdb_position:
+        cmd.extend(["--tdbpos", str(tdb_position)])
     cmd.extend(files)
 
     logger.info(f"Running sfg nov0002tile: {' '.join(cmd)}")
@@ -161,9 +177,9 @@ def tdb2rnx(
         str(binary),
         "tdb2rnx",
         "--tdb",
-        tdb_path,
+        str(tdb_path),
         "--settings",
-        settings_file,
+        str(settings_file),
         "--timeint",
         str(time_interval),
         "--year",

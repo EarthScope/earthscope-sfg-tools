@@ -1,5 +1,4 @@
-name: Python Lint & Test
-
+name: SFG tooling tests
 on:
   push:
     branches: [main]

@@ -1,3 +1,5 @@
+"""Helpers for locating bundled Go binaries and parsing their CLI log output."""
+
 import re
 import subprocess
 import logging

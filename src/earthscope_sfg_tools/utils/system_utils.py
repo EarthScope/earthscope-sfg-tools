@@ -1,3 +1,5 @@
+"""System-introspection helpers (OS/architecture detection, structured exceptions)."""
+
 import platform
 
 

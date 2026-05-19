@@ -1,4 +1,5 @@
-# Description: Utility functions for metadata classes.
+"""Utility helpers, mixins, and shared validators for metadata models."""
+
 from datetime import UTC, datetime
 from typing import Any
 
@@ -108,6 +109,8 @@ def check_fields_for_empty_strings(cls, value):
 
 
 class AttributeUpdater:
+    """Mixin providing recursive ``update_attributes`` for Pydantic metadata models."""
+
     def update_attributes(self, additional_data: dict[str, Any]):
         """Update the class attributes based on the provided dictionary.
 
@@ -229,6 +232,8 @@ def convert_custom_objects_to_dict(d: dict) -> dict:
 
 
 class Location(AttributeUpdater, BaseModel):
+    """Geographic location: latitude, longitude, and (optional) elevation."""
+
     latitude: float | None = Field(
         default=None, description="The latitude of the location.", ge=-90, le=90
     )

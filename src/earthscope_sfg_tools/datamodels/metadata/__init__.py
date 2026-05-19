@@ -1,3 +1,5 @@
+"""Site, vessel, campaign, and catalog metadata models (EarthScope + community)."""
+
 from .community.site import SFGDTSFSite
 from .earthscope import (
     Benchmark,

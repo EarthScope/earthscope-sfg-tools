@@ -19,6 +19,7 @@ version = "0.1.0"
 
 [project.optional-dependencies]
 tiledb = ["tiledb>=0.30"]
+docs = ["myst-parser>=5.1.0"]
 
 [build-system]
 build-backend = "hatchling.build"
@@ -68,6 +69,8 @@ test = { cmd = "pytest tests/ -v", description = "Run the test suite" }
 lint = { cmd = "ruff check src/ tests/", description = "Lint with ruff" }
 format-check = { cmd = "ruff format --check src/ tests/", description = "Check formatting" }
 format = { cmd = "ruff format src/ tests/", description = "Auto-format source" }
+docs = { cmd = "myst start", description = "Serve docs locally with live reload" }
+docs-build = { cmd = "myst build --html", description = "Build docs as static HTML" }
 
 # =============================================================================
 # Activation - environment variables
