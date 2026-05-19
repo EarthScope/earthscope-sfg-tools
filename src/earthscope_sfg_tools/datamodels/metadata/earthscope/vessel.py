@@ -2,12 +2,13 @@
 
 import json
 from datetime import datetime
+from pathlib import Path
 from enum import StrEnum
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from .utils import (
+from earthscope_sfg_tools.datamodels.metadata.earthscope.utils import (
     AttributeUpdater,
     check_dates,
     check_fields_for_empty_strings,
@@ -78,17 +79,34 @@ class GnssReceiver(AttributeUpdater, BaseModel):
     start: datetime = Field(..., gt=datetime(1901, 1, 1))
 
     # Optional
-    model: str | None = Field(default=None, description="The model of the receiver")
+    satelliteSystem: str | None = Field(
+        default=None, description="The satellite systems logged on the receiver"
+    )
     firmwareVersion: str | None = Field(
         default=None, description="The firmware version of the receiver"
     )
     end: datetime | None = Field(default=None, gt=datetime(1901, 1, 1))
+    elevationCutoff: str | None = Field(
+        default=None, description="The elevation cutoff (deg) for the receiver"
+    )
+    temperatureStabilization: str | None = Field(
+        default=None, description="(none or tolerance in degrees C)"
+    )
+    additionalInformation: str | None = Field(
+        default=None, description="Any additional information about the receiver"
+    )
 
     # Validators
     _parse_datetime = field_validator("start", "end", mode="before")(parse_datetime)
     _check_dates = field_validator("end")(check_dates)
     _check_strings = field_validator(
-        "model", "firmwareVersion", "type", "serialNumber"
+        "firmwareVersion",
+        "type",
+        "serialNumber",
+        "elevationCutoff",
+        "satelliteSystem",
+        "temperatureStabilization",
+        "additionalInformation",
     )(check_fields_for_empty_strings)
 
 
@@ -421,6 +439,6 @@ def import_vessel(filepath: str) -> Vessel:
 
 
 if __name__ == "__main__":
-    vessel_json_file_path = "json_schemas/vessel_example.json"
+    vessel_json_file_path = Path(__file__).parent / "vessel_example.json"
     vessel_class = import_vessel(vessel_json_file_path)
     vessel_class.print_json()
