@@ -1,0 +1,79 @@
+name: Build Go Binaries
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/go/**'
+      - '.github/workflows/build-go.yml'
+
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/go/**'
+      - '.github/workflows/build-go.yml'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            pixi-env: tiledb
+          - os: macos-latest   # arm64
+            pixi-env: tiledb
+          - os: macos-13       # x86_64
+            pixi-env: tiledb
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.8.3
+        with:
+          environments: ${{ matrix.pixi-env }}
+
+      - name: Build Go binary
+        run: pixi run -e ${{ matrix.pixi-env }} build-go
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-binary-${{ matrix.os }}
+          path: src/go/build/sfg_*
+          if-no-files-found: error
+
+  commit-binaries:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need a token with write access; GITHUB_TOKEN works for same-repo pushes
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download all platform binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: go-binary-*
+          path: src/go/build/
+          merge-multiple: true
+
+      - name: Make binaries executable
+        run: chmod +x src/go/build/sfg_*
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/go/build/sfg_*
+          git diff --staged --quiet && echo "No binary changes." || (
+            git commit -m "chore: update pre-built Go binaries [skip ci]" &&
+            git push
+          )

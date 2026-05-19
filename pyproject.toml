@@ -24,6 +24,16 @@ tiledb = ["tiledb>=0.30"]
 build-backend = "hatchling.build"
 requires = ["hatchling"]
 
+[tool.hatch.build.targets.wheel]
+# Include pre-built Go binaries so go_utils.find_binary() resolves correctly
+# from site-packages regardless of how the package is installed (path, git, PyPI).
+# The binaries must be compiled before building the wheel (pixi run build-go).
+packages = ["src/earthscope_sfg_tools"]
+artifacts = ["src/go/build/sfg_*"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src/go/build" = "earthscope_sfg_tools/go/build"
+
 [tool.pixi.workspace]
 channels = ["conda-forge"]
 platforms = ["osx-arm64", "osx-64", "linux-64", "win-64"]
