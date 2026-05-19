@@ -49,10 +49,14 @@ def novatel_770_2tile(files, gnss_obs_tdb, n_procs: int = 10, logger=None, **kwa
     Translates the workflow-side kwargs (``files``, ``gnss_obs_tdb``,
     ``n_procs``) to the underlying ``sfg novab2tile`` call.
     """
-    return novb2tile(input_files=files, tdb_path=gnss_obs_tdb, num_procs=n_procs, logger=logger)
+    return novb2tile(
+        input_files=files, tdb_path=gnss_obs_tdb, num_procs=n_procs, logger=logger
+    )
 
 
-def nov0002tile(files, gnss_obs_tdb, position_tdb=None, n_procs: int = 10, logger=None, **kwargs):
+def nov0002tile(
+    files, gnss_obs_tdb, position_tdb=None, n_procs: int = 10, logger=None, **kwargs
+):
     """Workflow-facing wrapper around the underlying ``sfg nov0002tile`` call.
 
     Translates the workflow-side kwargs (``files``, ``gnss_obs_tdb``,

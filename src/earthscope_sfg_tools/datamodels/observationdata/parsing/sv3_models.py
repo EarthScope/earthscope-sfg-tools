@@ -160,9 +160,15 @@ class SonardyneGNSSData(BaseModel):
     latitude: Decimal = Field(description="Latitude in degrees", ge=-90, le=90)
     longitude: Decimal = Field(description="Longitude in degrees", ge=-180, le=180)
     q: SV3GPSQuality = Field(description="Quality indicator")
-    sdx: Decimal | None = Field(description="Standard deviation east [m]", ge=0, default=None)
-    sdy: Decimal | None = Field(description="Standard deviation north [m]", ge=0, default=None)
-    sdz: Decimal | None = Field(description="Standard deviation up [m]", ge=0, default=None)
+    sdx: Decimal | None = Field(
+        description="Standard deviation east [m]", ge=0, default=None
+    )
+    sdy: Decimal | None = Field(
+        description="Standard deviation north [m]", ge=0, default=None
+    )
+    sdz: Decimal | None = Field(
+        description="Standard deviation up [m]", ge=0, default=None
+    )
     separation: Decimal | None = Field(description="Separation")
     time: TimeData = Field(description="Time data associated with the log")
 

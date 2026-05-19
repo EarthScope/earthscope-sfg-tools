@@ -24,10 +24,14 @@ from earthscope_sfg_tools.datamodels.observationdata.parsing.sv3_models import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_time() -> dict:
     """Minimal TimeData dict accepted by the model."""
     import datetime
-    from earthscope_sfg_tools.datamodels.observationdata.constants import GNSS_START_TIME
+    from earthscope_sfg_tools.datamodels.observationdata.constants import (
+        GNSS_START_TIME,
+    )
+
     ts = GNSS_START_TIME.timestamp()
     return {
         "common": ts,
