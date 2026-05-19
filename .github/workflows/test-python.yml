@@ -23,6 +23,8 @@ jobs:
 
       - name: Set up pixi
         uses: prefix-dev/setup-pixi@v0.8.3
+        with:
+          locked: false
 
       - name: Check formatting with ruff
         run: pixi run format-check
@@ -32,4 +34,3 @@ jobs:
 
       - name: Run tests
         run: pixi run -e tiledb test
-
