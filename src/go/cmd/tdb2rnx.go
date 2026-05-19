@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/sfg_utils"
-	"github.com/spf13/cobra"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 	"gitlab.com/earthscope/gnsstools/codecs/rinex"
 	"gitlab.com/earthscope/gnsstools/geodata/gnsstiledb"
 )
@@ -86,6 +86,7 @@ func filterDaySlices(daySlices []gnsstiledb.TimeRange, year int) ([]gnsstiledb.T
 func processDaySlice(ctx context.Context, client *gnsstiledb.Client, daySlice gnsstiledb.TimeRange, tdbPath string, interval int, settings *rinex.Settings, moduloMillis int64) {
 	hourSlices := getHourSlice(daySlice, interval)
 	batchNum := 0
+	var obsWriter *rinex.ObsWriter
 	for _, hourSlice := range hourSlices {
 		queryParams := gnsstiledb.ObsQueryParams{
 			Time: []gnsstiledb.TimeRange{hourSlice},
@@ -108,7 +109,6 @@ func processDaySlice(ctx context.Context, client *gnsstiledb.Client, daySlice gn
 			}
 		}
 
-		var obsWriter *rinex.ObsWriter
 		if batchNum == 0 {
 			settings.TimeOfFirst = epochs[0].Time
 			settings.TimeOfLast = daySlice.End
@@ -142,12 +142,25 @@ func processDaySlice(ctx context.Context, client *gnsstiledb.Client, daySlice gn
 			obsWriter = rinex.NewObsWriter(writer, settings)
 		}
 
+		if obsWriter == nil {
+			log.Warn("obsWriter not initialized for this batch, skipping")
+			continue
+		}
 		for _, epoch := range epochs {
 			if _, err := obsWriter.Write(epoch); err != nil {
 				log.Warnf("failed writing observation: %s", err)
 			}
 		}
 		batchNum++
+	}
+
+	// Drain the ObsWriter's internal buffer: writes the RINEX header (derived
+	// from all buffered epochs) followed by the epoch data to the underlying
+	// bufio.Writer. The deferred bufio.Flush() then flushes that to disk.
+	if obsWriter != nil {
+		if err := obsWriter.Flush(); err != nil {
+			log.Errorf("failed flushing RINEX output: %s", err)
+		}
 	}
 	log.Infof("==================== COMPLETE ====================")
 }
@@ -181,8 +194,8 @@ func runTdb2rnx(cmd *cobra.Command, args []string) error {
 		slog.Info("Decimation enabled", "modulo_ms", modulo)
 	}
 
-	settings, err := parseTdb2rnxSettings(metaPath)
-	if err != nil {
+	// Validate settings file early; each goroutine will re-parse its own copy.
+	if _, err := parseTdb2rnxSettings(metaPath); err != nil {
 		return fmt.Errorf("parsing settings: %w", err)
 	}
 
@@ -199,7 +212,8 @@ func runTdb2rnx(cmd *cobra.Command, args []string) error {
 
 	timeStart, timeEnd, err := client.NonEmptyTimeDomain(ctx, tdbPath)
 	if err != nil {
-		return fmt.Errorf("getting time domain: %w", err)
+		log.Warnf("TileDB array has no data (empty time domain) at %s: %s", tdbPath, err)
+		return nil
 	}
 	log.Infof("Time Range: %s - %s Found At %s", timeStart, timeEnd, tdbPath)
 
@@ -219,7 +233,14 @@ func runTdb2rnx(cmd *cobra.Command, args []string) error {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			processDaySlice(ctx, client, daySlice, tdbPath, timeInterval, settings, modulo)
+			// Re-parse settings for each goroutine to avoid data races on shared
+			// mutable fields (TimeOfFirst, TimeOfLast, ObservationsBySystem).
+			s, err := parseTdb2rnxSettings(metaPath)
+			if err != nil {
+				log.Errorf("failed parsing settings for day slice: %s", err)
+				return
+			}
+			processDaySlice(ctx, client, daySlice, tdbPath, timeInterval, s, modulo)
 		}(daySlice)
 	}
 	wg.Wait()

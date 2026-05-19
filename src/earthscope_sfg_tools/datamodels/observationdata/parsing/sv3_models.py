@@ -145,7 +145,14 @@ class SonardyneRangeData(BaseModel):
 
 
 class SonardyneGNSSData(BaseModel):
-    """GNSS position fix and standard deviations from a Sonardyne event log."""
+    """GNSS position fix and standard deviations from a Sonardyne event log.
+
+    Sonardyne firmware reports ``-1.0`` for ``sdx``, ``sdy``, and ``sdz`` when
+    the GNSS position solution is unavailable or the standard deviation has not
+    been computed.  The :meth:`_coerce_negative_sd_to_none` validator normalises
+    those sentinel values to ``None`` so that downstream processing can
+    distinguish "not measured" from a valid zero-uncertainty fix.
+    """
 
     hae: Decimal = Field(
         description="Height above ellipsoid in meters", ge=-1000, le=1000
@@ -153,11 +160,30 @@ class SonardyneGNSSData(BaseModel):
     latitude: Decimal = Field(description="Latitude in degrees", ge=-90, le=90)
     longitude: Decimal = Field(description="Longitude in degrees", ge=-180, le=180)
     q: SV3GPSQuality = Field(description="Quality indicator")
-    sdx: Decimal | None = Field(description="Standard deviation east [m]", ge=0)
-    sdy: Decimal | None = Field(description="Standard deviation north [m]", ge=0)
-    sdz: Decimal | None = Field(description="Standard deviation up [m]", ge=0)
+    sdx: Decimal | None = Field(
+        description="Standard deviation east [m]", ge=0, default=None
+    )
+    sdy: Decimal | None = Field(
+        description="Standard deviation north [m]", ge=0, default=None
+    )
+    sdz: Decimal | None = Field(
+        description="Standard deviation up [m]", ge=0, default=None
+    )
     separation: Decimal | None = Field(description="Separation")
     time: TimeData = Field(description="Time data associated with the log")
+
+    @field_validator("sdx", "sdy", "sdz", mode="before")
+    @classmethod
+    def _coerce_negative_sd_to_none(cls, value: object) -> object:
+        """Convert Sonardyne's -1.0 'not available' sentinel to None."""
+        if value is None:
+            return None
+        try:
+            if Decimal(str(value)) < 0:
+                return None
+        except Exception:
+            pass
+        return value
 
 
 class SonardyneAHRSData(BaseModel):

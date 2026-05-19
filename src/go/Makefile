@@ -37,7 +37,15 @@ LIBRARY_PATH = $(PREFIX)/lib
 CPATH = $(PREFIX)/include
 CLANG_PATH = $(PREFIX)/bin/clang
 PSEUDO_PATH = $(CLANG_PATH)
-CC = clang
+ifeq ($(OS),darwin)
+    CC = clang
+else
+    # Use the conda-forge gcc so CGO links against the conda sysroot (avoids
+    # __res_search linker errors on Ubuntu 22.04+ glibc 2.34+).
+    CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc
+    CGO_CFLAGS += --sysroot=$(CONDA_PREFIX)/x86_64-conda-linux-gnu/sysroot
+    CGO_LDFLAGS += --sysroot=$(CONDA_PREFIX)/x86_64-conda-linux-gnu/sysroot
+endif
 
 # Build all commands into a single binary
 # -buildvcs=false was added 8-21-25 to fix an issue building on AMD64 architecture
@@ -45,7 +53,7 @@ build:
 	@mkdir -p $(BUILD_DIR)
 	@BINARY_NAME=$(BINARY)_$(OS)_$(ARCH); \
 	echo "Building $$BINARY_NAME for $(OS)/$(ARCH)..."; \
-	env CGO_ENABLED=1 GOOS=$(OS) GOARCH=$(ARCH) CGO_CFLAGS="$(CGO_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" DYLD_LIBRARY_PATH=$(DYLD_LIBRARY_PATH) LD_LIBRARY_PATH=$(LD_LIBRARY_PATH) go build -o $(BUILD_DIR)/$$BINARY_NAME -buildvcs=false ./cmd
+	env CC="$(CC)" CGO_ENABLED=1 GOOS=$(OS) GOARCH=$(ARCH) CGO_CFLAGS="$(CGO_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" DYLD_LIBRARY_PATH=$(DYLD_LIBRARY_PATH) LD_LIBRARY_PATH=$(LD_LIBRARY_PATH) go build -o $(BUILD_DIR)/$$BINARY_NAME -buildvcs=false ./cmd
 
 # Bundle all binaries with their dylib dependencies so they run without conda.
 # On macOS: copies libtiledb.dylib and its transitive deps into build/libs/,
