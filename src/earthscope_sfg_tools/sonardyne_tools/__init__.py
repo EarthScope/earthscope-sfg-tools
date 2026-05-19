@@ -1,3 +1,5 @@
+"""Sonardyne SV3 acoustic-modem tooling: DFOP00 parsing, QC, and shot-data export."""
+
 from .sv3_operations import (
     dfop00_to_sfgdstf_seafloor_acoustic_data,
     dfop00_to_shotdata,

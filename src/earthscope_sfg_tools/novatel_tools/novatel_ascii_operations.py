@@ -1,3 +1,5 @@
+"""Novatel ASCII log → RINEX conversion via the bundled ``nova2rnx`` Go binary."""
+
 # External imports
 import json
 import shutil

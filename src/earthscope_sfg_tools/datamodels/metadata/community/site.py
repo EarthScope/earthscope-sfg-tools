@@ -1,3 +1,5 @@
+"""Community-standard SFGDTSF site metadata model."""
+
 from pydantic import BaseModel
 import datetime
 

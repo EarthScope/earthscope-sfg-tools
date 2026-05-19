@@ -1,3 +1,5 @@
+"""Top-level metadata catalogs aggregating sites, networks, and stations."""
+
 import json
 from enum import Enum
 from pathlib import Path
@@ -9,11 +11,15 @@ from .vessel import Vessel
 
 
 class CatalogType(Enum):
+    """Distinguishes a metadata catalog from a TileDB-data catalog."""
+
     Data = "Data"
     MetaData = "Meta-Data"
 
 
 class StationData(BaseModel):
+    """TileDB URIs for one station's observation data arrays."""
+
     name: str = Field(..., description="The station's name")
     shotdata: str = Field(default=None, description="The station's shotdata TileDB URI")
     shotdata_pre: str = Field(default=None, description="Pre-update shotdata")
@@ -35,6 +41,8 @@ class StationData(BaseModel):
 
 
 class NetworkData(BaseModel):
+    """A named network of stations (sites or data references)."""
+
     name: str = Field(..., description="The network name")
     stations: dict[str, StationData | Site] = Field(
         default={}, description="Stations in the network"
@@ -42,6 +50,8 @@ class NetworkData(BaseModel):
 
 
 class MetaDataCatalog(BaseModel):
+    """Top-level catalog of all networks/stations, in metadata or data mode."""
+
     name: str | None = Field(default="", description="The catalog name")
     networks: dict[str, NetworkData] = Field(default={}, description="Network catalog")
     info: str | None = Field(default="", description="Optional catalog meta")
@@ -245,4 +255,5 @@ class MetaDataCatalog(BaseModel):
 
     @field_serializer("type")
     def serialize_type(self, value: CatalogType) -> str:
+        """Serialize the ``CatalogType`` enum as its string value."""
         return value.value

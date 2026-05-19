@@ -1,3 +1,5 @@
+"""Tools operating on seafloor site data (CTD/sound-speed processing)."""
+
 from .soundspeed_operations import (
     ctd_to_svp_v1,
     ctd_to_svp_v2,

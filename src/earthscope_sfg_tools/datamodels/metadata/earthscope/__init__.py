@@ -1,3 +1,5 @@
+"""EarthScope-internal metadata models for sites, vessels, campaigns, and catalogs."""
+
 from .benchmark import Benchmark, Transponder
 from .campaign import Campaign, Survey, SurveyType, classify_survey_type
 from .catalogs import CatalogType, MetaDataCatalog, NetworkData, StationData
