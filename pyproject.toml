@@ -11,7 +11,9 @@ dependencies = [
   "pandas>=2.2",
   "pandera>=0.20",
   "pydantic>=2.7",
-  "pymap3d>=3.1"
+  "pymap3d>=3.1",
+  "matplotlib>=3.10.9,<4",
+  "cloudpathlib>=0.24.0,<0.25"
 ]
 name = "earthscope-sfg-tools"
 requires-python = ">= 3.11"
