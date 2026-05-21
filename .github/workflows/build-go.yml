@@ -14,13 +14,7 @@ on:
       - '.github/workflows/build-go.yml'
 
 jobs:
-  update-lockfile:
-    uses: ./.github/workflows/update-lockfile.yml
-    permissions:
-      contents: write
-
   build:
-    needs: update-lockfile
     strategy:
       fail-fast: false
       matrix:
@@ -41,7 +35,8 @@ jobs:
         uses: prefix-dev/setup-pixi@v0.8.3
         with:
           environments: ${{ matrix.pixi-env }}
-      
+          locked: false
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
