@@ -4050,7 +4050,7 @@ packages:
 - pypi: ./
   name: earthscope-sfg-tools
   version: 0.1.0
-  sha256: b44d3fbd4f25090516e7b4ea19a73ac131b7b9fc6f9e09798dc0d2a678e96e8d
+  sha256: a2cfb968eaa208dfada9532dc7aff61fec931626b001191c795b9279b8b55d0e
   requires_dist:
   - julian>=0.14
   - numpy>=1.26
@@ -8596,7 +8596,7 @@ packages:
   license: MIT
   license_family: MIT
   purls:
-  - pkg:pypi/pytest?source=compressed-mapping
+  - pkg:pypi/pytest?source=hash-mapping
   size: 299984
   timestamp: 1775644472530
 - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.14.4-habeac84_100_cp314.conda

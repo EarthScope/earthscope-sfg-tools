@@ -1,0 +1,36 @@
+name: Update pixi lockfile
+
+on:
+  workflow_call:
+  schedule:
+    - cron: '0 6 * * 1'  # weekly on Monday at 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  update-lockfile:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.8.3
+        with:
+          run-install: false
+
+      - name: Update lockfile
+        run: pixi update
+
+      - name: Commit and push if lockfile changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pixi.lock
+          if git diff --cached --quiet; then
+            echo "pixi.lock is already up to date"
+          else
+            git commit -m "chore: update pixi.lock [skip ci]"
+            git push
+          fi

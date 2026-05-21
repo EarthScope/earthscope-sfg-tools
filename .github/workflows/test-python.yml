@@ -16,7 +16,13 @@ on:
       - '.github/workflows/test-python.yml'
 
 jobs:
+  update-lockfile:
+    uses: ./.github/workflows/update-lockfile.yml
+    permissions:
+      contents: write
+
   test-formatting-compile:
+    needs: update-lockfile
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

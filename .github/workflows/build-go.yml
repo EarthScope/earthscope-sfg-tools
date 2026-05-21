@@ -14,7 +14,13 @@ on:
       - '.github/workflows/build-go.yml'
 
 jobs:
+  update-lockfile:
+    uses: ./.github/workflows/update-lockfile.yml
+    permissions:
+      contents: write
+
   build:
+    needs: update-lockfile
     strategy:
       fail-fast: false
       matrix:
