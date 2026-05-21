@@ -60,9 +60,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Need a token with write access; GITHUB_TOKEN works for same-repo pushes
           token: ${{ secrets.GITHUB_TOKEN }}
-
+          ref: ${{ github.ref_name }}
       - name: Download all platform binaries
         uses: actions/download-artifact@v4
         with:
