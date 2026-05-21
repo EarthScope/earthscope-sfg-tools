@@ -53,6 +53,9 @@ jobs:
 
   commit-binaries:
     needs: build
+    # Only commit binaries on direct push to main, not on PRs.
+    # On PRs, github.ref_name is "<pr_number>/merge" which is not a real branch.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -61,7 +64,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ github.ref_name }}
       - name: Download all platform binaries
         uses: actions/download-artifact@v4
         with:
