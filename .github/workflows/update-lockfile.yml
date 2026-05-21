@@ -24,6 +24,9 @@ jobs:
         run: pixi update
 
       - name: Commit and push if lockfile changed
+        env:
+          # head_ref is set for pull_request events; ref_name for push/schedule/dispatch
+          BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -32,5 +35,5 @@ jobs:
             echo "pixi.lock is already up to date"
           else
             git commit -m "chore: update pixi.lock [skip ci]"
-            git push
+            git push origin HEAD:$BRANCH
           fi
