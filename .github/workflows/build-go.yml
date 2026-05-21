@@ -23,9 +23,7 @@ jobs:
             pixi-env: tiledb
           - os: macos-latest   # arm64
             pixi-env: tiledb
-          - os: macos-13       # x86_64
-            pixi-env: tiledb
-
+  
     runs-on: ${{ matrix.os }}
 
     steps:
