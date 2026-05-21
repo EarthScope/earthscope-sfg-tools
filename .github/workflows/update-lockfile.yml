@@ -24,23 +24,18 @@ jobs:
           run-install: false
 
       - name: Update lockfile
-        run: pixi update
-
-      - name: Commit updated lockfile
         run: |
+          branch="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          git fetch origin "${branch}"
+          git reset --hard "origin/${branch}"
+          pixi update
+
+      - name: Commit and push updated lockfile
+        run: |
+          branch="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pixi.lock
           git diff --cached --quiet && exit 0
           git commit -m "chore: update pixi.lock [skip ci]"
-
-      - name: Rebase and push lockfile update
-        run: |
-          branch="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          git fetch origin "${branch}"
-          git rebase "origin/${branch}" || {
-            git rebase --abort
-            echo "Lockfile update conflicted with remote changes"
-            exit 1
-          }
           git push origin HEAD:"${branch}"
