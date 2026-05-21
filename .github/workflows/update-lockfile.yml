@@ -9,6 +9,9 @@ on:
 jobs:
   update-lockfile:
     runs-on: ubuntu-latest
+    concurrency:
+      group: update-lockfile-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: write
 
