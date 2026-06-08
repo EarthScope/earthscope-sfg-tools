@@ -23,9 +23,7 @@ jobs:
             pixi-env: tiledb
           - os: macos-latest   # arm64
             pixi-env: tiledb
-          - os: macos-13       # x86_64
-            pixi-env: tiledb
-
+  
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -35,7 +33,8 @@ jobs:
         uses: prefix-dev/setup-pixi@v0.8.3
         with:
           environments: ${{ matrix.pixi-env }}
-      
+          locked: false
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -54,6 +53,9 @@ jobs:
 
   commit-binaries:
     needs: build
+    # Only commit binaries on direct push to main, not on PRs.
+    # On PRs, github.ref_name is "<pr_number>/merge" which is not a real branch.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -68,8 +70,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          token: ${{ steps.app-token.outputs.token }}
-
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download all platform binaries
         uses: actions/download-artifact@v4
         with:
