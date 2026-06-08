@@ -11,7 +11,11 @@ from .system_utils import raise_exception, get_system_architecture
 
 logger = logging.getLogger(__name__)
 
-GO_BINARY_BUILD_DIR = Path(__file__).parent.parent.parent / "go" / "build"
+# When installed as a wheel: site-packages/earthscope_sfg_tools/go/build
+# When installed editable/dev: src/earthscope_sfg_tools/../go/build → src/go/build
+_pkg_root = Path(__file__).parent.parent
+GO_BINARY_BUILD_DIR = _pkg_root / "go" / "build"
+GO_BINARY_BUILD_DIR_SOURCE = _pkg_root.parent / "go" / "build"
 
 WARNINGS_DICT = {}
 
@@ -44,12 +48,14 @@ def find_binary(name: str = "sfg") -> Path:
     os_name, arch = get_system_architecture()
     binary_name = f"sfg_{os_name}_{arch}"
 
-    # Check package's go/build/ directory first
-    if GO_BINARY_BUILD_DIR.exists():
-        binary_path = GO_BINARY_BUILD_DIR / binary_name
-        if binary_path.exists() and binary_path.is_file():
-            return binary_path
-    else:
+    # Check installed wheel path then source/editable path
+    for build_dir in (GO_BINARY_BUILD_DIR, GO_BINARY_BUILD_DIR_SOURCE):
+        if build_dir.exists():
+            binary_path = build_dir / binary_name
+            if binary_path.exists() and binary_path.is_file():
+                return binary_path
+
+    if not GO_BINARY_BUILD_DIR.exists() and not GO_BINARY_BUILD_DIR_SOURCE.exists():
         logger.warning(
             f"Go binary build directory {GO_BINARY_BUILD_DIR} does not exist. "
             f"Please ensure Go tools are built and available in PATH or {GO_BINARY_BUILD_DIR}",
