@@ -228,3 +228,4 @@ CLAUDE.md
 
 # MyST build output
 _build/
+!src/go/build/

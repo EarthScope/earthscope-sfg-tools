@@ -24,12 +24,12 @@ _No docstring._
 | Name | Type | Description |
 |---|---|---|
 | `name` | `str` | The name of the benchmark |
-| `benchmarkID` | `Union` | The benchmark ID |
-| `aPrioriLocation` | `Union` | The a priori location of the benchmark |
-| `start` | `Union` | The start date of the benchmark |
-| `end` | `Union` | The end date of the benchmark |
-| `dropPointLocation` | `Union` | The drop point location of the benchmark |
-| `transponders` | `Union` | The transponders attached to the benchmark |
+| `benchmarkID` | `str \| None` | The benchmark ID |
+| `aPrioriLocation` | `earthscope_sfg_tools.datamodels.metadata.earthscope.utils.Location \| None` | The a priori location of the benchmark |
+| `start` | `datetime.datetime \| None` | The start date of the benchmark |
+| `end` | `datetime.datetime \| None` | The end date of the benchmark |
+| `dropPointLocation` | `earthscope_sfg_tools.datamodels.metadata.earthscope.utils.Location \| None` | The drop point location of the benchmark |
+| `transponders` | `list[earthscope_sfg_tools.datamodels.metadata.earthscope.benchmark.Transponder] \| None` | The transponders attached to the benchmark |
 
 **Methods**
 
@@ -70,8 +70,8 @@ _No docstring._
 | Name | Type | Description |
 |---|---|---|
 | `value` | `float` | Turn around time (TAT) in ms |
-| `start` | `Union` | The start date of the TAT |
-| `end` | `Union` | The end date of the TAT |
+| `start` | `datetime.datetime \| None` | The start date of the TAT |
+| `end` | `datetime.datetime \| None` | The end date of the TAT |
 
 ## class `Transponder`
 
@@ -83,15 +83,15 @@ _No docstring._
 |---|---|---|
 | `address` | `str` | The address of the transponder |
 | `tat` | `list` | The turn around time (TAT) of the transponder |
-| `start` | `Union` | The start date of the transponder |
-| `end` | `Union` | The end date of the transponder (if removed) |
-| `uid` | `Union` | The UID of the transponder |
-| `model` | `Union` | The model of the transponder |
-| `serialNumber` | `Union` | The serial number of the transponder |
-| `batteryCapacity` | `Union` | The battery capacity of the transponder, e.g 4 Ah |
-| `notes` | `Union` | Additional notes about the transponder or deployment |
-| `batteryVoltage` | `Union` | The battery voltage of the transponder, including date and voltage |
-| `extraSensors` | `Union` | Extra sensors attached to the transponder |
+| `start` | `datetime.datetime \| None` | The start date of the transponder |
+| `end` | `datetime.datetime \| None` | The end date of the transponder (if removed) |
+| `uid` | `str \| None` | The UID of the transponder |
+| `model` | `str \| None` | The model of the transponder |
+| `serialNumber` | `str \| None` | The serial number of the transponder |
+| `batteryCapacity` | `str \| None` | The battery capacity of the transponder, e.g 4 Ah |
+| `notes` | `str \| None` | Additional notes about the transponder or deployment |
+| `batteryVoltage` | `list[earthscope_sfg_tools.datamodels.metadata.earthscope.benchmark.BatteryVoltage] \| None` | The battery voltage of the transponder, including date and voltage |
+| `extraSensors` | `list[earthscope_sfg_tools.datamodels.metadata.earthscope.benchmark.ExtraSensors] \| None` | Extra sensors attached to the transponder |
 
 **Methods**
 

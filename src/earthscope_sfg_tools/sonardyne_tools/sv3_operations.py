@@ -1,3 +1,5 @@
+"""Operations on Sonardyne SV3 DFOP00 logs: parsing, merging, and GARPOS export."""
+
 from __future__ import annotations
 
 import json
@@ -48,6 +50,8 @@ class SV3PairingRules:
 
 
 class RejectionReason(Enum):
+    """Reasons an interrogation/reply pair may be rejected during validation."""
+
     ZERO_RANGE = auto()
     ROUNDTRIP_TOO_LONG = auto()
     RETURN_TIME_MISMATCH = auto()

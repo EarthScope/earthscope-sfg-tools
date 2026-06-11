@@ -11,7 +11,9 @@ dependencies = [
   "pandas>=2.2",
   "pandera>=0.20",
   "pydantic>=2.7",
-  "pymap3d>=3.1"
+  "pymap3d>=3.1",
+  "matplotlib>=3.10.9,<4",
+  "cloudpathlib>=0.24.0,<0.25"
 ]
 name = "earthscope-sfg-tools"
 requires-python = ">= 3.11"
@@ -25,15 +27,25 @@ docs = ["myst-parser>=5.1.0"]
 build-backend = "hatchling.build"
 requires = ["hatchling"]
 
+[tool.hatch.build.targets.wheel]
+# Include pre-built Go binaries so go_utils.find_binary() resolves correctly
+# from site-packages regardless of how the package is installed (path, git, PyPI).
+# The binaries must be compiled before building the wheel (pixi run build-go).
+packages = ["src/earthscope_sfg_tools"]
+artifacts = ["src/go/build/sfg_*"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src/go/build" = "earthscope_sfg_tools/go/build"
+
 [tool.pixi.workspace]
 channels = ["conda-forge"]
 platforms = ["osx-arm64", "osx-64", "linux-64", "win-64"]
 
 [tool.pixi.dependencies]
-pytest = ">=8"
+pytest = ">=9.0.3,<10"
 ruff = ">=0.4"
-matplotlib = ">=3.10.9,<4"
-cloudpathlib = ">=0.24.0,<0.25"
+go = ">=1.25.7"
+go-cgo = ">=1.25.7"
 
 [tool.pixi.pypi-dependencies]
 earthscope_sfg_tools = { path = ".", editable = true }

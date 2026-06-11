@@ -16,9 +16,9 @@ _No docstring._
 
 | Name | Type | Description |
 |---|---|---|
-| `name` | `Union` | The catalog name |
+| `name` | `str \| None` | The catalog name |
 | `networks` | `dict` | Network catalog |
-| `info` | `Union` | Optional catalog meta |
+| `info` | `str \| None` | Optional catalog meta |
 | `type` | `CatalogType` | Catalog Type (meta-data or data) |
 
 **Methods**
