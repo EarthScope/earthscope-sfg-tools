@@ -78,6 +78,7 @@ func runNovb2rnx(cmd *cobra.Command, args []string) error {
 					slog.Warn("No epochs found in file", "filename", fileNameTime.Filename)
 					return
 				}
+				slog.Info("Successfully processed file", "filename", fileNameTime.Filename, "num_epochs", len(file_epochs))
 				if modulo > 0 {
 					file_epochs = sfg_utils.DecimateEpochs(file_epochs, modulo)
 				}

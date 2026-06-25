@@ -61,6 +61,8 @@ func runNovab2tile(cmd *cobra.Command, args []string) error {
 				log.Warnf("no epochs found in file %s", filename)
 				return
 			}
+			log.Infof("successfully processed file %s with %d epochs", filename, len(epochs))
+			
 			if failCounter > 0 {
 				log.Warnf("failed to process %d epochs in file %s", failCounter, filename)
 			}
