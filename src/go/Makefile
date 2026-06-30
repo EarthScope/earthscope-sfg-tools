@@ -22,11 +22,15 @@ PREFIX := $(or $(SFG_TILEDB_PREFIX),$(CONDA_PREFIX))
 # This lets the pixi default environment build correctly without requiring -e tiledb.
 ifeq ($(OS),darwin)
     DYLD_LIBRARY_PATH := $(PREFIX)/lib:$(DYLD_LIBRARY_PATH)
+    # Two rpaths: @executable_path/libs for a future self-contained `bundle`,
+    # and the absolute build PREFIX/lib so the binary loads @rpath/libtiledb.dylib
+    # directly from its (conda/pixi) environment without a bundle step or
+    # DYLD_LIBRARY_PATH being set in the caller's process.
     # Use -Xlinker form to avoid Go CGO double-interpreting -Wl,-rpath,X
-    RPATH_FLAG = -Xlinker -rpath -Xlinker @executable_path/libs
+    RPATH_FLAG = -Xlinker -rpath -Xlinker @executable_path/libs -Xlinker -rpath -Xlinker $(PREFIX)/lib
 else
     LD_LIBRARY_PATH := $(PREFIX)/lib:$(LD_LIBRARY_PATH)
-    RPATH_FLAG = -Xlinker -rpath -Xlinker $$ORIGIN/libs
+    RPATH_FLAG = -Xlinker -rpath -Xlinker $$ORIGIN/libs -Xlinker -rpath -Xlinker $(PREFIX)/lib
 endif
 
 # CGO flags for TileDB
