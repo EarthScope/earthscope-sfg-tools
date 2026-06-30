@@ -41,12 +41,30 @@ class GoBuildHook(BuildHookInterface):
             # Nothing to build (e.g. building from an sdist without the Go tree).
             return
 
-        if shutil.which("go") is None:
-            raise RuntimeError(
-                "Go toolchain not found on PATH; cannot compile the `sfg` binary. "
-                "Build inside an environment that provides Go + TileDB "
-                "(e.g. `pixi install` then build), or install a prebuilt wheel."
+        # The CGO build links TileDB and needs a toolchain that only the
+        # conda/pixi environments provide. A plain `pip install .` with no such
+        # environment (e.g. the docs CI job, or installing only the Python
+        # package) must not fail here — skip the native build and emit a wheel
+        # that simply omits the binary. The binary is built when installing into
+        # a conda/pixi env where CONDA_PREFIX/SFG_TILEDB_PREFIX and the TileDB
+        # headers are present.
+        prefix = os.environ.get("SFG_TILEDB_PREFIX") or os.environ.get("CONDA_PREFIX")
+        tiledb_header = Path(prefix) / "include" / "tiledb" / "tiledb.h" if prefix else None
+        if tiledb_header is None or not tiledb_header.exists():
+            self.app.display_warning(
+                "Skipping Go `sfg` build: TileDB toolchain not found "
+                "(no CONDA_PREFIX/SFG_TILEDB_PREFIX with tiledb headers). "
+                "The wheel will not contain the native binary; build inside the "
+                "pixi/conda env to bundle it."
             )
+            return
+
+        if shutil.which("go") is None:
+            self.app.display_warning(
+                "Skipping Go `sfg` build: `go` not found on PATH. "
+                "The wheel will not contain the native binary."
+            )
+            return
 
         self.app.display_info(f"Building Go `sfg` binary in {go_dir} ...")
         subprocess.run(
