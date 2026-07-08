@@ -68,6 +68,8 @@ jobs:
             CGO_CFLAGS='-I${PREFIX}/include' \
             CGO_LDFLAGS='-L${PREFIX}/lib -ltiledb' \
             go build -o build/sfg_windows_amd64.exe -buildvcs=false ./cmd
+            echo '--- smoke test: does the exe actually run? ---'
+            PATH=\"${PREFIX}/bin:\$PATH\" ./build/sfg_windows_amd64.exe --help
           "
 
       - name: Upload binary
