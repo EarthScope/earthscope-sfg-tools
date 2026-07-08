@@ -47,12 +47,13 @@ jobs:
         if: runner.os != 'Windows'
         run: pixi run -e ${{ matrix.pixi-env }} build-go
 
-      # Spike: the Makefile is Unix-only (make/shell); Windows CI has no `make`,
-      # and conda-on-Windows lays out headers/libs under Library/{include,lib}
-      # instead of the Unix {include,lib}. This step is a temporary inline
-      # stand-in while we validate that pixi's win-64 gcc (go-cgo dependency)
-      # can link against conda-forge's MSVC-built tiledb win-64 package.
-      - name: Build Go binary (Windows, spike)
+      # The Makefile is Unix-only (make + shell conditionals) and conda-on-Windows
+      # lays headers/libs out under Library/{include,lib} rather than the Unix
+      # {include,lib}, so Windows gets its own build step instead of `make`.
+      # pixi's win-64 `go-cgo` dependency pulls in a MinGW-w64 gcc that links fine
+      # against conda-forge's (MSVC-built) tiledb win-64 package -- verified below
+      # by actually running the resulting exe, not just checking that link succeeded.
+      - name: Build Go binary (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
@@ -62,14 +63,11 @@ jobs:
           cd src/go
           pixi run -e ${{ matrix.pixi-env }} bash -c "
             set -euxo pipefail
-            which gcc
-            gcc --version
             CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
             CGO_CFLAGS='-I${PREFIX}/include' \
             CGO_LDFLAGS='-L${PREFIX}/lib -ltiledb' \
             go build -o build/sfg_windows_amd64.exe -buildvcs=false ./cmd
-            echo '--- smoke test: does the exe actually run? ---'
-            PATH=\"${PREFIX}/bin:\$PATH\" ./build/sfg_windows_amd64.exe --help
+            PATH=\"${PREFIX}/bin:\$PATH\" ./build/sfg_windows_amd64.exe --help >/dev/null
           "
 
       - name: Upload binary
@@ -98,7 +96,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
       - name: Download all platform binaries
         uses: actions/download-artifact@v4
         with:
