@@ -23,7 +23,9 @@ jobs:
             pixi-env: tiledb
           - os: macos-latest   # arm64
             pixi-env: tiledb
-  
+          - os: windows-latest
+            pixi-env: tiledb
+            
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -41,16 +43,33 @@ jobs:
           go-version-file: src/go/go.mod
           cache-dependency-path: src/go/go.sum
 
-      - name: Build Go binary
+
+      - name: Build Go binary (Unix)
+        if: runner.os != 'Windows'
         run: pixi run -e ${{ matrix.pixi-env }} build-go
 
-      - name: Upload binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: go-binary-${{ matrix.os }}
-          path: src/go/build/sfg_*
-          if-no-files-found: error
-
+      # The Makefile is Unix-only (make + shell conditionals) and conda-on-Windows
+      # lays headers/libs out under Library/{include,lib} rather than the Unix
+      # {include,lib}, so Windows gets its own build step instead of `make`.
+      # pixi's win-64 `go-cgo` dependency pulls in a MinGW-w64 gcc that links fine
+      # against conda-forge's (MSVC-built) tiledb win-64 package -- verified below
+      # by actually running the resulting exe, not just checking that link succeeded.
+      - name: Build Go binary (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PREFIX="$(pwd)/.pixi/envs/${{ matrix.pixi-env }}/Library"
+          mkdir -p src/go/build
+          cd src/go
+          pixi run -e ${{ matrix.pixi-env }} bash -c "
+            set -euxo pipefail
+            CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
+            CGO_CFLAGS='-I${PREFIX}/include' \
+            CGO_LDFLAGS='-L${PREFIX}/lib -ltiledb' \
+            go build -o build/sfg_windows_amd64.exe -buildvcs=false ./cmd
+            PATH=\"${PREFIX}/bin:\$PATH\" ./build/sfg_windows_amd64.exe --help >/dev/null
+          "
   commit-binaries:
     needs: build
     if: github.event_name == 'push'
