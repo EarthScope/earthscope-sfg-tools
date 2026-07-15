@@ -52,7 +52,17 @@ def parse_qcjson_dict(
             interrogation_event
         )
     except Exception as e:
-        logger.error(f"Failed to parse interrogation block: {e}")
+        # When the transceiver errors on an interrogation, Sonardyne firmware
+        # emits sentinel string codes (e.g. "ERR3") in place of the AHRS/GNSS
+        # observation blocks. These fail model validation but are an expected,
+        # benign condition — skip them quietly rather than logging at ERROR.
+        observations = interrogation_raw.get("observations")
+        if isinstance(observations, dict) and any(
+            isinstance(v, str) for v in observations.values()
+        ):
+            logger.debug(f"Skipping interrogation block with error sentinel(s): {e}")
+        else:
+            logger.error(f"Failed to parse interrogation block: {e}")
         return None
 
     def _pairs():

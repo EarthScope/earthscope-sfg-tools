@@ -56,10 +56,17 @@ func LoadEnv() {
 	// Construct the path to the .env file
 	envFilePath := filepath.Join(dir, ".env")
 
+	// The .env file is optional. Skip quietly when it is absent rather than
+	// warning on every invocation; only surface an error if a file that does
+	// exist fails to load.
+	if _, statErr := os.Stat(envFilePath); os.IsNotExist(statErr) {
+		log.Debugf("No .env file at %s, skipping", envFilePath)
+		return
+	}
+
 	// Load the .env file
 	log.Infof("Loading .env file from %s", envFilePath)
-	err := godotenv.Load(envFilePath)
-	if err != nil {
+	if err := godotenv.Load(envFilePath); err != nil {
 		log.Warn("Error loading .env file", err)
 	}
 }

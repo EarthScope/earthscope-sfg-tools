@@ -171,7 +171,7 @@ def build_shotdata(
             )
 
     if not processed:
-        logger.error("No valid pairs found")
+        logger.debug("No valid pairs found")
         return None
 
     df = pd.DataFrame(processed)
