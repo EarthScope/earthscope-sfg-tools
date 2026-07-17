@@ -16,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"gitlab.com/earthscope/gnsstools/codecs/rinex"
+	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 	"gitlab.com/earthscope/gnsstools/geodata/gnsstiledb"
 )
 
@@ -35,9 +36,12 @@ func parseTdb2rnxSettings(path string) (*rinex.Settings, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed reading settings file: %w", err)
 	}
-	var settings = &rinex.Settings{}
+	settings := rinex.NewSettings()
 	if err := json.Unmarshal(bytes, settings); err != nil {
 		return nil, fmt.Errorf("failed parsing settings file: %w", err)
+	}
+	if settings.ObservationsBySystem == nil {
+		settings.ObservationsBySystem = observation.NewObservationsBySystem()
 	}
 	return settings, nil
 }

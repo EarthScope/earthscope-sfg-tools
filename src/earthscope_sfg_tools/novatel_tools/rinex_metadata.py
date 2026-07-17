@@ -21,9 +21,9 @@ class RinexMetadata(BaseModel):
     model_config = {"frozen": True}
 
     marker_name: str = Field(..., description="Site name")
-    rinex_version: str | None = Field(default="2.11")
+    rinex_version: str | None = Field(default="4.02")
     rinex_type: str | None = Field(default="O")
-    rinex_system: str | None = Field(default="G")
+    rinex_system: str | None = Field(default="M")
     marker_number: str | None = Field(default="0001")
     marker_type: str | None = Field(default="GEODETIC")
     observer: str | None = Field(default="EarthScope")
