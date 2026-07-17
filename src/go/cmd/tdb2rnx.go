@@ -123,10 +123,7 @@ func processDaySlice(ctx context.Context, client *gnsstiledb.Client, daySlice gn
 			}
 
 			startYear, startMonth, startDay := epochs[0].Time.Date()
-			currentDate := time.Date(startYear, startMonth, startDay, 0, 0, 0, 0, time.UTC)
-			dayOfYear := currentDate.YearDay()
-			yy := startYear % 100
-			filename := fmt.Sprintf("%s%03d0.%02do", settings.MarkerName, dayOfYear, yy)
+			filename := sfg_utils.BuildV3ObsFilename(settings, epochs)
 			log.Infof("Generating Daily RINEX File For Year %d, Month %d, Day %d To %s", startYear, startMonth, startDay, filename)
 
 			if _, err := os.Stat(filename); err == nil {
