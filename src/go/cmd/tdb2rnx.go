@@ -16,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"gitlab.com/earthscope/gnsstools/codecs/rinex"
+	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 	"gitlab.com/earthscope/gnsstools/geodata/gnsstiledb"
 )
 
@@ -35,9 +36,12 @@ func parseTdb2rnxSettings(path string) (*rinex.Settings, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed reading settings file: %w", err)
 	}
-	var settings = &rinex.Settings{}
+	settings := rinex.NewSettings()
 	if err := json.Unmarshal(bytes, settings); err != nil {
 		return nil, fmt.Errorf("failed parsing settings file: %w", err)
+	}
+	if settings.ObservationsBySystem == nil {
+		settings.ObservationsBySystem = observation.NewObservationsBySystem()
 	}
 	return settings, nil
 }
@@ -119,10 +123,7 @@ func processDaySlice(ctx context.Context, client *gnsstiledb.Client, daySlice gn
 			}
 
 			startYear, startMonth, startDay := epochs[0].Time.Date()
-			currentDate := time.Date(startYear, startMonth, startDay, 0, 0, 0, 0, time.UTC)
-			dayOfYear := currentDate.YearDay()
-			yy := startYear % 100
-			filename := fmt.Sprintf("%s%03d0.%02do", settings.MarkerName, dayOfYear, yy)
+			filename := sfg_utils.BuildV3ObsFilename(settings, epochs)
 			log.Infof("Generating Daily RINEX File For Year %d, Month %d, Day %d To %s", startYear, startMonth, startDay, filename)
 
 			if _, err := os.Stat(filename); err == nil {
