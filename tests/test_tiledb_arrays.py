@@ -44,14 +44,22 @@ def _kin_position_df() -> pd.DataFrame:
 
 
 class TestTBDArrayWriteDf:
-    """Asserts on the DataFrame handed to tiledb.from_pandas rather than a
-    real array round-trip: tiledb-py's dataframe layer rejects pandas >= 3,
-    which this repo does not pin against, so from_pandas cannot run in the
-    test env."""
-
     @pytest.fixture
     def kin_array(self, tmp_path) -> TDBKinPositionArray:
         return TDBKinPositionArray(tmp_path / "kin_array")
+
+    def test_write_df_round_trips_through_tiledb(self, kin_array):
+        """End-to-end: a DataFrame with 'time' as a plain column lands in the
+        array (raised before the index fix)."""
+        df = _kin_position_df()
+        kin_array.write_df(df)
+
+        # array[:] rather than array.df[:] — the latter needs pyarrow,
+        # which the tiledb env does not ship.
+        with tiledb.open(str(kin_array.uri)) as array:
+            written = array[:]
+        assert len(written["time"]) == 2
+        assert list(written["latitude"]) == [45.0, 45.0001]
 
     def test_write_df_promotes_time_column_to_index(self, kin_array):
         """'time' arrives as a plain column but the sparse dimension must be

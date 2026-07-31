@@ -8,7 +8,7 @@ authors = [
 dependencies = [
   "julian>=0.14",
   "numpy>=1.26",
-  "pandas>=2.2",
+  "pandas>=2.2,<3",  # tiledb-py dataframe layer (from_pandas) rejects pandas >= 3
   "pandera>=0.20",
   "pydantic>=2.7",
   "pymap3d>=3.1",
