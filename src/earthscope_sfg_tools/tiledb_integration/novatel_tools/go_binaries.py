@@ -12,6 +12,15 @@ from ...utils.misc import listify
 logger = logging.getLogger(__name__)
 
 
+def _check_returncode(result: subprocess.CompletedProcess, subcommand: str) -> None:
+    """Raise on non-zero exit so callers can't silently ignore failures."""
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"sfg {subcommand} exited {result.returncode}.\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+
 def nova2tile(
     input_files: list[str] | str,
     tdb_path: str,
@@ -37,6 +46,8 @@ def nova2tile(
     ------
     BinaryNotFoundError
         If the nova2tile binary cannot be found.
+    RuntimeError
+        If the binary exits with a non-zero return code.
     """
     binary = find_binary()
 
@@ -47,6 +58,7 @@ def nova2tile(
     logger.info(f"Running sfg nova2tile: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     parse_cli_logs(result, logger)
+    _check_returncode(result, "nova2tile")
     return result
 
 
@@ -75,6 +87,8 @@ def novb2tile(
     ------
     BinaryNotFoundError
         If the novb2tile binary cannot be found.
+    RuntimeError
+        If the binary exits with a non-zero return code.
     """
     binary = find_binary()
 
@@ -85,6 +99,7 @@ def novb2tile(
     logger.info(f"Running sfg novab2tile: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     parse_cli_logs(result, logger)
+    _check_returncode(result, "novab2tile")
     return result
 
 
@@ -117,6 +132,8 @@ def nov0002tile(
     ------
     BinaryNotFoundError
         If the nov0002tile binary cannot be found.
+    RuntimeError
+        If the binary exits with a non-zero return code.
     """
     binary = find_binary()
 
@@ -136,6 +153,7 @@ def nov0002tile(
     logger.info(f"Running sfg nov0002tile: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     parse_cli_logs(result, logger)
+    _check_returncode(result, "nov0002tile")
     return result
 
 
@@ -170,6 +188,8 @@ def tdb2rnx(
     ------
     BinaryNotFoundError
         If the tdb2rnx binary cannot be found.
+    RuntimeError
+        If the binary exits with a non-zero return code.
     """
     binary = find_binary()
 
@@ -191,4 +211,5 @@ def tdb2rnx(
     logger.info(f"Running sfg tdb2rnx: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     parse_cli_logs(result, logger)
+    _check_returncode(result, "tdb2rnx")
     return result

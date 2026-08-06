@@ -1,10 +1,8 @@
 """TileDB integration module.
 
-This module provides a deep boundary for TileDB workflows with:
-- backend abstraction
-- structured operation results
-- service-level failure policy
-- legacy-compatible helper functions
+Wraps the Go ``sfg`` binary subcommands that move NovAtel data in and out
+of TileDB arrays, and re-exports the legacy TDB array classes and schemas.
+Requires the ``tiledb`` extra: ``pip install earthscope-sfg-tools[tiledb]``.
 """
 
 try:
@@ -95,16 +93,15 @@ rinex_qc = _not_yet_implemented("rinex_qc")
 
 
 __all__ = [
-    "TileDBService",
-    "TileDBOperationResult",
-    "TileDBIntegrationError",
-    "TileDBBinaryExecutionError",
-    "GoBinaryTileDBBackend",
+    # Go binary wrappers
     "nova2tile",
+    "novb2tile",
     "nov0002tile",
     "novatel_770_2tile",
     "tdb2rnx",
+    # Not yet ported (import-compatible stubs)
     "tile2rinex",
+    "rinex_qc",
     # Legacy-compatible TDB array classes
     "TBDArray",
     "TDBAcousticArray",
