@@ -99,8 +99,13 @@ class TBDArray:
         """
         logger.debug(f"Writing dataframe to {self.uri}")
         if validate:
-            df_val = self.dataframe_schema.validate(df, lazy=True)
-        tiledb.from_pandas(str(self.uri), df_val, mode="append")
+            df = self.dataframe_schema.validate(df, lazy=True)
+        # tiledb.from_pandas maps the sparse 'time' dimension from the index,
+        # so a plain 'time' column must be promoted after schema validation
+        # (the pandera schema expects it as a column).
+        if "time" in df.columns:
+            df = df.set_index("time")
+        tiledb.from_pandas(str(self.uri), df, mode="append")
 
     def read_df(
         self,
