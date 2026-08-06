@@ -55,6 +55,8 @@ github.com/valyala/fasttemplate v1.2.2 h1:lxLXG0uE3Qnshl9QyaK6XJxMXlQZELvChBOCmQ
 github.com/valyala/fasttemplate v1.2.2/go.mod h1:KHLXt3tVN2HBp8eijSv/kGJopbvo7S+qRAEEKiv+SiQ=
 gitlab.com/earthscope/gnsstools v0.60.0 h1:6zByEMvEIsXgsJlziRiwmF0G2yjeiuhZ505DONMabdU=
 gitlab.com/earthscope/gnsstools v0.60.0/go.mod h1:vRJRBktQob9c0WdHYKH3h19gkLn0E3xkxW7vX4ATXXI=
+gitlab.com/earthscope/gnsstools v0.88.0 h1:KBS5wSGD/p6RjR4Ckrs83l5yrL6gx272a3gJUvRwmhA=
+gitlab.com/earthscope/gnsstools v0.88.0/go.mod h1:xWR2jAXhxV/6JSFCljt+Dc/G9ML8OKayBh0P2oyHxvA=
 gitlab.com/earthscope/gnsstools/geodata v0.58.0 h1:JHrvCqRLpydmrkOCid01v8EXEStnmIgJfFqLi2WJexY=
 gitlab.com/earthscope/gnsstools/geodata v0.58.0/go.mod h1:+eTweWf6H476k013pYiIH+t8pYX7eXLKtwVfsebkhgA=
 go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=
@@ -68,6 +70,8 @@ golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8/go.mod h1:oPkhp1MJrh7nUepCBc
 golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.42.0 h1:omrd2nAlyT5ESRdCLYdm3+fMfNFE/+Rf4bDIQImRJeo=
 golang.org/x/sys v0.42.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+golang.org/x/sys v0.44.0 h1:ildZl3J4uzeKP07r2F++Op7E9B29JRUy+a27EibtBTQ=
+golang.org/x/sys v0.44.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
 golang.org/x/text v0.35.0 h1:JOVx6vVDFokkpaq1AEptVzLTpDe9KGpj5tR4/X+ybL8=
 golang.org/x/text v0.35.0/go.mod h1:khi/HExzZJ2pGnjenulevKNX1W67CUy0AsXcNubPGCA=
 gonum.org/v1/gonum v0.17.0 h1:VbpOemQlsSMrYmn7T2OUvQ4dqxQXU+ouZFQsZOx50z4=

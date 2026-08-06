@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,6 +19,63 @@ import (
 	rinex "gitlab.com/earthscope/gnsstools/codecs/rinex"
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 )
+
+// BuildV3ObsFilename constructs a RINEX v3/v4 long-format observation
+// filename: SSSSMRCCC_S_YYYYDDDHHMM_PPP_FFF_DT.rnx
+//
+// Monument number, receiver number, and country code aren't tracked per
+// station today, so they're fixed at "00"/"USA"; the data-source character
+// is always "R" (receiver-generated) since this pipeline never produces
+// RINEX from a real-time stream. epochs must be sorted by time and used to
+// both anchor the file's start timestamp and estimate the sampling
+// interval, so decimated output is labeled correctly.
+func BuildV3ObsFilename(settings *rinex.Settings, epochs []observation.Epoch) string {
+	t := epochs[0].Time
+	doy := t.YearDay()
+	station := fmt.Sprintf("%s00USA", settings.MarkerName)
+	sysChar := "M"
+	if settings.RinexSystem != "" {
+		sysChar = string(settings.RinexSystem[0])
+	}
+	freq := estimateDataFrequency(epochs)
+	return fmt.Sprintf("%s_R_%04d%03d%02d%02d_01D_%s_%sO.rnx",
+		station, t.Year(), doy, t.Hour(), t.Minute(), freq, sysChar)
+}
+
+// estimateDataFrequency returns the RINEX 3-character sampling-interval
+// code (e.g. "01S", "30S", "15M") derived from the median gap between
+// consecutive epochs. Returns "00U" (unspecified) when fewer than two
+// epochs are available.
+func estimateDataFrequency(epochs []observation.Epoch) string {
+	if len(epochs) < 2 {
+		return "00U"
+	}
+	n := len(epochs) - 1
+	if n > 200 {
+		n = 200
+	}
+	deltas := make([]float64, n)
+	for i := 0; i < n; i++ {
+		deltas[i] = epochs[i+1].Time.Sub(epochs[i].Time).Seconds()
+	}
+	sort.Float64s(deltas)
+	median := deltas[len(deltas)/2]
+	if median <= 0 {
+		return "00U"
+	}
+	switch {
+	case median < 1:
+		return fmt.Sprintf("%02dC", int(math.Round(median*100)))
+	case median < 60:
+		return fmt.Sprintf("%02dS", int(math.Round(median)))
+	case median < 3600:
+		return fmt.Sprintf("%02dM", int(math.Round(median/60)))
+	case median < 86400:
+		return fmt.Sprintf("%02dH", int(math.Round(median/3600)))
+	default:
+		return fmt.Sprintf("%02dD", int(math.Round(median/86400)))
+	}
+}
 
 func ArrayExists(arrayPath string) bool {
 	ctx, err := tiledb.NewContext(nil)
@@ -101,10 +159,7 @@ func BatchEpochsByDay(epochs []observation.Epoch) (map[string][]observation.Epoc
 func WriteEpochs(epochs []observation.Epoch, settings *rinex.Settings) error {
 	SortEpochsByTime(epochs)
 	startYear, startMonth, startDay := epochs[0].Time.Date()
-	currentDate := time.Date(startYear, startMonth, startDay, 0, 0, 0, 0, time.UTC)
-	dayOfYear := currentDate.YearDay()
-	yy := startYear % 100
-	filename := fmt.Sprintf("%s%03d0.%02do", settings.MarkerName, dayOfYear, yy)
+	filename := BuildV3ObsFilename(settings, epochs)
 	log.Infof("Generating Daily RINEX File For Year %d, Month %d, Day %d To %s", startYear, startMonth, startDay, filename)
 
 	// Check if the file already exists

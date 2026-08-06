@@ -600,6 +600,11 @@ func ProcessFileNOVB(file string,antIndex uint8) ([]observation.Epoch,int,error)
 				//log.Warnf("failed reading message: %s", err)
 				continue MessageLoop
 			}
+			// Apply antenna filter at the message level for all message types.
+			if msg.MeasurementSource() != antIndex {
+				continue MessageLoop
+			}
+
 			switch msg.MessageID {
 
 				case 140:{
@@ -629,13 +634,11 @@ func ProcessFileNOVB(file string,antIndex uint8) ([]observation.Epoch,int,error)
 						fail_counter++
 						continue MessageLoop
 					}
-					if epoch.AntennaIndex == antIndex {
-						if len(epoch.Satellites) == 0 {
-							fail_counter++
-							continue MessageLoop
-						}
-						epochs = append(epochs, epoch)
+					if len(epoch.Satellites) == 0 {
+						fail_counter++
+						continue MessageLoop
 					}
+					epochs = append(epochs, epoch)
 				}
 			}
 		}
@@ -793,13 +796,13 @@ MessageLoop:
 			//log.Warnf("failed reading message: %s", err)
 			continue MessageLoop
 		}
-		if msg.MessageID == 140 {
+		if msg.MessageID == 140 || msg.MessageID == 2537 {
 			return msg.Time(), nil
 		} else {
 			continue MessageLoop
 		}
 	}
-	return time.Time{}, fmt.Errorf("no RANGEA message found in file")
+	return time.Time{}, fmt.Errorf("no RANGEA/RANGECMP5 message found in file")
 }
 
 type FileTime struct {
