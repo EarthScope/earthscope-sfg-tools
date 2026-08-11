@@ -146,7 +146,11 @@ def _forward_logrus(stream_text: str, logger: logging.Logger, default_level: int
         if not line:
             continue
         match = _LOGRUS_LEVEL.search(line)
-        level = _LEVEL_MAP.get(match.group(1).lower(), default_level) if match else default_level
+        level = (
+            _LEVEL_MAP.get(match.group(1).lower(), default_level)
+            if match
+            else default_level
+        )
         logger.log(level, line)
 
         # Preserve existing side effects on the msg= payload.
@@ -176,6 +180,10 @@ def parse_cli_logs(result: subprocess.CompletedProcess, logger: logging.Logger):
             when its trigger string is found in stdout or stderr.
     """
     if result.stdout:
-        _forward_logrus(remove_ansi_escape(result.stdout), logger, default_level=logging.DEBUG)
+        _forward_logrus(
+            remove_ansi_escape(result.stdout), logger, default_level=logging.DEBUG
+        )
     if result.stderr:
-        _forward_logrus(remove_ansi_escape(result.stderr), logger, default_level=logging.WARNING)
+        _forward_logrus(
+            remove_ansi_escape(result.stderr), logger, default_level=logging.WARNING
+        )

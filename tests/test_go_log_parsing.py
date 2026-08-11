@@ -13,7 +13,9 @@ _MIXED_STDERR = (
 
 
 def _result(stdout="", stderr=""):
-    return subprocess.CompletedProcess(args=[], returncode=0, stdout=stdout, stderr=stderr)
+    return subprocess.CompletedProcess(
+        args=[], returncode=0, stdout=stdout, stderr=stderr
+    )
 
 
 def test_each_line_forwarded_at_its_own_level(caplog):
