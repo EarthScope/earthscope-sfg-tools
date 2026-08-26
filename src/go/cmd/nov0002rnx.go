@@ -83,7 +83,8 @@ func runNov0002rnx(cmd *cobra.Command, args []string) error {
 				if modulo > 0 {
 					file_epochs = sfg_utils.DecimateEpochs(file_epochs, modulo)
 				}
-				epoch_count += len(file_epochs)
+				num_epochs := len(file_epochs)
+				epoch_count += num_epochs
 
 				batched_epochs_sub, err := sfg_utils.BatchEpochsByDay(file_epochs)
 				if err != nil {
@@ -101,7 +102,7 @@ func runNov0002rnx(cmd *cobra.Command, args []string) error {
 
 				startYear, startMonth, startDay := fileNameTime.Time.Date()
 				currentDate := time.Date(startYear, startMonth, startDay, 0, 0, 0, 0, time.UTC)
-				slog.Info("Processed file", "filename", fileNameTime.Filename, "Year", startYear, "Day of Year", currentDate.YearDay(), "num_epochs", len(file_epochs), "num_fails", fails)
+				slog.Info("Processed file", "filename", fileNameTime.Filename, "Year", startYear, "Day of Year", currentDate.YearDay(), "num_epochs", num_epochs, "num_fails", fails)
 			}
 
 			if batched_epochs[YMD_KEY] != nil {
