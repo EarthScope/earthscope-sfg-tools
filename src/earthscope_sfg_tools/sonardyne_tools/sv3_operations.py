@@ -171,7 +171,7 @@ def build_shotdata(
             )
 
     if not processed:
-        logger.error("No valid pairs found")
+        logger.debug("No valid pairs found")
         return None
 
     df = pd.DataFrame(processed)
@@ -190,21 +190,26 @@ def novatel_interrogation_to_garpos_interrogation(
 
     Args:
         novatel_interrogation: Parsed Novatel interrogation event containing GNSS
-            position, AHRS attitude, and a common timestamp.
+            position, NOV_INS attitude, and a common timestamp.
 
     Returns:
         An :class:`SV3InterrogationData` instance with ECEF position, attitude,
         position standard deviations, and ping time (GPS time).
+
+    Raises:
+        ValueError: If the event has no NOV_INS block. 
     """
+    if novatel_interrogation.observations.NOV_INS is None:
+        raise ValueError("Interrogation event has no NOV_INS block")
     east_ecef, north_ecef, up_ecef = pm.geodetic2ecef(
         float(novatel_interrogation.observations.GNSS.latitude),
         float(novatel_interrogation.observations.GNSS.longitude),
         float(novatel_interrogation.observations.GNSS.hae),
     )
     return SV3InterrogationData(
-        head0=novatel_interrogation.observations.AHRS.h,
-        pitch0=novatel_interrogation.observations.AHRS.p,
-        roll0=novatel_interrogation.observations.AHRS.r,
+        head0=novatel_interrogation.observations.NOV_INS.h,
+        pitch0=novatel_interrogation.observations.NOV_INS.p,
+        roll0=novatel_interrogation.observations.NOV_INS.r,
         east0=east_ecef,
         north0=north_ecef,
         up0=up_ecef,
@@ -224,13 +229,20 @@ def novatel_reply_to_garpos_reply(novatel_reply: NovatelRangeEvent) -> SV3ReplyD
     :class:`SV3ReplyData` object.
 
     Args:
-        novatel_reply: Parsed Novatel range event containing GNSS position, AHRS
+        novatel_reply: Parsed Novatel range event containing GNSS position, NOV_INS
             attitude, acoustic range diagnostics, and a common timestamp.
 
     Returns:
         An :class:`SV3ReplyData` instance with ECEF position, attitude, acoustic
         diagnostics, TAT, one-way travel time, and return time (GPS time).
+
+    Raises:
+        ValueError: If the event has no NOV_INS block. See
+            :func:`novatel_interrogation_to_garpos_interrogation` for why
+            NOV_INS is used unconditionally rather than AHRS.
     """
+    if novatel_reply.observations.NOV_INS is None:
+        raise ValueError("Range event has no NOV_INS block")
     east_ecef, north_ecef, up_ecef = pm.geodetic2ecef(
         float(novatel_reply.observations.GNSS.latitude),
         float(novatel_reply.observations.GNSS.longitude),
@@ -243,9 +255,9 @@ def novatel_reply_to_garpos_reply(novatel_reply: NovatelRangeEvent) -> SV3ReplyD
     )
     return SV3ReplyData(
         transponderID=novatel_reply.range.cn,
-        head1=novatel_reply.observations.AHRS.h,
-        pitch1=novatel_reply.observations.AHRS.p,
-        roll1=novatel_reply.observations.AHRS.r,
+        head1=novatel_reply.observations.NOV_INS.h,
+        pitch1=novatel_reply.observations.NOV_INS.p,
+        roll1=novatel_reply.observations.NOV_INS.r,
         east1=east_ecef,
         north1=north_ecef,
         up1=up_ecef,

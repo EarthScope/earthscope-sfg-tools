@@ -109,14 +109,67 @@ def remove_ansi_escape(text):
     return ansi_escape.sub("", text)
 
 
+# Go binaries log via logrus in the form: time="..." level=info msg="..."
+_LOGRUS_LEVEL = re.compile(r"\blevel=(\w+)")
+_LEVEL_MAP = {
+    "trace": logging.DEBUG,
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "warning": logging.WARNING,
+    "warn": logging.WARNING,
+    "error": logging.ERROR,
+    "fatal": logging.CRITICAL,
+    "panic": logging.CRITICAL,
+}
+
+
+def _forward_logrus(stream_text: str, logger: logging.Logger, default_level: int):
+    """Forward each Go log line at its own logrus level.
+
+    Each line is emitted as its own record at the Python level that maps to
+    the line's ``level=`` field (info→INFO, warning→WARNING, error→ERROR,
+    etc.).  Lines with no recognizable ``level=`` field fall back to
+    ``default_level``.  Known warning/exception strings in the ``msg=``
+    payload are preserved as ``warnings.warn`` calls / raised exceptions.
+
+    Args:
+        stream_text: Decoded, ANSI-stripped stdout or stderr text.
+        logger: Logger to receive the forwarded messages.
+        default_level: Level used for lines lacking a ``level=`` field.
+
+    Raises:
+        Exception: Any exception class returned by :func:`raise_exception`
+            when its trigger string is found in a line's ``msg=`` payload.
+    """
+    for line in stream_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        match = _LOGRUS_LEVEL.search(line)
+        level = (
+            _LEVEL_MAP.get(match.group(1).lower(), default_level)
+            if match
+            else default_level
+        )
+        logger.log(level, line)
+
+        # Preserve existing side effects on the msg= payload.
+        message = line.split("msg=", 1)[-1]
+        if (warning := parse_error(message)) is not None:
+            logger.warning(warning.message)
+            warnings.warn(warning.message, warning, 3)
+        if (exception := raise_exception(message)) is not None:
+            raise exception
+
+
 def parse_cli_logs(result: subprocess.CompletedProcess, logger: logging.Logger):
     """Parse and forward stdout/stderr from a Go binary subprocess.
 
-    Strips ANSI escape codes, then routes lines to the appropriate log
-    level.  Lines containing ``'Processed'`` or ``'Created'`` are logged
-    at INFO; everything else at DEBUG.  Lines matching a known exception
-    pattern raise that exception.  ``stderr`` lines containing ``'error'``
-    are logged at ERROR; others at WARNING.
+    Strips ANSI escape codes, then forwards each line at its own logrus
+    ``level=`` (see :func:`_forward_logrus`), so ordinary
+    ``logger.setLevel`` calls filter the Go output as expected.  Lines with
+    no ``level=`` field default to DEBUG on stdout and WARNING on stderr.
+    Lines matching a known exception pattern raise that exception.
 
     Args:
         result: Completed subprocess whose stdout/stderr are plain text.
@@ -127,29 +180,10 @@ def parse_cli_logs(result: subprocess.CompletedProcess, logger: logging.Logger):
             when its trigger string is found in stdout or stderr.
     """
     if result.stdout:
-        stdout_cleaned = remove_ansi_escape(result.stdout)
-        logger.debug(stdout_cleaned)
-        result_message = stdout_cleaned.split("msg=")
-        for log_line in result_message:
-            message = log_line.split("\n")[0]
-            if "Processed" in message or "Created" in message:
-                logger.info(message)
-            if (exception := raise_exception(message)) is not None:
-                raise exception
+        _forward_logrus(
+            remove_ansi_escape(result.stdout), logger, default_level=logging.DEBUG
+        )
     if result.stderr:
-        stderr_cleaned = remove_ansi_escape(result.stderr)
-        if "error" in stderr_cleaned.lower():
-            logger.error(stderr_cleaned)
-            if (warning := parse_error(stderr_cleaned)) is not None:
-                logger.warning(warning.message)
-                warnings.warn(warning.message, warning, 3)
-        else:
-            logger.warning(stderr_cleaned)
-
-        result_message = stderr_cleaned.split("msg=")
-        for log_line in result_message:
-            message = log_line.split("\n")[0]
-            if "Processing" in message or "Created" in message:
-                logger.info(message)
-            if (exception := raise_exception(message)) is not None:
-                raise exception
+        _forward_logrus(
+            remove_ansi_escape(result.stderr), logger, default_level=logging.WARNING
+        )

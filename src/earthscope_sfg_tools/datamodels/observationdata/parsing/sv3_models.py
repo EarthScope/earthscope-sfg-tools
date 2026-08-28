@@ -187,17 +187,30 @@ class SonardyneGNSSData(BaseModel):
 
 
 class SonardyneAHRSData(BaseModel):
-    """AHRS attitude (heading, pitch, roll) and acceleration from a Sonardyne event log."""
+    """AHRS attitude (heading, pitch, roll) and acceleration from a Sonardyne event log.
 
-    acx: Decimal = Field(description="Acceleration X axis in m/s^2")
-    acy: Decimal = Field(description="Acceleration Y axis in m/s^2")
-    acz: Decimal = Field(description="Acceleration Z axis in m/s^2")
-    h: Decimal = Field(description="Heading in degrees", ge=Decimal(0), le=Decimal(360))
-    h_mag: Decimal | None = Field(
-        description="Magnetic heading in degrees", ge=Decimal(0), le=Decimal(360)
+    Not used for shotdata attitude (see ``novatel_interrogation_to_garpos_interrogation``,
+    which uses NOV_INS instead) — kept around only for diagnostics. All fields
+    but ``time`` are optional because real events report two disjoint shapes:
+    magnetic-heading-only (``h_mag``) or full accel+heading/pitch/roll, never
+    both together.
+    """
+
+    acx: Decimal | None = Field(default=None, description="Acceleration X axis in m/s^2")
+    acy: Decimal | None = Field(default=None, description="Acceleration Y axis in m/s^2")
+    acz: Decimal | None = Field(default=None, description="Acceleration Z axis in m/s^2")
+    h: Decimal | None = Field(
+        default=None, description="Heading in degrees", ge=Decimal(0), le=Decimal(360)
     )
-    p: Decimal = Field(description="Pitch in degrees", ge=Decimal(-90), le=Decimal(90))
-    r: Decimal = Field(description="Roll in degrees", ge=Decimal(-180), le=Decimal(180))
+    h_mag: Decimal | None = Field(
+        default=None, description="Magnetic heading in degrees", ge=Decimal(0), le=Decimal(360)
+    )
+    p: Decimal | None = Field(
+        default=None, description="Pitch in degrees", ge=Decimal(-90), le=Decimal(90)
+    )
+    r: Decimal | None = Field(
+        default=None, description="Roll in degrees", ge=Decimal(-180), le=Decimal(180)
+    )
     time: TimeData = Field(description="Time data associated with the log")
 
 
@@ -235,12 +248,12 @@ class SonardyneRangeReplyData(BaseModel):
 class SonardyneObservations(BaseModel):
     """Bundle of all sensor observations attached to one Sonardyne event."""
 
-    AHRS: SonardyneAHRSData | None = Field(description="AHRS data")
+    AHRS: SonardyneAHRSData | None = Field(default=None, description="AHRS data")
     GNSS: SonardyneGNSSData | None = Field(description="GNSS data")
     NOV_HEADING: SonardyneHeadingData | None = Field(
-        description="Sonardyne heading data"
+        default=None, description="Sonardyne heading data"
     )
-    NOV_INS: SonardyneINSData | None = Field(description="Sonardyne INS data")
+    NOV_INS: SonardyneINSData | None = Field(default=None, description="Sonardyne INS data")
     NOV_RANGE: SonardyneRangeData | None = Field(description="Sonardyne range data")
 
 
