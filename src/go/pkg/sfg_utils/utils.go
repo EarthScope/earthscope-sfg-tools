@@ -196,22 +196,29 @@ func WriteEpochs(epochs []observation.Epoch, settings *rinex.Settings) error {
 	return nil
 }
 
+// Reader parses the NovAtel ASCII logs carried inside a GPSA binary
+// (NOV000) stream. Internally it flattens the underlying DLE-framed
+// packets into one continuous ASCII byte stream (see gpsaASCIIReader) and
+// hands that to novatelascii.Scanner, since GPSA packet boundaries do not
+// align with log boundaries — a large log can span several packets and
+// several small logs can be interleaved between the fragments of a large
+// one.
 type Reader struct {
-	Reader *bufio.Reader
+	scanner novatelascii.Scanner
 }
 
 func NewReader(r io.Reader) Reader {
-	return Reader{Reader: bufio.NewReader(r)}
+	br, ok := r.(*bufio.Reader)
+	if !ok {
+		br = bufio.NewReader(r)
+	}
+	return Reader{scanner: novatelascii.NewScanner(newGPSAASCIIReader(br))}
 }
 
-func (reader Reader) nextMessageNOV00bin() (message novatelascii.Message, err error) {
-	message, err = DeserializeNOV00bin(reader.Reader)
-	if err != nil {
-		if err == io.EOF {
-			return message, err
-		}
-	}
-	return message, nil
+// nextMessageNOV00bin returns the next NovAtel ASCII log from the GPSA
+// binary stream.
+func (reader *Reader) nextMessageNOV00bin() (message novatelascii.Message, err error) {
+	return reader.scanner.NextMessage()
 }
 
 
