@@ -418,66 +418,148 @@ func processBuffer(buffer []byte) (message novatelascii.Message, err error) {
 
 }
 
-func DeserializeNOV00bin(r *bufio.Reader) (message novatelascii.Message, err error) {
-	var stx byte = 0x2        // start of text, 2 in decimal
-	var etx byte = 0x3        // end of text, 3 in decimal
-	var log_start byte = 0x23 // log start, 35 in decimal ASCII #
-	var log_done byte = 0x2A  // log done, 2 in decimal, * in Ascii
-	var got_start_of_text bool = false
-	var got_end_of_text bool = false
-	var got_start_of_log bool = false
-	var got_end_of_log bool = false
+// gpsaHeaderLen is the size, in bytes, of the binary GPSA packet header
+// that precedes every ASCII log fragment: 2-byte message id, 8-byte
+// instrument time, 8-byte common time.
+const gpsaHeaderLen = 18
+
+// readRawGPSAPacket reads one DLE/STX/ETX-framed GPSA packet from r
+// (Sonardyne binary framing with DLE byte-stuffing) and returns its
+// unstuffed contents: the 18-byte GPSA header followed by the packet's
+// data bytes, with the trailing 1-byte XOR checksum stripped.
+//
+// A single ASCII NovAtel log (e.g. a large multi-signal RANGEA) can be
+// split across several consecutive GPSA packets when it exceeds the
+// underlying link's packet size; only the first fragment carries the
+// '#'/'%' sync char and full 18-byte header semantics, continuation
+// fragments carry raw log bytes. Reassembly is the caller's job — this
+// function only ever returns one low-level packet's payload.
+//
+// Corrupt packets (bad CRC, ETX with no matching STX, too short) are
+// skipped with a debug log, mirroring the reference GPSABinaryExtractor.
+func readRawGPSAPacket(r *bufio.Reader) ([]byte, error) {
+	const dle byte = 0x10 // data link escape
+	const stx byte = 0x02 // start of text
+	const etx byte = 0x03 // end of text
+
+	var gotDLE bool
+	var gotSTX bool
 	var buffer []byte
+	var crc byte
 
 	for {
-		peekByte, err := r.Peek(1)
+		b, err := r.ReadByte()
 		if err != nil {
-			switch {
-			case err == io.EOF || err == bufio.ErrBufferFull:
-				// do not advance the reader
-				return message, err
-			default:
-				// advance the reader
-				_, err := r.Discard(1)
-				if err != nil {
-					log.Warnf("error discarding byte (%s)", err)
+			return nil, err
+		}
+
+		switch {
+		case b == dle && !gotDLE:
+			gotDLE = true
+
+		case b == stx && gotDLE:
+			// DLE + STX: start of packet
+			gotDLE = false
+			gotSTX = true
+			buffer = buffer[:0]
+			crc = 0
+
+		case b == etx && gotDLE:
+			// DLE + ETX: end of packet
+			gotDLE = false
+			hadSTX := gotSTX
+			gotSTX = false
+
+			if !hadSTX {
+				slog.Debug("Found ETX with no STX")
+				continue
+			}
+			if crc != 0 {
+				slog.Debug("CRC error in packet", "crc", crc)
+				continue
+			}
+			// header plus at least the trailing checksum byte
+			if len(buffer) < gpsaHeaderLen+1 {
+				slog.Debug("Packet too short", "len", len(buffer))
+				continue
+			}
+
+			out := make([]byte, len(buffer)-1)
+			copy(out, buffer[:len(buffer)-1]) // strip trailing checksum byte
+			return out, nil
+
+		default:
+			if gotDLE {
+				// A lone DLE should only precede STX, ETX, or a stuffed DLE.
+				if b != dle {
+					slog.Debug("Found DLE with no stuffing", "byte", b)
 				}
-				return message, fmt.Errorf("error peeking byte (%s)", err)
+				gotDLE = false
 			}
-		}
-		if peekByte[0] == stx {
-			got_start_of_text = true
-		} else if peekByte[0] == log_start {
-			got_start_of_log = true
-			buffer = []byte{}
-		} else if peekByte[0] == etx {
-			got_end_of_text = true
-		} else if peekByte[0] == log_done {
-			got_end_of_log = true
-			got_end_of_text = false
-		}
-		if got_end_of_text && got_end_of_log {
-			buffer = append(buffer, peekByte[0])
-			_, err := r.Discard(1)
-			if err != nil {
-				log.Warnf("error discarding byte (%s)", err)
+			if gotSTX {
+				buffer = append(buffer, b)
+				crc ^= b
 			}
-			message, err := processBuffer(buffer)
-			if err != nil {
-				break
-			}
-			return message, err
-		} else if got_start_of_text && got_start_of_log {
-			buffer = append(buffer, peekByte[0])
-		}
-		_, err = r.Discard(1)
-		if err != nil {
-			log.Warnf("error discarding byte (%s)", err)
 		}
 	}
+}
 
-	return novatelascii.LongMessage{}, fmt.Errorf("unknown error")
+// gpsaASCIIReader adapts a stream of DLE-framed GPSA binary packets into a
+// continuous io.Reader of the NovAtel ASCII log bytes they carry.
+//
+// The GPSA transport chunks whatever ASCII log data is queued (RANGEA,
+// INSPVAA, INSSTDEVA, ...) into fixed-size packets with no regard for log
+// boundaries: one large log (e.g. a multi-signal RANGEA) can span several
+// packets, and several short logs can be interleaved between the fragments
+// of a large one. Packet boundaries therefore carry no message-framing
+// meaning — the only reliable way to recover individual logs is to
+// concatenate every packet's data back into one continuous ASCII stream
+// and let novatelascii.Scanner split it on '\n', exactly as it already
+// does for a plain ASCII NovAtel log file (see ProcessFileNOVASCII).
+// The source recording can also have genuine gaps — a log's trailing
+// checksum + CRLF simply missing from the stream (dropped at capture
+// time, not a framing bug). Left alone that would let the next log's
+// sync char get silently absorbed into the truncated log's data field,
+// so gpsaASCIIReader forces every sync char onto its own line; the
+// truncated log then fails to parse (as it must — its checksum really is
+// gone) without dragging the following, otherwise-good log down with it.
+type gpsaASCIIReader struct {
+	r           *bufio.Reader
+	buf         []byte
+	lastByte    byte
+	haveEmitted bool
+}
 
+func newGPSAASCIIReader(r *bufio.Reader) *gpsaASCIIReader {
+	return &gpsaASCIIReader{r: r}
+}
+
+// appendChunk appends packet data to buf, inserting a '\n' before any
+// sync char ('#' or '%') not already at the start of a line.
+func (g *gpsaASCIIReader) appendChunk(chunk []byte) {
+	for _, b := range chunk {
+		if (b == '#' || b == '%') && g.haveEmitted && g.lastByte != '\n' {
+			g.buf = append(g.buf, '\n')
+		}
+		g.buf = append(g.buf, b)
+		g.lastByte = b
+		g.haveEmitted = true
+	}
+}
+
+func (g *gpsaASCIIReader) Read(p []byte) (int, error) {
+	for len(g.buf) == 0 {
+		packet, err := readRawGPSAPacket(g.r)
+		if err != nil {
+			return 0, err
+		}
+		if len(packet) > gpsaHeaderLen {
+			g.appendChunk(packet[gpsaHeaderLen:])
+		}
+	}
+	n := copy(p, g.buf)
+	g.buf = g.buf[n:]
+	return n, nil
 }
 
 // processFileNOVASCII reads a NOVATEL ASCII file and processes its contents to extract GNSS epochs.
@@ -678,7 +760,6 @@ epochLoop:
 	for {
 		message, err := reader.nextMessageNOV00bin()
 		if err != nil {
-			fail_counter++
 			if err == io.EOF {
 				err = f.Close()
 				if err != nil {
@@ -686,6 +767,7 @@ epochLoop:
 				}
 				break epochLoop
 			}
+			fail_counter++
 			slog.Debug("Error reading message", "error", err)
 		}
 

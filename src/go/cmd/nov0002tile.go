@@ -2,37 +2,15 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"sync"
 
 	sfg_utils "github.com/EarthScope/es_sfgtools/src/golangtools/pkg/sfg_utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	novatelascii "gitlab.com/earthscope/gnsstools/codecs/novatel/novatel_ascii"
 	"gitlab.com/earthscope/gnsstools/geodata/gnsstiledb"
 )
-
-type nov000Reader struct {
-	Reader *bufio.Reader
-}
-
-func newNov000Reader(r io.Reader) nov000Reader {
-	return nov000Reader{Reader: bufio.NewReader(r)}
-}
-
-func (reader nov000Reader) NextMessage() (message novatelascii.Message, err error) {
-	message, err = sfg_utils.DeserializeNOV00bin(reader.Reader)
-	if err != nil {
-		if err == io.EOF {
-			return message, err
-		}
-	}
-	return message, nil
-}
-
 
 func runNov0002tile(cmd *cobra.Command, args []string) error {
 	sfg_utils.LoadEnv()
