@@ -613,6 +613,7 @@ epochLoop:
 					slog.Error("Error serializing GNSS epoch", "error", err)
 					fail_counter++
 				}
+				normalizeRangeAEpochTime(&epoch)
 				epochs = append(epochs, epoch)
 			}
 		case novatelascii.ShortMessage:
@@ -627,6 +628,7 @@ epochLoop:
 					slog.Error("Error serializing GNSS epoch", "error", err)
 					fail_counter++
 				}
+				normalizeRangeAEpochTime(&epoch)
 				epochs = append(epochs, epoch)
 			}
 		}
@@ -643,6 +645,14 @@ epochLoop:
 		lockTracker.Apply(&epochs[i])
 	}
 	return epochs, fail_counter, nil
+}
+
+// normalizeRangeAEpochTime removes sub-millisecond floating-point artifacts
+// introduced while converting the decimal GPS seconds in an ASCII header to a
+// time.Time. RANGEA headers report milliseconds, so nearest-millisecond
+// rounding preserves the receiver timestamp instead of turning .600 into .599.
+func normalizeRangeAEpochTime(epoch *observation.Epoch) {
+	epoch.Time = epoch.Time.Round(time.Millisecond)
 }
 
 // processFileNOVB processes a NOVB file and returns a slice of observation.Epoch.

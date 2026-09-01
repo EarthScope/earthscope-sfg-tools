@@ -17,7 +17,7 @@ dependencies = [
 ]
 name = "earthscope-sfg-tools"
 requires-python = ">= 3.11"
-version = "0.2.1"
+version = "0.2.3"
 
 [project.optional-dependencies]
 tiledb = ["tiledb>=0.30"]
