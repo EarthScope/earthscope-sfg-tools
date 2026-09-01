@@ -668,22 +668,29 @@ func normalizeRangeAEpochTime(epoch *observation.Epoch) {
 // Returns:
 //   - A slice of observation.Epoch containing the extracted epochs.
 func ProcessFileNOVB(file string, antIndex uint8) ([]observation.Epoch, int, error) {
+	epochs := []observation.Epoch{}
+	failCounter, err := StreamFileNOVB(file, antIndex, func(epoch observation.Epoch) error {
+		epochs = append(epochs, epoch)
+		return nil
+	})
+	return epochs, failCounter, err
+}
+
+// StreamFileNOVB decodes primary- or secondary-antenna RANGE, RANGECMP and
+// RANGECMP5 epochs from one NOV770 file and yields them in source order. Lock
+// tracking is intentionally left to ContinuousEpochProcessor so it can span
+// files and bounded TileDB writes.
+func StreamFileNOVB(file string, antIndex uint8, yield func(observation.Epoch) error) (int, error) {
 	f, err := os.Open(file)
 	if err != nil {
-		log.Fatalf("failed opening file: %s", err)
+		return 0, fmt.Errorf("opening NOV770 file: %w", err)
 	}
 	defer f.Close()
-	if antIndex < 0 {
-		log.Warnf("invalid antenna index %d, defaulting to 0", antIndex)
-		antIndex = 0
-	}
 	if antIndex > 1 {
-		log.Warnf("invalid antenna index %d, defaulting to 1", antIndex)
-		antIndex = 1
+		return 0, fmt.Errorf("invalid antenna index %d", antIndex)
 	}
 
 	reader := bufio.NewReader(f)
-	epochs := []observation.Epoch{}
 	fail_counter := 0
 MessageLoop:
 	for {
@@ -707,22 +714,15 @@ MessageLoop:
 			continue MessageLoop
 		}
 
+		var epoch observation.Epoch
 		switch msg.MessageID {
-
+		case 43:
+			msg43 := msg.DeserializeMessage43()
+			epoch, err = msg43.SerializeGNSSEpoch(msg.Time())
 		case 140:
 			{
 				msg140 := msg.DeserializeMessage140()
-				epoch, err := msg140.SerializeGNSSEpoch(msg.Time())
-				if err != nil {
-					log.Errorf("failed serializing epoch: %s", err)
-					fail_counter++
-					continue MessageLoop
-				}
-				if len(epoch.Satellites) == 0 {
-					fail_counter++
-					continue MessageLoop
-				}
-				epochs = append(epochs, epoch)
+				epoch, err = msg140.SerializeGNSSEpoch(msg.Time())
 			}
 		case 2537:
 			{
@@ -732,21 +732,26 @@ MessageLoop:
 					fail_counter++
 					continue MessageLoop
 				}
-				epoch, err := msg2537.SerializeGNSSEpoch(msg.Time())
-				if err != nil {
-					log.Errorf("failed serializing epoch: %s", err)
-					fail_counter++
-					continue MessageLoop
-				}
-				if len(epoch.Satellites) == 0 {
-					fail_counter++
-					continue MessageLoop
-				}
-				epochs = append(epochs, epoch)
+				epoch, err = msg2537.SerializeGNSSEpoch(msg.Time())
 			}
+		default:
+			continue MessageLoop
+		}
+		if err != nil {
+			log.Errorf("failed serializing epoch: %s", err)
+			fail_counter++
+			continue MessageLoop
+		}
+		if len(epoch.Satellites) == 0 {
+			fail_counter++
+			continue MessageLoop
+		}
+		epoch.AntennaIndex = msg.MeasurementSource()
+		if err := yield(epoch); err != nil {
+			return fail_counter, err
 		}
 	}
-	return epochs, fail_counter, nil
+	return fail_counter, nil
 }
 
 // processFileNOV000 processes a NOV000 file containing GNSS and INS messages.
@@ -766,14 +771,31 @@ MessageLoop:
 // The function logs errors encountered during file reading and message deserialization,
 // and logs the number of INSPVAA and INSSTDEVA records found.
 func ProcessFileNOV000(file string) ([]observation.Epoch, []INSCompleteRecord, int) {
+	epochs := []observation.Epoch{}
+	insCompleteRecords, failCounter, err := StreamFileNOV000(file, func(epoch observation.Epoch) error {
+		epochs = append(epochs, epoch)
+		return nil
+	})
+	if err != nil {
+		slog.Error("Error processing NOV000 file", "file", file, "error", err)
+		failCounter++
+	}
+	GetTimeDiffGNSS(epochs)
+	GetTimeDiffsINSPVA(insCompleteRecords)
+	return epochs, insCompleteRecords, failCounter
+}
+
+// StreamFileNOV000 decodes the embedded ASCII RANGEA stream from one NOV000
+// file, normalizes its millisecond timestamps, and yields GNSS epochs in source
+// order. INS records are returned for their separate TileDB destination.
+func StreamFileNOV000(file string, yield func(observation.Epoch) error) ([]INSCompleteRecord, int, error) {
 
 	f, err := os.Open(file)
 	if err != nil {
-		log.Fatalf("failed opening file %s, %s ", file, err)
+		return nil, 0, fmt.Errorf("opening NOV000 file: %w", err)
 	}
 	defer f.Close()
 	reader := NewReader(bufio.NewReader(f))
-	epochs := []observation.Epoch{}
 	insEpochs := []InspvaaRecord{}
 	insStdDevEpochs := []INSSTDEVARecord{}
 	fail_counter := 0
@@ -812,7 +834,10 @@ epochLoop:
 					fail_counter++
 					continue epochLoop
 				}
-				epochs = append(epochs, epoch)
+				normalizeRangeAEpochTime(&epoch)
+				if err := yield(epoch); err != nil {
+					return nil, fail_counter, err
+				}
 				// Check if the message is an INSPVAA message
 			} else if m.Msg == "INSPVAA" {
 				record, err := DeserializeINSPVAARecord(m.Data, m.Time())
@@ -838,9 +863,7 @@ epochLoop:
 	slog.Info("Found records", "INSPVAA", len(insEpochs), "INSSTDEVA", len(insStdDevEpochs), "num_fails", fail_counter)
 	// Merge INSPVAA and INSSTDEVA records
 	insCompleteRecords := MergeINSPVAAAndINSSTDEVA(insEpochs, insStdDevEpochs)
-	GetTimeDiffGNSS(epochs)
-	GetTimeDiffsINSPVA(insCompleteRecords)
-	return epochs, insCompleteRecords, fail_counter
+	return insCompleteRecords, fail_counter, nil
 }
 
 func GetFirstEpochTimeNOV000(file string) (time.Time, error) {
@@ -868,9 +891,9 @@ epochLoop:
 
 		switch m := message.(type) {
 		case novatelascii.LongMessage:
-
-			time := m.Time()
-			return time, nil
+			if m.Msg == "RANGEA" {
+				return m.Time().Round(time.Millisecond), nil
+			}
 		}
 	}
 	return time.Time{}, fmt.Errorf("no RANGEA message found in file")
@@ -900,13 +923,13 @@ MessageLoop:
 			//log.Warnf("failed reading message: %s", err)
 			continue MessageLoop
 		}
-		if msg.MessageID == 140 || msg.MessageID == 2537 {
+		if msg.MessageID == 43 || msg.MessageID == 140 || msg.MessageID == 2537 {
 			return msg.Time(), nil
 		} else {
 			continue MessageLoop
 		}
 	}
-	return time.Time{}, fmt.Errorf("no RANGEA/RANGECMP5 message found in file")
+	return time.Time{}, fmt.Errorf("no RANGE/RANGECMP/RANGECMP5 message found in file")
 }
 
 type FileTime struct {
