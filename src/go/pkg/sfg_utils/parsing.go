@@ -573,7 +573,7 @@ func (g *gpsaASCIIReader) Read(p []byte) (int, error) {
 // 5. Appends the GNSS epoch to the result slice.
 //
 // If an error occurs while opening the file or reading messages, the function logs the error and terminates the program.
-func ProcessFileNOVASCII(filename string) ([]observation.Epoch, int,error) {
+func ProcessFileNOVASCII(filename string) ([]observation.Epoch, int, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		log.Fatal(err)
@@ -632,6 +632,16 @@ epochLoop:
 		}
 	}
 	epochs = RemoveDuplicateEpochs(epochs)
+	// RemoveDuplicateEpochs currently collects through a map, so sort after
+	// deduplication. Lock-time reset detection requires monotonically ordered
+	// epochs.
+	sort.Slice(epochs, func(i, j int) bool {
+		return epochs[i].Time.Before(epochs[j].Time)
+	})
+	var lockTracker observation.LockTimeTracker
+	for i := range epochs {
+		lockTracker.Apply(&epochs[i])
+	}
 	return epochs, fail_counter, nil
 }
 
@@ -647,7 +657,7 @@ epochLoop:
 //
 // Returns:
 //   - A slice of observation.Epoch containing the extracted epochs.
-func ProcessFileNOVB(file string,antIndex uint8) ([]observation.Epoch,int,error) {
+func ProcessFileNOVB(file string, antIndex uint8) ([]observation.Epoch, int, error) {
 	f, err := os.Open(file)
 	if err != nil {
 		log.Fatalf("failed opening file: %s", err)
@@ -665,65 +675,67 @@ func ProcessFileNOVB(file string,antIndex uint8) ([]observation.Epoch,int,error)
 	reader := bufio.NewReader(f)
 	epochs := []observation.Epoch{}
 	fail_counter := 0
-	MessageLoop:
-		for {
-			msg,err := novatelbinary.DeserializeMessage(reader)
-			if err != nil {
-				fail_counter++
-				if err == io.EOF {
-					break MessageLoop
+MessageLoop:
+	for {
+		msg, err := novatelbinary.DeserializeMessage(reader)
+		if err != nil {
+			fail_counter++
+			if err == io.EOF {
+				break MessageLoop
 
-				}
-				if err == bufio.ErrBufferFull{
-					log.Warnf("buffer full: %s", err)
-					reader.Reset(f)
-				}
-		
-				//log.Warnf("failed reading message: %s", err)
-				continue MessageLoop
 			}
-			// Apply antenna filter at the message level for all message types.
-			if msg.MeasurementSource() != antIndex {
-				continue MessageLoop
+			if err == bufio.ErrBufferFull {
+				log.Warnf("buffer full: %s", err)
+				reader.Reset(f)
 			}
 
-			switch msg.MessageID {
+			//log.Warnf("failed reading message: %s", err)
+			continue MessageLoop
+		}
+		// Apply antenna filter at the message level for all message types.
+		if msg.MeasurementSource() != antIndex {
+			continue MessageLoop
+		}
 
-				case 140:{
-					msg140 := msg.DeserializeMessage140()
-					epoch, err := msg140.SerializeGNSSEpoch(msg.Time())
-					if err != nil {
-						log.Errorf("failed serializing epoch: %s", err)
-						fail_counter++
-						continue MessageLoop
-					}
-					if len(epoch.Satellites) == 0 {
-						fail_counter++
-						continue MessageLoop
-					}
-					epochs = append(epochs, epoch)
+		switch msg.MessageID {
+
+		case 140:
+			{
+				msg140 := msg.DeserializeMessage140()
+				epoch, err := msg140.SerializeGNSSEpoch(msg.Time())
+				if err != nil {
+					log.Errorf("failed serializing epoch: %s", err)
+					fail_counter++
+					continue MessageLoop
 				}
-				case 2537: {
-					msg2537, err := msg.DeserializeMessage2537()
-					if err != nil {
-						log.Errorf("failed deserializing message 2537: %s", err)
-						fail_counter++
-						continue MessageLoop
-					}
-					epoch, err := msg2537.SerializeGNSSEpoch(msg.Time())
-					if err != nil {
-						log.Errorf("failed serializing epoch: %s", err)
-						fail_counter++
-						continue MessageLoop
-					}
-					if len(epoch.Satellites) == 0 {
-						fail_counter++
-						continue MessageLoop
-					}
-					epochs = append(epochs, epoch)
+				if len(epoch.Satellites) == 0 {
+					fail_counter++
+					continue MessageLoop
 				}
+				epochs = append(epochs, epoch)
+			}
+		case 2537:
+			{
+				msg2537, err := msg.DeserializeMessage2537()
+				if err != nil {
+					log.Errorf("failed deserializing message 2537: %s", err)
+					fail_counter++
+					continue MessageLoop
+				}
+				epoch, err := msg2537.SerializeGNSSEpoch(msg.Time())
+				if err != nil {
+					log.Errorf("failed serializing epoch: %s", err)
+					fail_counter++
+					continue MessageLoop
+				}
+				if len(epoch.Satellites) == 0 {
+					fail_counter++
+					continue MessageLoop
+				}
+				epochs = append(epochs, epoch)
 			}
 		}
+	}
 	return epochs, fail_counter, nil
 }
 
@@ -892,7 +904,6 @@ type FileTime struct {
 	Time     time.Time
 }
 
-
 // SortFilesByFirstEpochNOVB sorts a list of NOVB files by their first epoch timestamp.
 // It reads the first epoch time from each file and returns the files sorted in chronological order.
 // Files that cannot be parsed or have errors reading the first epoch time are skipped with a warning.
@@ -947,8 +958,7 @@ func SortFilesByFirstEpochNOV000(files []string) ([]FileTime, error) {
 		return fileTimes[i].Time.Before(fileTimes[j].Time)
 	})
 	return fileTimes, nil
-}	
-
+}
 
 func RemoveDuplicateEpochs(epochs []observation.Epoch) []observation.Epoch {
 	seen := make(map[time.Time]observation.Epoch)
