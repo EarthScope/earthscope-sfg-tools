@@ -67,6 +67,17 @@ func getHourSlice(daySlice gnsstiledb.TimeRange, interval int) []gnsstiledb.Time
 	return hourSlices
 }
 
+// finalQueryRange converts the final inclusive array-domain timestamp into the
+// exclusive end bound expected by gnsstiledb.ReadObservations. Intermediate
+// slice bounds are already exclusive and must not be extended, or observations
+// exactly on an hour boundary would be read twice.
+func finalQueryRange(hourSlice, daySlice gnsstiledb.TimeRange) gnsstiledb.TimeRange {
+	if hourSlice.End.Equal(daySlice.End) {
+		hourSlice.End = hourSlice.End.Add(time.Millisecond)
+	}
+	return hourSlice
+}
+
 func filterDaySlices(daySlices []gnsstiledb.TimeRange, year int) ([]gnsstiledb.TimeRange, error) {
 	if len(daySlices) == 0 {
 		return nil, fmt.Errorf("no day slices found")
@@ -92,8 +103,9 @@ func processDaySlice(ctx context.Context, client *gnsstiledb.Client, daySlice gn
 	batchNum := 0
 	var obsWriter *rinex.ObsWriter
 	for _, hourSlice := range hourSlices {
+		queryRange := finalQueryRange(hourSlice, daySlice)
 		queryParams := gnsstiledb.ObsQueryParams{
-			Time: []gnsstiledb.TimeRange{hourSlice},
+			Time: []gnsstiledb.TimeRange{queryRange},
 		}
 		epochs, err := client.ReadObservations(ctx, tdbPath, queryParams)
 		if err != nil {
