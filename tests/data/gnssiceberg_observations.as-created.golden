@@ -1,0 +1,42 @@
+# table: observations (as created)
+
+## schema (schema-id 0, 20 top-level, 20 total incl. nested)
+id     path                                       required   type
+1      station_id                                 true       string
+2      session_id                                 true       string
+3      epoch                                      true       timestamptz
+4      epoch_pico                                 true       int
+5      clock_offset                               false      double
+6      constellation                              true       string
+7      satellite                                  true       int
+8      signal                                     true       string
+9      code                                       false      double
+10     phase                                      false      double
+11     doppler                                    false      double
+12     snr                                        false      double
+13     loss_of_lock                               true       boolean
+14     half_cycle_ambiguity                       true       boolean
+15     boc_tracking                               true       boolean
+16     lock_time                                  false      double
+17     epoch_flag                                 false      int
+18     fcn                                        false      int
+19     write_time                                 false      timestamptz
+20     publish_time                               false      timestamptz
+
+## partition spec (spec-id 0, 2 fields)
+field_id  name                       source_id transform
+1000      epoch_day                  3         day
+1001      station_id_bucket          1         bucket[32]
+
+## sort order raw
+1: [
+1 asc nulls-first
+2 asc nulls-first
+3 asc nulls-first
+6 asc nulls-first
+7 asc nulls-first
+8 asc nulls-first
+]
+
+## declared vs assigned field ids
+(none — the fresh-ID pass reproduced the declared ids)

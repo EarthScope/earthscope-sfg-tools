@@ -1,7 +1,6 @@
 """Novatel ASCII log → RINEX conversion via the bundled ``nova2rnx`` Go binary."""
 
 # External imports
-import json
 import shutil
 import subprocess
 import tempfile
@@ -9,10 +8,10 @@ from pathlib import Path
 
 import logging
 
-import numpy as np
 
 from ..utils.go_utils import find_binary, parse_cli_logs
 from ..utils.misc import listify
+from .rangea_parser import _parse_header, extract_rangea_strings_from_qcpin
 from .rinex_metadata import RinexMetadata
 from .utils import MetadataModel  # backward-compat alias
 
@@ -140,11 +139,17 @@ def novatel_ascii_2rinex(
             cmd.append(str(file))
         cmd_str = " ".join(cmd)
         logger.info(f" Running {cmd_str} in {workdir}", stacklevel=2)
-        result = subprocess.run(cmd, check=True, capture_output=True, cwd=workdir)
+        result = subprocess.run(
+            cmd, check=True, capture_output=True, text=True, cwd=workdir
+        )
 
         parse_cli_logs(result, logger)
 
-        rinex_file_paths = list(Path(workdir).rglob(f"*{site}*"))
+        rinex_file_paths = [
+            p
+            for p in Path(workdir).rglob(f"*{meta.marker_name}*")
+            if p != metadata_path
+        ]
         logger.info(
             f"Converted {files} to {rinex_file_paths} Daily RINEX files", stacklevel=2
         )
@@ -161,36 +166,47 @@ def novatel_ascii_2rinex(
     return outpaths
 
 
-def qcpin_to_novatelpin(source: str | Path, writedir: Path) -> Path:
-    """Convert a QCPIN JSON file to a Novatel PIN text file.
+def qcpin_to_novatelpin(source: str | Path, writedir: str | Path) -> Path:
+    """Write the RANGEA logs in a QCPIN JSON file to a NovAtel ASCII file.
+
     Args:
-        source (str|Path): Path to the QCPIN JSON file.
-        writedir (Path): Directory where the Novatel PIN text file will be saved.
+        source: Path to the QCPIN JSON file.
+        writedir: Directory for the output ``<source stem>_novpin.txt``.
+
     Returns:
-        Path: Path to the generated Novatel PIN text file.
+        Path to the NovAtel ASCII file, one RANGEA log per line in GPS-time
+        order.
     """
-    with open(source) as file:
-        pin_data = json.load(file)
-
-    range_headers = []
-    time_stamps = []
-
-    for data in pin_data.values():
-        range_header = data.get("observations").get("NOV_RANGE")
-        time_header = data.get("observations").get("NOV_INS").get("time").get("common")
-        range_headers.append(range_header)
-        time_stamps.append(time_header)
-
-    time_sorted = np.argsort(time_stamps)
-    range_headers = [range_headers[i] for i in time_sorted]
-
-    file_path = writedir / (str(source.id) + "_novpin.txt")
-    with tempfile.NamedTemporaryFile(mode="w+", delete=True) as temp_file:
-        for header in range_headers:
-            temp_file.write(header)
-            temp_file.write("\n")
-        temp_file.seek(0)
-        shutil.copy(temp_file.name, file_path)
-        novatel_pin = Path(file_path)
-
+    source = Path(source)
+    rangea = extract_rangea_strings_from_qcpin(source)
+    rangea.sort(key=lambda log: _parse_header(log.split(";", 1)[0])[:2])
+    novatel_pin = Path(writedir) / f"{source.stem}_novpin.txt"
+    novatel_pin.write_text("".join(log.rstrip("\n") + "\n" for log in rangea))
     return novatel_pin
+
+
+def qcpin_to_rinex(
+    source: str | Path,
+    writedir: str | Path,
+    site: str | None = None,
+    metadata: dict | MetadataModel | Path | str | None = None,
+    modulo_millis: int = 0,
+) -> list[Path]:
+    """Convert the RANGEA logs in a QCPIN JSON file to daily RINEX.
+
+    Writes an intermediate NovAtel ASCII file to a temp directory with
+    :func:`qcpin_to_novatelpin`, then converts it with
+    :func:`novatel_ascii_2rinex`.
+
+    Returns:
+        Paths to the daily RINEX files in ``writedir``.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        novatel_pin = qcpin_to_novatelpin(source, tmp)
+        return novatel_ascii_2rinex(
+            novatel_pin,
+            writedir=Path(writedir),
+            site=site,
+            metadata=metadata,
+            modulo_millis=modulo_millis,
+        )

@@ -21,6 +21,7 @@ version = "0.2.1"
 
 [project.optional-dependencies]
 tiledb = ["tiledb>=0.30"]
+iceberg = ["pyiceberg[pyiceberg-core]>=0.12", "pyarrow>=17"]
 docs = ["myst-parser>=5.1.0"]
 
 [build-system]
@@ -47,6 +48,10 @@ pytest = ">=9.0.3,<10"
 ruff = ">=0.4"
 go = ">=1.25.7"
 go-cgo = ">=1.25.7"
+pyiceberg = ">=0.12.0,<0.13"
+pyiceberg-core = ">=0.7"
+pyarrow = ">=25.0.0,<26"
+sqlalchemy = ">=2.1.4,<3"
 
 [tool.pixi.pypi-dependencies]
 earthscope_sfg_tools = { path = ".", editable = true }

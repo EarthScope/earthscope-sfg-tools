@@ -151,7 +151,6 @@ def novatel_binary_2rinex(
                     subcommand="nov0002rnx",
                     modulo_millis=modulo_millis,
                     num_routines=num_routines,
-                    antindex=antindex,
                     logger=logger,
                 )
             )
@@ -172,6 +171,7 @@ def novatel_binary_2rinex(
                     subcommand="novb2rnx",
                     modulo_millis=modulo_millis,
                     num_routines=num_routines,
+                    antindex=antindex,
                     logger=logger,
                 )
             )
