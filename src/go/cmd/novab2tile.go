@@ -52,7 +52,7 @@ func runNovab2tile(cmd *cobra.Command, args []string) error {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			epochs, failCounter, err := sfg_utils.ProcessFileNOVB(filename, uint8(antIndex))
+			epochs, failCounter, err := sfg_utils.ProcessFileNOVB(filename, uint8(antIndex), false)
 			if err != nil {
 				log.Errorf("error processing file: %v", err)
 				return

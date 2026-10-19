@@ -41,7 +41,7 @@ func runNova2rnx(cmd *cobra.Command, args []string) error {
 
 	epochs := []observation.Epoch{}
 	for _, filename := range args {
-		file_epochs, fails, err := sfg_utils.ProcessFileNOVASCII(filename)
+		file_epochs, fails, err := sfg_utils.ProcessFileNOVASCII(filename, false)
 		if err != nil {
 			slog.Error("Error processing file", "filename", filename, "error", err)
 		}

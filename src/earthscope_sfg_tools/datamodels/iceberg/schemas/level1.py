@@ -3,7 +3,9 @@ Level 1 tables: raw parsed output from full-rate log files.
 
 Every Level 1 table carries the scope columns plus ``Log_Source`` and is
 stored at the native sampling rate of its source log. Times are UTC
-``timestamptz``; other time scales are derived by the access API.
+``timestamptz``; other time scales are derived by the access API. The one
+exception is ``gnss_observations.epoch``, which holds GPS time to stay
+compatible with gnsstools readers.
 """
 
 from pyiceberg.transforms import DayTransform
@@ -65,7 +67,7 @@ INSPVA = TableDef(
     doc="NovAtel INSPVAA position, velocity and attitude (NOV000.bin).",
     columns=(
         *LEVEL1_SCOPE,
-        Column("time", TIMESTAMPTZ, "Epoch, UTC"),
+        Column("time", TIMESTAMPTZ, "Epoch, UTC (converted from GPS time)"),
         Column("lat", DOUBLE, "Geodetic latitude [deg]", ge=-90, le=90),
         Column("lon", DOUBLE, "Geodetic longitude [deg]", ge=-180, le=180),
         Column("alt", DOUBLE, "Geodetic altitude [m]"),
@@ -81,19 +83,23 @@ INSPVA = TableDef(
 INSSTDEV = TableDef(
     name="insstdev",
     level=1,
-    doc="NovAtel INSSTDEVA solution standard deviations (NOV000.bin).",
+    doc=(
+        "NovAtel INSSTDEVA solution standard deviations (NOV000.bin). The "
+        "cov_* columns keep GNATSS's names but hold the logged attitude std "
+        "devs, not variances."
+    ),
     columns=(
         *LEVEL1_SCOPE,
-        Column("time", TIMESTAMPTZ, "Epoch, UTC"),
+        Column("time", TIMESTAMPTZ, "Epoch, UTC (converted from GPS time)"),
         Column("lat_sig", DOUBLE, "Latitude std dev [deg]", ge=0),
         Column("lon_sig", DOUBLE, "Longitude std dev [deg]", ge=0),
         Column("alt_sig", DOUBLE, "Altitude std dev [m]", ge=0),
         Column("north_sig", DOUBLE, "North velocity std dev [m/s]", ge=0),
         Column("east_sig", DOUBLE, "East velocity std dev [m/s]", ge=0),
         Column("up_sig", DOUBLE, "Up velocity std dev [m/s]", ge=0),
-        Column("cov_rr", DOUBLE, "Roll-Roll covariance diagonal [deg^2]", ge=0),
-        Column("cov_pp", DOUBLE, "Pitch-Pitch covariance diagonal [deg^2]", ge=0),
-        Column("cov_hh", DOUBLE, "Heading-Heading covariance diagonal [deg^2]", ge=0),
+        Column("cov_rr", DOUBLE, "Roll std dev [deg], as logged", ge=0),
+        Column("cov_pp", DOUBLE, "Pitch std dev [deg], as logged", ge=0),
+        Column("cov_hh", DOUBLE, "Heading (azimuth) std dev [deg], as logged", ge=0),
         Column("ext_sol_stat", STRING, "Extended solution status", required=False),
         Column("time_since_update", STRING, "Time since last update", required=False),
     ),
@@ -132,7 +138,8 @@ GNSS_OBSERVATIONS = TableDef(
         Column(
             "epoch",
             TIMESTAMPTZ,
-            "Observation epoch, UTC, truncated to the microsecond",
+            "Observation epoch in GPS time (no leap-second shift, as gnsstools "
+            "stores it), truncated to the microsecond",
         ),
         Column(
             "epoch_pico",
@@ -220,8 +227,10 @@ ATTITUDE_AHRS = TableDef(
     name="attitude_ahrs",
     level=1,
     doc=(
-        "Sonardyne AHRS block of SV3 events (DFOP00, QCPIN). Measurement "
-        "columns are nullable: some events report only magnetic heading."
+        "Attitude from the Sonardyne AHRS block of SV3 events (DFOP00, QCPIN) "
+        "and the full-rate XSENS log (AHRS00). Measurement columns are "
+        "nullable: some events report only magnetic heading. time_start_count "
+        "and time_status come from the SV3 time block and are null for AHRS00."
     ),
     columns=(
         *LEVEL1_SCOPE,
@@ -233,7 +242,13 @@ ATTITUDE_AHRS = TableDef(
             "drift/reset diagnostics",
             ge=0,
         ),
-        Column("time_start_count", INT, "Start count for the time", ge=0),
+        Column(
+            "time_start_count",
+            INT,
+            "Start count for the time",
+            required=False,
+            ge=0,
+        ),
         Column("time_status", STRING, "Status of the time data", required=False),
         Column("acx", DOUBLE, "Acceleration, X axis [m/s^2]", required=False),
         Column("acy", DOUBLE, "Acceleration, Y axis [m/s^2]", required=False),

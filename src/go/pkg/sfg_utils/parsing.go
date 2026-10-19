@@ -44,6 +44,8 @@ type INSSTDEVARecord struct {
 	roll_std          float64
 	pitch_std         float64
 	azimuth_std       float64
+	extSolStat        string
+	timeSinceUpdate   string
 }
 
 type INSCompleteRecord struct {
@@ -239,6 +241,11 @@ func DeserializeINSSTDEVARecord(data string, time time.Time) (INSSTDEVARecord, e
 		return INSSTDEVARecord{}, fmt.Errorf("error deserializing INSSTDEVA (%s)", err)
 	}
 	record.azimuth_std = azimuth_std
+
+	if len(parts) > 10 {
+		record.extSolStat = strings.TrimSpace(parts[9])
+		record.timeSinceUpdate = strings.TrimSpace(parts[10])
+	}
 
 	return record, nil
 }
@@ -573,7 +580,13 @@ func (g *gpsaASCIIReader) Read(p []byte) (int, error) {
 // 5. Appends the GNSS epoch to the result slice.
 //
 // If an error occurs while opening the file or reading messages, the function logs the error and terminates the program.
-func ProcessFileNOVASCII(filename string) ([]observation.Epoch, int,error) {
+// novatelBinaryTimeStatusUnknown is the NovAtel GPS reference time status
+// "UNKNOWN": the receiver has no time fix and the header week is 0.
+const novatelBinaryTimeStatusUnknown uint8 = 20
+
+// ProcessFileNOVASCII reads RANGEA epochs from a NovAtel ASCII log. With
+// skipUnknownTime, logs whose header time status is UNKNOWN are skipped.
+func ProcessFileNOVASCII(filename string, skipUnknownTime bool) ([]observation.Epoch, int, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		log.Fatal(err)
@@ -581,10 +594,10 @@ func ProcessFileNOVASCII(filename string) ([]observation.Epoch, int,error) {
 	defer file.Close()
 	epochs := []observation.Epoch{}
 	fail_counter := 0
-	scanner := novatelascii.NewScanner(bufio.NewReader(file))
+	scanner := novatelascii.NewScanner(newReceiverStatusReader(file))
 epochLoop:
 	for {
-		msg, err := scanner.NextMessage()
+		msg, err := nextMessage(scanner)
 		if err != nil {
 			fail_counter++
 			if err == io.EOF {
@@ -601,6 +614,9 @@ epochLoop:
 		// log.Debugf("%+v", msg)
 		switch m := msg.(type) {
 		case novatelascii.LongMessage:
+			if skipUnknownTime && m.TimeStatus == "UNKNOWN" {
+				continue epochLoop
+			}
 			if m.Msg == "RANGEA" {
 				rangea, err := novatelascii.DeserializeRANGEA(m.Data)
 				if err != nil {
@@ -644,10 +660,11 @@ epochLoop:
 //
 // Parameters:
 //   - file: The path to the NOVB file to be processed.
+//   - skipUnknownTime: skip messages whose header time status is UNKNOWN.
 //
 // Returns:
 //   - A slice of observation.Epoch containing the extracted epochs.
-func ProcessFileNOVB(file string,antIndex uint8) ([]observation.Epoch,int,error) {
+func ProcessFileNOVB(file string, antIndex uint8, skipUnknownTime bool) ([]observation.Epoch, int, error) {
 	f, err := os.Open(file)
 	if err != nil {
 		log.Fatalf("failed opening file: %s", err)
@@ -684,6 +701,9 @@ func ProcessFileNOVB(file string,antIndex uint8) ([]observation.Epoch,int,error)
 			}
 			// Apply antenna filter at the message level for all message types.
 			if msg.MeasurementSource() != antIndex {
+				continue MessageLoop
+			}
+			if skipUnknownTime && msg.TimeStatus == novatelBinaryTimeStatusUnknown {
 				continue MessageLoop
 			}
 
@@ -744,6 +764,17 @@ func ProcessFileNOVB(file string,antIndex uint8) ([]observation.Epoch,int,error)
 // The function logs errors encountered during file reading and message deserialization,
 // and logs the number of INSPVAA and INSSTDEVA records found.
 func ProcessFileNOV000(file string) ([]observation.Epoch, []INSCompleteRecord, int) {
+	epochs, insEpochs, insStdDevEpochs, fail_counter := ScanFileNOV000(file, false)
+	insCompleteRecords := MergeINSPVAAAndINSSTDEVA(insEpochs, insStdDevEpochs)
+	GetTimeDiffGNSS(epochs)
+	GetTimeDiffsINSPVA(insCompleteRecords)
+	return epochs, insCompleteRecords, fail_counter
+}
+
+// ScanFileNOV000 reads a NOV000.bin file into its GNSS epochs and its
+// unmerged INSPVAA and INSSTDEVA records, plus the count of failed messages.
+// With skipUnknownTime, logs whose header time status is UNKNOWN are skipped.
+func ScanFileNOV000(file string, skipUnknownTime bool) ([]observation.Epoch, []InspvaaRecord, []INSSTDEVARecord, int) {
 
 	f, err := os.Open(file)
 	if err != nil {
@@ -773,6 +804,9 @@ epochLoop:
 
 		switch m := message.(type) {
 		case novatelascii.LongMessage:
+			if skipUnknownTime && m.TimeStatus == "UNKNOWN" {
+				continue epochLoop
+			}
 
 			// Deserialize the message based on its type
 
@@ -814,11 +848,7 @@ epochLoop:
 		}
 	}
 	slog.Info("Found records", "INSPVAA", len(insEpochs), "INSSTDEVA", len(insStdDevEpochs), "num_fails", fail_counter)
-	// Merge INSPVAA and INSSTDEVA records
-	insCompleteRecords := MergeINSPVAAAndINSSTDEVA(insEpochs, insStdDevEpochs)
-	GetTimeDiffGNSS(epochs)
-	GetTimeDiffsINSPVA(insCompleteRecords)
-	return epochs, insCompleteRecords, fail_counter
+	return epochs, insEpochs, insStdDevEpochs, fail_counter
 }
 
 func GetFirstEpochTimeNOV000(file string) (time.Time, error) {

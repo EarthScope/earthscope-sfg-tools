@@ -212,13 +212,13 @@ func NewReader(r io.Reader) Reader {
 	if !ok {
 		br = bufio.NewReader(r)
 	}
-	return Reader{scanner: novatelascii.NewScanner(newGPSAASCIIReader(br))}
+	return Reader{scanner: novatelascii.NewScanner(newReceiverStatusReader(newGPSAASCIIReader(br)))}
 }
 
 // nextMessageNOV00bin returns the next NovAtel ASCII log from the GPSA
 // binary stream.
 func (reader *Reader) nextMessageNOV00bin() (message novatelascii.Message, err error) {
-	return reader.scanner.NextMessage()
+	return nextMessage(reader.scanner)
 }
 
 

@@ -242,6 +242,54 @@ class TableDef:
             [{**row, **stamp} for row in rows], schema=self.schema.as_arrow()
         )
 
+    def conform_arrow(
+        self,
+        table: pa.Table,
+        scope: Scope,
+        log_source: str | None = None,
+    ) -> pa.Table:
+        """Conform a columnar table of parsed rows to this table's schema.
+
+        The columnar counterpart of :meth:`to_arrow`, for parsers that emit
+        Arrow directly (e.g. the Go ``sfg nov2level1`` command). Scope columns
+        and ``Log_Source`` are stamped, missing nullable columns are filled
+        with nulls, and columns are cast and reordered. Raises on a column the
+        schema does not define, a missing required column, or nulls in one.
+        """
+        stamp: dict[str, Any] = scope.as_columns(self.scope_names)
+        if "Log_Source" in self._by_name:
+            if log_source is None:
+                raise ValueError(f"Table {self.name!r} requires a Log_Source")
+            stamp["Log_Source"] = log_source
+
+        unknown = sorted(set(table.column_names) - self._by_name.keys())
+        overlap = sorted(set(table.column_names) & stamp.keys())
+        if unknown or overlap:
+            raise ValueError(
+                f"Table {self.name!r}: unknown columns {unknown}, "
+                f"stamped columns supplied by the parser {overlap}"
+            )
+
+        target = self.schema.as_arrow()
+        n = table.num_rows
+        arrays = []
+        for col in target:
+            if col.name in stamp:
+                arrays.append(pa.repeat(pa.scalar(stamp[col.name], col.type), n))
+            elif col.name in table.column_names:
+                arrays.append(table[col.name].cast(col.type))
+            elif col.nullable:
+                arrays.append(pa.nulls(n, col.type))
+            else:
+                raise ValueError(
+                    f"Table {self.name!r} is missing required column {col.name!r}"
+                )
+            if not col.nullable and arrays[-1].null_count:
+                raise ValueError(
+                    f"Table {self.name!r}: required column {col.name!r} has nulls"
+                )
+        return pa.Table.from_arrays(arrays, schema=target)
+
     @property
     def partition_spec(self) -> PartitionSpec:
         """The partition spec built from ``partition_by``."""

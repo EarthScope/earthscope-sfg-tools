@@ -256,6 +256,18 @@ class SonardyneObservations(BaseModel):
     NOV_INS: SonardyneINSData | None = Field(default=None, description="Sonardyne INS data")
     NOV_RANGE: SonardyneRangeData | None = Field(description="Sonardyne range data")
 
+    @field_validator("AHRS", "GNSS", "NOV_HEADING", "NOV_INS", "NOV_RANGE", mode="before")
+    @classmethod
+    def _coerce_error_code_to_none(cls, value: object) -> object:
+        """Treat a sensor error code (e.g. ``"ERR3"`` for no GNSS fix) as a missing block.
+
+        The SV3 logs a string in place of the block when a sensor has no data;
+        rejecting it would drop the whole event, including its range.
+        """
+        if isinstance(value, str):
+            return None
+        return value
+
 
 class SonardyneRangeEvent(BaseModel):
     """Full Sonardyne range (reply) event parsed from a DFOP00 JSONL log."""

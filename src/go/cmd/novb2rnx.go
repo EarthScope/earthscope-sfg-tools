@@ -69,7 +69,7 @@ func runNovb2rnx(cmd *cobra.Command, args []string) error {
 			defer func() { <-sem }()
 
 			for _, fileNameTime := range fileNameTimes {
-				file_epochs, fails, err := sfg_utils.ProcessFileNOVB(fileNameTime.Filename, uint8(antIndex))
+				file_epochs, fails, err := sfg_utils.ProcessFileNOVB(fileNameTime.Filename, uint8(antIndex), false)
 				if err != nil {
 					slog.Error("Error processing file", "filename", fileNameTime.Filename, "error", err)
 					return

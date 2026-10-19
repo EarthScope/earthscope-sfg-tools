@@ -14,7 +14,7 @@ These tables are the raw parsed outputs from our full rate files. We will need t
 
 Before finalizing the schemas (see Schemas at the end of this doc), several cross-cutting questions needed answers so every table (and the API in front of them) agrees on the same conventions. Resolved:
 
-1. **Standardized time column.** Every table carries a `time` column (or, where a row spans two distinct instants — travel times, GARPOS — the existing named columns, e.g. `T_transmit`/`T_receive`) as `timestamptz`, UTC, microsecond precision. No separate stored "scientific timescale" column — GNATSS's TT/J2000 scale, GPS time, GPS-week+TOW, and GARPOS's seconds-of-day are all derived by the API at read time. They're annoying.
+1. **Standardized time column.** Every table carries a `time` column (or, where a row spans two distinct instants — travel times, GARPOS — the existing named columns, e.g. `T_transmit`/`T_receive`) as `timestamptz`, UTC, microsecond precision. No separate stored "scientific timescale" column — GNATSS's TT/J2000 scale, GPS time, GPS-week+TOW, and GARPOS's seconds-of-day are all derived by the API at read time. They're annoying. **Exception:** `gnss_observations.epoch` holds GPS time (no leap-second shift), because the table follows the gnsstools `observations` layout and gnsstools readers/RINEX writers assume GPST there. NovAtel INS logs (INSPVA, INSSTDEV) are converted from GPS time to UTC at ingest, and logs with header time status `UNKNOWN` (no time fix yet) are dropped.
 2. **Scope fields.** Every table carries exactly `Network`, `Station`, `Campaign` — matching the warehouse partitioning scheme.
 3. **Log\_Source.** Present on every Level 1 (raw, single-source) table; intentionally absent from the Level 2/3 derived tables (GARPOS format, Community standard format), since a merged/derived row can combine more than one source log.
 4. **Sampling rate.** Level 1 tables stay at their native sampling rate (true to "Level 1 = raw parsed output") — no resampling onto a shared grid at ingest.
@@ -120,9 +120,9 @@ Parsed today into: `INSSTDEVSchema` (`community/posfilter_models.py`).
 | `north_sig` | `double` | ≥ 0.0 | North velocity std dev \[m/s\] |
 | `east_sig` | `double` | ≥ 0.0 | East velocity std dev \[m/s\] |
 | `up_sig` | `double` | ≥ 0.0 | Up velocity std dev \[m/s\] |
-| `cov_rr` | `double` | ≥ 0.0 | Roll–Roll covariance diagonal \[deg²\] |
-| `cov_pp` | `double` | ≥ 0.0 | Pitch–Pitch covariance diagonal \[deg²\] |
-| `cov_hh` | `double` | ≥ 0.0 | Heading–Heading covariance diagonal \[deg²\] |
+| `cov_rr` | `double` | ≥ 0.0 | Roll std dev \[deg\], as logged (GNATSS's name; NovAtel logs σ, not variance) |
+| `cov_pp` | `double` | ≥ 0.0 | Pitch std dev \[deg\], as logged |
+| `cov_hh` | `double` | ≥ 0.0 | Heading (azimuth) std dev \[deg\], as logged |
 | `ext_sol_stat` | `string` | — | Extended solution status (present in `INSSTDEVSchema`; was missing here) |
 | `time_since_update` | `string` | — | Time since last update |
 
@@ -138,6 +138,8 @@ Source files:
 Parsed today into: TileDB `GNSSObsSchema` (`tiledb_integration/schemas.py`) — dims `time` (int64 ms), `sys`, `sat`, `obs`; attrs `range`, `phase`, `doppler`, `snr`, `slip`, `flags`, `fcn`. This table replaces it with one row per (epoch, satellite, signal) and µs time + ps remainder instead of ms.
 
 Note: we might need to add another field to distinguish file source as well. `Log_Source` will help keep multiple antenna observations separate.
+
+**Implemented differently:** the table follows the gnsstools `observations` layout (`station_id`, `session_id`, `epoch` in GPST, `epoch_pico`, `constellation` as `GPS`/`GLO`/…) with `Network`, `Campaign`, `Log_Source` appended — see `datamodels/iceberg/schemas/level1.py`. Parsing uses the gnsstools NovAtel codecs via `sfg nov2level1`; NOV770 antennas get `Log_Source` `NOV770_ANT<n>`. The table below is the original proposal.
 
 | Field | Type | Constraints | Description |
 | --- | --- | --- | --- |

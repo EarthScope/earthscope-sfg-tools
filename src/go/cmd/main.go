@@ -21,6 +21,7 @@ func init() {
 	rootCmd.AddCommand(nova2tileCmd)
 	rootCmd.AddCommand(novab2tileCmd)
 	rootCmd.AddCommand(nov0002tileCmd)
+	rootCmd.AddCommand(nov2level1Cmd)
 	rootCmd.AddCommand(tdb2rnxCmd)
 	rootCmd.AddCommand(rnxqcCmd)
 }

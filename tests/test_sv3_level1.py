@@ -99,3 +99,20 @@ def test_qcpin_travel_times(tmp_path):
     table = qcpin_to_travel_times(path, SCOPE)
     assert table.num_rows == len(qcpin) - 1
     assert set(table.column("Log_Source").to_pylist()) == {"QCPIN"}
+
+
+def test_gnss_error_code_keeps_event(tmp_path):
+    # With no GNSS fix the SV3 logs an error string ("ERR3") in place of the
+    # GNSS block. The event, and its range, must still parse.
+    lines = DFOP00.read_text().splitlines()
+    events = [json.loads(line) for line in lines]
+    for e in events:
+        e["observations"]["GNSS"] = "ERR3"
+    path = tmp_path / "err3_DFOP00.raw"
+    path.write_text("\n".join(json.dumps(e) for e in events))
+
+    assert dfop00_to_gnss_antenna_positions(path, SCOPE).num_rows == 0
+    assert (
+        dfop00_to_travel_times(path, SCOPE).num_rows
+        == dfop00_to_travel_times(DFOP00, SCOPE).num_rows
+    )

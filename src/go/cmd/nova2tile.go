@@ -48,7 +48,7 @@ func runNova2tile(cmd *cobra.Command, args []string) error {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			epochs, failCounter, err := sfg_utils.ProcessFileNOVASCII(filename)
+			epochs, failCounter, err := sfg_utils.ProcessFileNOVASCII(filename, false)
 			if err != nil {
 				log.Errorf("error processing file %s: %v", filename, err)
 				return
