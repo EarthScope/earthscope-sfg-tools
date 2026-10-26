@@ -1,7 +1,7 @@
 // Package novatel holds the NovAtel decoding shared by the NOV000 and NOV770
 // file parsers: an ASCII log scanner (plain or GPSA-wrapped) with workarounds
-// for gnsstools scanner bugs, INS record decoding, and the mapping of
-// gnsstools observation epochs onto the GNSSObs table.
+// for gnsstools scanner bugs, and INS log decoding into datamodels.INSPVARow
+// and datamodels.INSSTDEVRow. Building the tables is package datamodels' job.
 //
 // Adapted from src/go/pkg/sfg_utils (parsing.go, ascii_workarounds.go).
 package novatel

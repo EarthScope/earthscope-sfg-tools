@@ -18,19 +18,21 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/catalogDef/schemas"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/internal/tablebuild"
+	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
+	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/internal/logtype"
 )
 
-// LogSource is the Log_Source value for rows parsed from DFOP00 files.
-const LogSource = "DFOP00"
-
-// Tables are the tables DFOP00 files produce.
-var Tables = []schemas.TableDef{schemas.TWTT, schemas.AttitudeAHRS}
+const (
+	// FileType names the file type in stream EDIDs.
+	FileType = "DFOP00"
+	// LogType is the one log type DFOP00 files carry (SV3 JSON events), and
+	// the Log_Source value of their rows.
+	LogType = "DFOP00"
+)
 
 // timeBlock is an SV3 time stamp. Common is UNIX seconds, UTC.
 type timeBlock struct {
@@ -130,28 +132,42 @@ func unixMicros(n json.Number) (int64, error) {
 	return sec*1_000_000 + us, nil
 }
 
-// ParseFile parses the DFOP00 file at path into def (one of Tables) for
-// scope. The caller releases the table.
-//
-// TWTT: each range event pairs with the most recent preceding interrogation;
-// a zero range (no reply detected) yields no row. AttitudeAHRS: one row per
-// distinct AHRS block (consecutive events usually repeat the same block).
-func ParseFile(path string, def schemas.TableDef, scope schemas.Scope) (arrow.Table, error) {
-	var parse func([]event, schemas.Scope) (arrow.Table, error)
-	switch def.Name {
-	case schemas.TWTT.Name:
-		parse = twttTable
-	case schemas.AttitudeAHRS.Name:
-		parse = attitudeTable
-	default:
-		return nil, tablebuild.Unsupported(LogSource, def, Tables...)
+// TWTT parses the logType (LogType) events of the DFOP00 file at path into
+// travel_times rows (see datamodels.ParsedSchema):
+// each range event pairs with the most recent preceding interrogation, and a
+// zero range (no reply detected) yields no row. The caller releases the
+// table.
+func TWTT(path, logType string) (arrow.Table, error) {
+	events, err := parseEvents(path, logType)
+	if err != nil {
+		return nil, err
+	}
+	return datamodels.BuildTWTT(travelTimes(events), LogType)
+}
+
+// AttitudeAHRS parses the logType (LogType) events of the DFOP00 file at path
+// into attitude_ahrs rows (see datamodels.ParsedSchema): one row per distinct AHRS block (consecutive events usually repeat
+// the same block). The caller releases the table.
+func AttitudeAHRS(path, logType string) (arrow.Table, error) {
+	events, err := parseEvents(path, logType)
+	if err != nil {
+		return nil, err
+	}
+	return datamodels.BuildAttitudeAHRS(attitudes(events), LogType)
+}
+
+// parseEvents reads the events of the DFOP00 file at path, logging how many
+// lines were not valid JSON. logType must be LogType.
+func parseEvents(path, logType string) ([]event, error) {
+	if err := logtype.Check(FileType, logType, LogType); err != nil {
+		return nil, err
 	}
 	events, bad, err := readEvents(path)
 	if err != nil {
 		return nil, err
 	}
 	slog.Debug("parsed DFOP00", "file", filepath.Base(path), "events", len(events), "bad_lines", bad)
-	return parse(events, scope)
+	return events, nil
 }
 
 func readEvents(path string) (events []event, bad int, err error) {
@@ -177,24 +193,11 @@ func readEvents(path string) (events []event, bad int, err error) {
 	return events, bad, sc.Err()
 }
 
-func twttTable(events []event, scope schemas.Scope) (arrow.Table, error) {
-	b, err := tablebuild.New(schemas.TWTT)
-	if err != nil {
-		return nil, err
-	}
-	defer b.Release()
+// travelTimes pairs each range event with the most recent preceding
+// interrogation; a zero range (no reply detected) yields no row.
+func travelTimes(events []event) []datamodels.TWTTRow {
 	var (
-		sc         = b.Scope(scope, LogSource)
-		mtID       = tablebuild.Col[*array.StringBuilder](b, "MT_ID")
-		tTransmit  = tablebuild.Col[*array.TimestampBuilder](b, "T_transmit")
-		tReceive   = tablebuild.Col[*array.TimestampBuilder](b, "T_receive")
-		travelTime = tablebuild.Col[*array.Float64Builder](b, "TravelTime")
-		dbV        = tablebuild.Col[*array.Float32Builder](b, "dbV")
-		acc        = tablebuild.Col[*array.Int32Builder](b, "acc")
-		aSNR       = tablebuild.Col[*array.Float64Builder](b, "aSNR")
-		tat        = tablebuild.Col[*array.Float64Builder](b, "tat")
-	)
-	var (
+		out                       []datamodels.TWTTRow
 		ping                      *event
 		noPing, noReply, badTimes int
 	)
@@ -219,39 +222,30 @@ func twttTable(events []event, scope schemas.Scope) (arrow.Table, error) {
 			badTimes++
 			continue
 		}
-		sc.Append()
-		mtID.Append(e.Range.CN)
-		tTransmit.Append(arrow.Timestamp(sent))
-		tReceive.Append(arrow.Timestamp(recv))
-		travelTime.Append(e.Range.Range)
-		dbV.Append(float32(e.Range.Diag.DBV))
-		acc.Append(int32(math.Round(float64(e.Range.Diag.XC))))
-		aSNR.Append(float64(e.Range.Diag.SNR))
-		tat.Append(e.Range.TAT / 1000)
+		snr, tat := float64(e.Range.Diag.SNR), e.Range.TAT/1000
+		out = append(out, datamodels.TWTTRow{
+			MTID:       e.Range.CN,
+			TTransmit:  time.UnixMicro(sent).UTC(),
+			TReceive:   time.UnixMicro(recv).UTC(),
+			TravelTime: e.Range.Range,
+			DBV:        float32(e.Range.Diag.DBV),
+			Acc:        int32(math.Round(float64(e.Range.Diag.XC))),
+			ASNR:       &snr,
+			TAT:        &tat,
+		})
 	}
 	slog.Debug("DFOP00 travel times", "no_interrogation", noPing, "no_reply", noReply, "bad_times", badTimes)
-	return b.Table()
+	return out
 }
 
-func attitudeTable(events []event, scope schemas.Scope) (arrow.Table, error) {
-	b, err := tablebuild.New(schemas.AttitudeAHRS)
-	if err != nil {
-		return nil, err
-	}
-	defer b.Release()
+// attitudes is one attitude_ahrs row per distinct AHRS block (consecutive
+// events usually repeat the same block).
+func attitudes(events []event) []datamodels.AttitudeAHRSRow {
 	var (
-		sc           = b.Scope(scope, LogSource)
-		tm           = tablebuild.Col[*array.TimestampBuilder](b, "time")
-		tmInstrument = tablebuild.Col[*array.Float64Builder](b, "time_instrument")
-		startCount   = tablebuild.Col[*array.Int32Builder](b, "time_start_count")
-		status       = tablebuild.Col[*array.StringBuilder](b, "time_status")
+		out  []datamodels.AttitudeAHRSRow
+		last json.Number
+		bad  int
 	)
-	var measurements []*array.Float64Builder
-	for _, name := range []string{"acx", "acy", "acz", "h", "h_mag", "p", "r"} {
-		measurements = append(measurements, tablebuild.Col[*array.Float64Builder](b, name))
-	}
-	var last json.Number
-	bad := 0
 	for i := range events {
 		a, err := events[i].ahrs()
 		if err != nil {
@@ -267,29 +261,20 @@ func attitudeTable(events []event, scope schemas.Scope) (arrow.Table, error) {
 			continue
 		}
 		last = a.Time.Common
-		sc.Append()
-		tm.Append(arrow.Timestamp(t))
-		tmInstrument.Append(a.Time.Instrument)
-		if a.Time.StartCount != nil {
-			startCount.Append(*a.Time.StartCount)
-		} else {
-			startCount.AppendNull()
+		r := datamodels.AttitudeAHRSRow{
+			Time:           time.UnixMicro(t).UTC(),
+			TimeInstrument: a.Time.Instrument,
+			TimeStartCount: a.Time.StartCount,
+			Acx:            a.Acx, Acy: a.Acy, Acz: a.Acz,
+			H: a.H, HMag: a.HMag, P: a.P, R: a.R,
 		}
 		if a.Time.Status != "" {
-			status.Append(a.Time.Status)
-		} else {
-			status.AppendNull()
+			r.TimeStatus = &a.Time.Status
 		}
-		for j, v := range []*float64{a.Acx, a.Acy, a.Acz, a.H, a.HMag, a.P, a.R} {
-			if v != nil {
-				measurements[j].Append(*v)
-			} else {
-				measurements[j].AppendNull()
-			}
-		}
+		out = append(out, r)
 	}
 	if bad > 0 {
 		slog.Debug("DFOP00 bad AHRS blocks", "count", bad)
 	}
-	return b.Table()
+	return out
 }

@@ -17,6 +17,7 @@ from ._base import (
     INT,
     LEVEL1_SCOPE,
     LOG_SOURCE,
+    STREAM_EDID,
     STRING,
     TIMESTAMPTZ,
     Column,
@@ -58,6 +59,7 @@ TRAVEL_TIMES = TableDef(
         Column(
             "tat", DOUBLE, "Beacon turn-around time [s]", required=False, ge=0, le=10
         ),
+        STREAM_EDID,
     ),
 )
 
@@ -77,6 +79,7 @@ INSPVA = TableDef(
         Column("roll", DOUBLE, "Roll angle [deg]", ge=-180, le=180),
         Column("pitch", DOUBLE, "Pitch angle [deg]", ge=-90, le=90),
         Column("heading", DOUBLE, "Heading angle [deg]", ge=0, lt=360),
+        STREAM_EDID,
     ),
 )
 
@@ -102,6 +105,7 @@ INSSTDEV = TableDef(
         Column("cov_hh", DOUBLE, "Heading (azimuth) std dev [deg], as logged", ge=0),
         Column("ext_sol_stat", STRING, "Extended solution status", required=False),
         Column("time_since_update", STRING, "Time since last update", required=False),
+        STREAM_EDID,
     ),
 )
 
@@ -257,6 +261,7 @@ ATTITUDE_AHRS = TableDef(
         Column("h_mag", DOUBLE, "Magnetic heading [deg]", required=False, ge=0, le=360),
         Column("p", DOUBLE, "Pitch [deg]", required=False, ge=-90, le=90),
         Column("r", DOUBLE, "Roll [deg]", required=False, ge=-180, le=180),
+        STREAM_EDID,
     ),
 )
 
@@ -272,6 +277,7 @@ SOUND_SPEED = TableDef(
         Column("time", TIMESTAMPTZ, "Cast/profile time, UTC"),
         Column("depth", DOUBLE, "Depth [m]", ge=0, le=10_000),
         Column("speed", DOUBLE, "Sound speed [m/s]", ge=0, le=3800),
+        STREAM_EDID,
     ),
 )
 

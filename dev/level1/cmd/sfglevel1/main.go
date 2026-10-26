@@ -1,114 +1,116 @@
 // Command sfglevel1 parses one raw GNSS-A log into a full-row Level 1 Arrow
-// IPC file per table, for the Python ingest layer (dev/iceberg_level1.py).
+// IPC file per table. It is a debug/export tool: Level 1 ingest writes to
+// Iceberg from Go through package sink (see dev/level1/main.go), not through
+// these files and the Python ingest layer (dev/iceberg_level1.py).
 //
 // Usage:
 //
-//	sfglevel1 FILETYPE -out DIR [-table NAME] FILE
+//	sfglevel1 FILETYPE -out DIR [-table NAME] [-log LOGTYPE] FILE
 //
-// FILETYPE is one of fileparse.FileTypes (AHRS00, NOV770, NOV000, DFOP00).
-// Every table the file type produces is written as DIR/<table>.arrow, or
-// only -table NAME. The scope is read from FILE's
+// FILETYPE is a file type in fileparse.Parsers (AHRS00, NOV770, NOV000,
+// DFOP00). Every (log type, table) the file type produces is written as
+// DIR/<table>_<logtype>.arrow, or only those matching -table and -log. The scope is read from FILE's
 // .../<network>/<station>/<campaign>/raw directory unless -network, -station
 // and -campaign override it.
 package main
 
 import (
-	"flag"
-	"fmt"
+	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
 
-	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/apache/arrow-go/v18/arrow/ipc"
-
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/catalogDef/schemas"
+	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/catalogDef/catalog"
+	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
 	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse"
 )
 
-const usage = "usage: sfglevel1 FILETYPE -out DIR [-table NAME] FILE"
+const usage = "usage: sfglevel1 FILETYPE -out DIR [-table NAME] [-log LOGTYPE] FILE"
+
+func parseFiles(ctx context.Context, cat catalog.Catalog, parsers []fileparse.Parser, files []string, scope datamodels.Scope) {
+	for _, parser := range parsers {
+		for _, file := range files {
+			arrowTbl, err := parser.Parse(file, scope)
+			if err != nil {
+				slog.Error("failed to parse file", "file", file, "error", err)
+				os.Exit(1)
+			}
+			slog.Info("parsed file successfully", "file", filepath.Base(file), "rows", arrowTbl.NumRows())
+			// ingest the parsed arrow table into the catalog
+			numRows, err := cat.Append(ctx, parser.Table, arrowTbl, catalog.WithSource(file))
+			arrowTbl.Release()
+			if err != nil {
+				slog.Error("failed to ingest arrow table", "file", filepath.Base(file), "table", parser.Table.Name, "error", err)
+				os.Exit(1)
+			}
+			slog.Info("ingested arrow table successfully", "numRows", numRows)
+		}
+	}
+}
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, usage)
-		os.Exit(2)
-	}
-	if err := run(os.Args[1], os.Args[2:]); err != nil {
-		fmt.Fprintln(os.Stderr, "sfglevel1:", err)
+	data_path, err := filepath.Abs("/Users/franklyndunbar/Project/SeaFloorGeodesy/Data/SFGMain2/cascadia-gorda/SLT1/2026_A_1126/raw")
+	if err != nil {
+		slog.Error("failed to get absolute path", "error", err)
 		os.Exit(1)
 	}
-}
-
-func run(fileType string, args []string) error {
-	ft, ok := fileparse.Lookup(fileType)
-	if !ok {
-		return fmt.Errorf("unknown file type %q", fileType)
-	}
-	fs := flag.NewFlagSet(ft.Name, flag.ExitOnError)
-	out := fs.String("out", "", "output directory (required)")
-	tableName := fs.String("table", "", "write only this table (default: all the file type produces)")
-	network := fs.String("network", "", "Network scope (default: from the file path)")
-	station := fs.String("station", "", "Station scope (default: from the file path)")
-	campaign := fs.String("campaign", "", "Campaign scope (default: from the file path)")
-	fs.Parse(args)
-	if *out == "" || fs.NArg() != 1 {
-		return fmt.Errorf(usage)
-	}
-	file := fs.Arg(0)
-	scope := schemas.ScopeFromRawDir(filepath.Dir(file))
-	for _, o := range []struct{ dst, v *string }{
-		{&scope.Network, network}, {&scope.Station, station}, {&scope.Campaign, campaign},
-	} {
-		if *o.v != "" {
-			*o.dst = *o.v
-		}
-	}
-	defs := ft.Tables
-	if *tableName != "" {
-		def, ok := ft.Table(*tableName)
-		if !ok {
-			return fmt.Errorf("%s files do not produce table %q", ft.Name, *tableName)
-		}
-		defs = []schemas.TableDef{def}
-	}
-	for _, def := range defs {
-		tbl, err := ft.Parse(file, def, scope)
-		if err != nil {
-			return err
-		}
-		slog.Info("parsed", "file", file, "table", def.Name, "rows", tbl.NumRows())
-		err = writeArrowIPC(filepath.Join(*out, def.Name+".arrow"), tbl)
-		tbl.Release()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func writeArrowIPC(path string, tbl arrow.Table) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	f, err := os.Create(path)
+	warehouse_path, err := filepath.Abs("/Users/franklyndunbar/Project/SeaFloorGeodesy/Data/ICEBERG_L1")
 	if err != nil {
-		return err
+		slog.Error("failed to get absolute path", "error", err)
+		os.Exit(1)
 	}
-	defer f.Close()
-	w, err := ipc.NewFileWriter(f, ipc.WithSchema(tbl.Schema()))
+	ahrs, err := filepath.Glob(filepath.Join(data_path, "*AHRS00.bin"))
 	if err != nil {
-		return fmt.Errorf("opening Arrow IPC writer for %s: %w", path, err)
+		slog.Error("failed to glob AHRS00 files", "error", err)
+		os.Exit(1)
 	}
-	rdr := array.NewTableReader(tbl, -1)
-	defer rdr.Release()
-	for rdr.Next() {
-		if err := w.Write(rdr.RecordBatch()); err != nil {
-			return fmt.Errorf("writing %s: %w", path, err)
-		}
+	nov770, err := filepath.Glob(filepath.Join(data_path, "*NOV770.raw"))
+	if err != nil {
+		slog.Error("failed to glob NOV770 files", "error", err)
+		os.Exit(1)
 	}
-	if err := w.Close(); err != nil {
-		return fmt.Errorf("closing %s: %w", path, err)
+	nov000, err := filepath.Glob(filepath.Join(data_path, "*NOV000.bin"))
+	if err != nil {
+		slog.Error("failed to glob NOV000 files", "error", err)
+		os.Exit(1)
 	}
-	return f.Close()
+	dfop00, err := filepath.Glob(filepath.Join(data_path, "*DFOP00.raw"))
+	if err != nil {
+		slog.Error("failed to glob DFOP00 files", "error", err)
+		os.Exit(1)
+	}
+
+	ctx := context.Background()
+
+	// Build local iceberg catalog
+	cfg := catalog.Config{
+		Warehouse: warehouse_path,
+		Type:      catalog.TypeSQL,
+	}
+	cat, err := catalog.Open(ctx, cfg)
+	if err != nil {
+		slog.Error("failed to open catalog", "warehouse", warehouse_path, "error", err)
+		os.Exit(1)
+	}
+	defer cat.Close()
+
+	// build the scope, then parse the nov000 files across all log types
+	scope := datamodels.Scope{
+		Network:  "cascadia-gorda",
+		Station:  "SLT1",
+		Campaign: "2026_A_1126",
+	}
+	// load the parsers for nov000 files
+	parsers := fileparse.ForFileType("NOV000")
+	parseFiles(ctx, *cat, parsers, nov000, scope)
+
+	parsers = fileparse.ForFileType("AHRS00")
+	parseFiles(ctx, *cat, parsers, ahrs, scope)
+
+	parsers = fileparse.ForFileType("DFOP00")
+	parseFiles(ctx, *cat, parsers, dfop00, scope)
+
+	parsers = fileparse.ForFileType("NOV770")
+	parseFiles(ctx, *cat, parsers, nov770, scope)
+
 }

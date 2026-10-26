@@ -1,4 +1,4 @@
-package schemas
+package datamodels
 
 import (
 	"errors"
@@ -9,23 +9,35 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 )
 
-// Validate checks rows against t: every column present with its schema type,
-// no nulls in required columns, and every value inside the column's bounds
-// and IsIn set. It reports one error per offending column.
+// Validate checks rows against t: every schema column present, no nulls in
+// required columns, and every value inside its Column's bounds and IsIn set
+// (tables defined by External carry no bounds). It reports one error per
+// offending column.
 func (t TableDef) Validate(rows arrow.Table) error {
+	schema, err := t.Schema()
+	if err != nil {
+		return err
+	}
 	sc := rows.Schema()
+	column := func(name string) *arrow.Column {
+		if idx := sc.FieldIndices(name); len(idx) > 0 {
+			return rows.Column(idx[0])
+		}
+		return nil
+	}
 	var errs []error
+	for _, f := range schema.Fields() {
+		col := column(f.Name)
+		switch {
+		case col == nil:
+			errs = append(errs, fmt.Errorf("%s.%s: missing column", t.Name, f.Name))
+		case f.Required && col.NullN() > 0:
+			errs = append(errs, fmt.Errorf("%s.%s: %d nulls in a required column", t.Name, f.Name, col.NullN()))
+		}
+	}
 	for _, c := range t.Columns {
-		idx := sc.FieldIndices(c.Name)
-		if len(idx) == 0 {
-			errs = append(errs, fmt.Errorf("%s.%s: missing column", t.Name, c.Name))
-			continue
-		}
-		col := rows.Column(idx[0])
-		if c.Required && col.NullN() > 0 {
-			errs = append(errs, fmt.Errorf("%s.%s: %d nulls in a required column", t.Name, c.Name, col.NullN()))
-		}
-		if c.Ge == nil && c.Le == nil && c.Gt == nil && c.Lt == nil && c.IsIn == nil {
+		col := column(c.Name)
+		if col == nil || (c.Ge == nil && c.Le == nil && c.Gt == nil && c.Lt == nil && c.IsIn == nil) {
 			continue
 		}
 		bad, first, err := countViolations(c, col.Data().Chunks())

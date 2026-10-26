@@ -9,7 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/catalogDef/schemas"
+	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
 )
 
 func TestUnixMicros(t *testing.T) {
@@ -44,21 +44,19 @@ func writeSample(t *testing.T) string {
 	return path
 }
 
-var scope = schemas.Scope{Network: "net", Station: "STA", Campaign: "2026_A_0001"}
-
 func col[T arrow.Array](t *testing.T, tbl arrow.Table, name string) T {
 	t.Helper()
 	return tbl.Column(tbl.Schema().FieldIndices(name)[0]).Data().Chunk(0).(T)
 }
 
 func TestTWTT(t *testing.T) {
-	tbl, err := ParseFile(writeSample(t), schemas.TWTT, scope)
+	tbl, err := TWTT(writeSample(t), LogType)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tbl.Release()
-	if err := schemas.TWTT.Validate(tbl); err != nil {
-		t.Fatal(err)
+	if want, _ := datamodels.ParsedSchema(datamodels.TWTT); !tbl.Schema().Equal(want) {
+		t.Fatalf("schema = %v, want TWTT parsed schema %v", tbl.Schema(), want)
 	}
 	if tbl.NumRows() != 1 {
 		t.Fatalf("%d rows, want 1 (the zero range has no reply)", tbl.NumRows())
@@ -84,19 +82,19 @@ func TestTWTT(t *testing.T) {
 	if got := col[*array.Float32](t, tbl, "dbV").Value(0); got != -12 {
 		t.Errorf("dbV = %v", got)
 	}
-	if got := col[*array.String](t, tbl, "Log_Source").Value(0); got != LogSource {
+	if got := col[*array.String](t, tbl, "Log_Source").Value(0); got != LogType {
 		t.Errorf("Log_Source = %q", got)
 	}
 }
 
 func TestAttitude(t *testing.T) {
-	tbl, err := ParseFile(writeSample(t), schemas.AttitudeAHRS, scope)
+	tbl, err := AttitudeAHRS(writeSample(t), LogType)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tbl.Release()
-	if err := schemas.AttitudeAHRS.Validate(tbl); err != nil {
-		t.Fatal(err)
+	if want, _ := datamodels.ParsedSchema(datamodels.AttitudeAHRS); !tbl.Schema().Equal(want) {
+		t.Fatalf("schema = %v, want attitude_ahrs parsed schema %v", tbl.Schema(), want)
 	}
 	// Events 1 and 2 repeat one block, event 3 logs an error code.
 	if tbl.NumRows() != 2 {
@@ -112,8 +110,8 @@ func TestAttitude(t *testing.T) {
 	}
 }
 
-func TestUnsupported(t *testing.T) {
-	if _, err := ParseFile(writeSample(t), schemas.GNSSObs, scope); err == nil {
-		t.Fatal("want an error: DFOP00 does not produce GNSSObs")
+func TestUnknownLogType(t *testing.T) {
+	if _, err := TWTT(writeSample(t), "RANGEA"); err == nil {
+		t.Fatal("want an error: DFOP00 files have no RANGEA logs")
 	}
 }

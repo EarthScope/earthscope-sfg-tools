@@ -65,6 +65,7 @@ def test_to_arrow_stamps_scope_and_log_source():
         "Station": "S",
         "Campaign": "C",
         "Log_Source": "CTD",
+        "stream_edid": None,
     }
     with pytest.raises(ValueError, match="Log_Source"):
         SOUND_SPEED.to_arrow(rows, scope)

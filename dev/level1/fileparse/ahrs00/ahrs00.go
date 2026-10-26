@@ -9,32 +9,23 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/catalogDef/schemas"
+	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
 	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/gpsa"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/internal/tablebuild"
+	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/internal/logtype"
 	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/xsens"
 )
 
-// LogSource is the Log_Source value for rows parsed from AHRS00.bin.
-const LogSource = "AHRS00"
-
-// Tables are the tables AHRS00.bin files produce.
-var Tables = []schemas.TableDef{schemas.AttitudeAHRS}
-
-// Row is one attitude_ahrs row. Measurement fields are NaN when the XSENS
-// message did not carry them.
-type Row struct {
-	Time           int64   // UTC, microseconds since the UNIX epoch
-	TimeInstrument float64 // seconds since instrument power-on
-	Acx, Acy, Acz  float64 // [m/s^2]
-	H              float64 // heading [deg], 0..360
-	HMag           float64 // magnetic heading from the magnetometer [deg], 0..360
-	P, R           float64 // pitch, roll [deg]
-}
+const (
+	// FileType names the file type in stream EDIDs.
+	FileType = "AHRS00"
+	// LogType is the one log type AHRS00.bin files carry, and the
+	// Log_Source value of their rows.
+	LogType = "AHRS00"
+)
 
 // Stats summarises a parse.
 type Stats struct {
@@ -67,9 +58,9 @@ type packetStart struct {
 
 // Parse reads an AHRS00.bin stream. Each XSENS message takes the time of
 // the GPSA packet holding its first byte.
-func Parse(r io.Reader) ([]Row, Stats, error) {
+func Parse(r io.Reader) ([]datamodels.AttitudeAHRSRow, Stats, error) {
 	var (
-		rows    []Row
+		out     []datamodels.AttitudeAHRSRow
 		stats   Stats
 		dec     xsens.Decoder
 		starts  []packetStart // packets whose bytes are still buffered
@@ -85,7 +76,7 @@ func Parse(r io.Reader) ([]Row, Stats, error) {
 			for len(starts) > 1 && starts[1].offset <= off {
 				starts = starts[1:]
 			}
-			rows = append(rows, toRow(starts[0].pkt, m))
+			out = append(out, toAttitude(starts[0].pkt, m))
 		}
 	}
 	for {
@@ -103,81 +94,57 @@ func Parse(r io.Reader) ([]Row, Stats, error) {
 		emit()
 	}
 	stats.CorruptPackets = g.Corrupt
-	stats.Messages = len(rows)
+	stats.Messages = len(out)
 	stats.BadMessages = dec.Bad
-	return rows, stats, nil
+	return out, stats, nil
 }
 
-func toRow(p gpsa.Packet, m xsens.MTData2) Row {
-	nan := math.NaN()
-	row := Row{
-		Time:           int64(p.CommonTime),
+// toAttitude is the attitude_ahrs row of XSENS message m, timed by its GPSA
+// packet p. Measurements the message did not carry are nil.
+func toAttitude(p gpsa.Packet, m xsens.MTData2) datamodels.AttitudeAHRSRow {
+	a := datamodels.AttitudeAHRSRow{
+		Time:           time.UnixMicro(int64(p.CommonTime)).UTC(),
 		TimeInstrument: float64(p.InstrumentTime) / 1e6,
-		Acx:            nan, Acy: nan, Acz: nan,
-		H: nan, HMag: nan, P: nan, R: nan,
 	}
 	if m.Euler.Valid {
-		row.R, row.P, row.H = m.Euler.X, m.Euler.Y, wrap360(m.Euler.Z)
+		a.R, a.P, a.H = ptr(m.Euler.X), ptr(m.Euler.Y), ptr(wrap360(m.Euler.Z))
 	}
 	if m.Acceleration.Valid {
-		row.Acx, row.Acy, row.Acz = m.Acceleration.X, m.Acceleration.Y, m.Acceleration.Z
+		a.Acx, a.Acy, a.Acz = ptr(m.Acceleration.X), ptr(m.Acceleration.Y), ptr(m.Acceleration.Z)
 	}
 	if m.MagneticField.Valid {
-		row.HMag = magneticHeading(m.MagneticField.X, m.MagneticField.Y)
+		a.HMag = ptr(magneticHeading(m.MagneticField.X, m.MagneticField.Y))
 	}
-	return row
+	return a
 }
 
-// ParseFile parses the AHRS00.bin file at path into def for scope. AHRS00
-// files produce schemas.AttitudeAHRS only. The caller releases the table.
-func ParseFile(path string, def schemas.TableDef, scope schemas.Scope) (arrow.Table, error) {
-	if def.Name != schemas.AttitudeAHRS.Name {
-		return nil, tablebuild.Unsupported(LogSource, def, Tables...)
+func ptr(v float64) *float64 { return &v }
+
+// AttitudeAHRS parses the logType (LogType) logs of the AHRS00.bin file at
+// path into attitude_ahrs rows (see datamodels.ParsedSchema). The caller
+// releases the table.
+func AttitudeAHRS(path, logType string) (arrow.Table, error) {
+	if err := logtype.Check(FileType, logType, LogType); err != nil {
+		return nil, err
 	}
-	rows, stats, err := readFile(path)
+	rs, stats, err := readFile(path)
 	if err != nil {
 		return nil, err
 	}
-	slog.Debug("parsed AHRS00", "file", filepath.Base(path), "rows", len(rows),
+	slog.Debug("parsed AHRS00", "file", filepath.Base(path), "rows", len(rs),
 		"packets", stats.Packets, "corrupt_packets", stats.CorruptPackets, "bad_messages", stats.BadMessages)
-	return attitudeTable(rows, scope)
+	return datamodels.BuildAttitudeAHRS(rs, LogType)
 }
 
-func readFile(path string) ([]Row, Stats, error) {
+func readFile(path string) ([]datamodels.AttitudeAHRSRow, Stats, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, Stats{}, err
 	}
 	defer f.Close()
-	rows, stats, err := Parse(f)
+	rs, stats, err := Parse(f)
 	if err != nil {
 		return nil, stats, fmt.Errorf("parsing %s: %w", path, err)
 	}
-	return rows, stats, nil
-}
-
-// attitudeTable converts rows to an attitude_ahrs table: NaN measurements
-// become null; the SV3-only time_start_count/time_status are left null.
-func attitudeTable(rows []Row, scope schemas.Scope) (arrow.Table, error) {
-	b, err := tablebuild.New(schemas.AttitudeAHRS)
-	if err != nil {
-		return nil, err
-	}
-	defer b.Release()
-	sc := b.Scope(scope, LogSource)
-	tm := tablebuild.Col[*array.TimestampBuilder](b, "time")
-	tmInstrument := tablebuild.Col[*array.Float64Builder](b, "time_instrument")
-	var measurements []*array.Float64Builder
-	for _, name := range []string{"acx", "acy", "acz", "h", "h_mag", "p", "r"} {
-		measurements = append(measurements, tablebuild.Col[*array.Float64Builder](b, name))
-	}
-	for _, r := range rows {
-		sc.Append()
-		tm.Append(arrow.Timestamp(r.Time))
-		tmInstrument.Append(r.TimeInstrument)
-		for i, v := range []float64{r.Acx, r.Acy, r.Acz, r.H, r.HMag, r.P, r.R} {
-			tablebuild.Float64(measurements[i], v, !math.IsNaN(v))
-		}
-	}
-	return b.Table()
+	return rs, stats, nil
 }

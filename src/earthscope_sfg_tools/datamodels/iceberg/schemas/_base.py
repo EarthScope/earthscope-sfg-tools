@@ -332,3 +332,15 @@ SCOPE_COLUMNS: tuple[Column, ...] = (
 LOG_SOURCE = Column("Log_Source", STRING, "Source log file or log type")
 
 LEVEL1_SCOPE: tuple[Column, ...] = (*SCOPE_COLUMNS, LOG_SOURCE)
+
+# Last column of every Level 1 table with LEVEL1_SCOPE: the rows' stream EDID,
+# network:station:campaign:file_type:log_source. Optional and last because it
+# was added after the tables were defined (field IDs follow declaration order,
+# and added columns must be optional). The Go parsers set it; Python ingest
+# leaves it null.
+STREAM_EDID = Column(
+    "stream_edid",
+    STRING,
+    "Stream EDID, network:station:campaign:file_type:log_source",
+    required=False,
+)

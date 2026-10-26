@@ -52,6 +52,7 @@ pyiceberg = ">=0.12.0,<0.13"
 pyiceberg-core = ">=0.7"
 pyarrow = ">=25.0.0,<26"
 sqlalchemy = ">=2.1.4,<3"
+ipykernel = ">=7.4.0,<8"
 
 [tool.pixi.pypi-dependencies]
 earthscope_sfg_tools = { path = ".", editable = true }

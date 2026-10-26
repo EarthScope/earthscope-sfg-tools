@@ -1,7 +1,8 @@
-package schemas
+package datamodels
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/iceberg-go"
@@ -9,7 +10,7 @@ import (
 )
 
 // Go counterparts of the Python TableDefs in
-// earthscope_sfg_tools.datamodels.iceberg.schemas. Keep the two in step:
+// earthscope_sfg_tools.datamodels.iceberg. Keep the two in step:
 // Iceberg tracks columns by field ID, which is assigned in declaration order
 // starting at 1, so new columns must only ever be appended.
 
@@ -38,10 +39,28 @@ type TableDef struct {
 	Level   int
 	Doc     string
 	Columns []Column
-	// PartitionBy defaults to identity on Network, Station, Campaign.
+	// PartitionBy defaults to identity on Network, Station, Campaign, or to
+	// External's spec. Set on an External table, it overrides that spec;
+	// keys name columns of External's schema.
 	PartitionBy []PartitionKey
 	// SortBy names the columns of the table's ascending sort order.
 	SortBy []string
+	// External, when set, supplies the whole table definition from the
+	// library that owns it (see GNSSObs); Columns and SortBy are then
+	// unused, and PartitionBy, if set, overrides its partition spec.
+	External func() (External, error)
+	// TimeColumn is the timestamp column that orders a stream's rows.
+	// Catalog.Append replaces existing rows by (stream_edid, TimeColumn
+	// window), so re-ingesting a file does not duplicate its rows.
+	TimeColumn string
+}
+
+// External is a complete table definition owned by another library.
+type External struct {
+	Schema     *iceberg.Schema
+	Spec       iceberg.PartitionSpec
+	SortOrder  table.SortOrder
+	Properties iceberg.Properties
 }
 
 // partitionFieldIDStart is the first partition field ID, by Iceberg convention.
@@ -66,9 +85,17 @@ var Level1Scope = []Column{
 	{Name: "Log_Source", Type: str, Doc: "Source log file or log type", Required: true},
 }
 
-// level1 prefixes cols with the Level 1 scope columns.
+// StreamEDIDColumn is the last column of every Level 1 table built with
+// level1: the rows' stream EDID (see StreamEDID). It is last, and nullable,
+// because it was added after the tables were defined: Iceberg assigns field
+// IDs in declaration order and only allows new columns to be optional. The
+// Go parsers always set it; the Python ingest leaves it null.
+var StreamEDIDColumn = Column{Name: "stream_edid", Type: str,
+	Doc: "Stream EDID, network:station:campaign:file_type:log_source"}
+
+// level1 wraps cols in the Level 1 scope columns and StreamEDIDColumn.
 func level1(cols ...Column) []Column {
-	return append(append([]Column{}, Level1Scope...), cols...)
+	return append(append(append([]Column{}, Level1Scope...), cols...), StreamEDIDColumn)
 }
 
 var scopePartitions = []PartitionKey{
@@ -93,8 +120,17 @@ func (t TableDef) Column(name string) (Column, bool) {
 	return Column{}, false
 }
 
-// Schema is the Iceberg schema, with field IDs in declaration order.
-func (t TableDef) Schema() *iceberg.Schema {
+// Schema is the Iceberg schema: External's, or Columns with field IDs in
+// declaration order.
+func (t TableDef) Schema() (*iceberg.Schema, error) {
+	if t.External != nil {
+		ext, err := t.External()
+		return ext.Schema, err
+	}
+	return t.columnSchema(), nil
+}
+
+func (t TableDef) columnSchema() *iceberg.Schema {
 	fields := make([]iceberg.NestedField, len(t.Columns))
 	for i, c := range t.Columns {
 		fields[i] = iceberg.NestedField{
@@ -104,13 +140,26 @@ func (t TableDef) Schema() *iceberg.Schema {
 	return iceberg.NewSchema(0, fields...)
 }
 
-// PartitionSpec builds the spec from PartitionBy (scope identity by default).
+// PartitionSpec is built from PartitionBy when set, against External's
+// schema for an External table; otherwise it is External's spec, or scope
+// identity.
 func (t TableDef) PartitionSpec() (iceberg.PartitionSpec, error) {
+	if t.External != nil {
+		ext, err := t.External()
+		if err != nil || t.PartitionBy == nil {
+			return ext.Spec, err
+		}
+		return t.buildSpec(ext.Schema, t.PartitionBy)
+	}
 	keys := t.PartitionBy
 	if keys == nil {
 		keys = scopePartitions
 	}
-	schema := t.Schema()
+	return t.buildSpec(t.columnSchema(), keys)
+}
+
+// buildSpec is the partition spec of keys over schema's columns.
+func (t TableDef) buildSpec(schema *iceberg.Schema, keys []PartitionKey) (iceberg.PartitionSpec, error) {
 	opts := make([]iceberg.PartitionOption, len(keys))
 	for i, k := range keys {
 		name := k.Name
@@ -118,7 +167,7 @@ func (t TableDef) PartitionSpec() (iceberg.PartitionSpec, error) {
 			name = k.Source
 		}
 		// Iceberg reserves IDs >= 1000 for partition fields (as in the Python TableDef).
-		id := 1000 + i
+		id := partitionFieldIDStart + i
 		opts[i] = iceberg.AddPartitionFieldByName(k.Source, name, k.Transform, schema, &id)
 	}
 	spec, err := iceberg.NewPartitionSpecOpts(opts...)
@@ -128,12 +177,17 @@ func (t TableDef) PartitionSpec() (iceberg.PartitionSpec, error) {
 	return spec, nil
 }
 
-// SortOrder is an ascending, nulls-first sort on SortBy; unsorted when empty.
+// SortOrder is External's sort order, or an ascending, nulls-first sort on
+// SortBy; unsorted when empty.
 func (t TableDef) SortOrder() (table.SortOrder, error) {
+	if t.External != nil {
+		ext, err := t.External()
+		return ext.SortOrder, err
+	}
 	if len(t.SortBy) == 0 {
 		return table.UnsortedSortOrder, nil
 	}
-	schema := t.Schema()
+	schema := t.columnSchema()
 	fields := make([]table.SortField, len(t.SortBy))
 	for i, name := range t.SortBy {
 		f, ok := schema.FindFieldByName(name)
@@ -148,7 +202,26 @@ func (t TableDef) SortOrder() (table.SortOrder, error) {
 	return table.NewSortOrder(table.InitialSortOrderID, fields)
 }
 
+// Properties are the table properties to create the table with: External's
+// plus the table doc as "comment".
+func (t TableDef) Properties() (iceberg.Properties, error) {
+	props := iceberg.Properties{}
+	if t.External != nil {
+		ext, err := t.External()
+		if err != nil {
+			return nil, err
+		}
+		maps.Copy(props, ext.Properties)
+	}
+	props["comment"] = t.Doc
+	return props, nil
+}
+
 // ArrowSchema is the Arrow schema of a full row, for building write batches.
 func (t TableDef) ArrowSchema() (*arrow.Schema, error) {
-	return table.SchemaToArrowSchema(t.Schema(), nil, true, false)
+	sc, err := t.Schema()
+	if err != nil {
+		return nil, err
+	}
+	return table.SchemaToArrowSchema(sc, nil, true, false)
 }

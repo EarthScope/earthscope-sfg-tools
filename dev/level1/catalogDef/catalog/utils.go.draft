@@ -1,0 +1,14 @@
+package catalog
+
+import (
+	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/catalogDef/schemas"
+	"github.com/apache/arrow-go"
+	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
+)
+
+// GNSSObsToArrow takes in scope, and a list of gnsstools Epochs and returns an arrow table
+// Arrow table in this case is GNSSObs 
+func GNSSObsToArrow(scope schemas.Scope, obs []observation.Epoch) (error, arrow.Table) {
+	var tableDef := schemas.GNSSObs
+	
+}

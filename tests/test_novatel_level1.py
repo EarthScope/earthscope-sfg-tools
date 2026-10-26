@@ -49,6 +49,7 @@ def test_conform_arrow_stamps_scope_and_reorders():
             "time": T0,
             "depth": 1.0,
             "speed": 1500.0,
+            "stream_edid": None,
         }
     ]
 
