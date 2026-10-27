@@ -6,7 +6,9 @@ Command line for the catalog access API.
 
 Without --survey or a window, every survey of the campaign is exported to
 its own directory under --out. Each export is then run with
-``gnatss run <dir>/config.yaml --posfilter --no-run-all``.
+``gnatss run <dir>/config.yaml --posfilter --no-run-all``, or, exported with
+--solver, ``gnatss run <dir>/config.yaml`` for the posfilter and the array
+position.
 """
 
 import argparse
@@ -16,7 +18,7 @@ from pathlib import Path
 
 from ..datamodels.iceberg.schemas import Scope
 from ..datamodels.metadata.earthscope.site import Site
-from .posfilter import export_posfilter
+from .posfilter import SolverOptions, export_posfilter
 from .reader import Level1Reader, open_catalog
 from .site import PosfilterSite
 
@@ -26,6 +28,7 @@ def _export_posfilter(args: argparse.Namespace) -> int:
     site_meta = Site.from_json(str(args.site_metadata))
     scope = Scope(args.network, args.station, args.campaign)
     out = Path(args.out)
+    solver = SolverOptions(gps_sigma_limit=args.gps_sigma_limit) if args.solver else None
 
     if args.survey or args.start or args.end:
         runs = [(args.survey, out)]
@@ -42,8 +45,10 @@ def _export_posfilter(args: argparse.Namespace) -> int:
                 site_meta, args.campaign, survey=survey, start=args.start, end=args.end
             )
             s = export_posfilter(
-                reader, site, scope, out_dir, positions=args.positions, sound_speed=not args.no_sound_speed
-            )
+                reader, site, scope, out_dir,
+                positions=args.positions, sound_speed=not args.no_sound_speed, solver=solver,
+                position_sigmas=args.position_sigmas,
+            )  # fmt: skip
         except ValueError as e:
             failed += 1
             print(f"{survey or 'window'}: FAILED: {e}", file=sys.stderr)
@@ -72,7 +77,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--start", help="UTC window start (ISO), instead of a survey")
     p.add_argument("--end", help="UTC window end (ISO), instead of a survey")
     p.add_argument("--positions", default="DFOP00", help="antenna position stream file type (default DFOP00)")
+    p.add_argument(
+        "--position-sigmas", default="logged", choices=["logged", "insstdev"],
+        help="antenna sigmas: as logged, or the INS position sigmas (for DFOP00, which logs the INS position)",
+    )  # fmt: skip
     p.add_argument("--no-sound-speed", action="store_true", help="skip the sound speed profile")
+    p.add_argument("--solver", action="store_true", help="add a GNATSS solver section (array position)")
+    p.add_argument(
+        "--gps-sigma-limit", type=float, default=SolverOptions.gps_sigma_limit,
+        help="solver: max antenna 3D sigma [m] (default %(default)s)",
+    )  # fmt: skip
     p.add_argument("--out", required=True, help="output directory")
     p.add_argument("-v", "--verbose", action="store_true")
     p.set_defaults(func=_export_posfilter)

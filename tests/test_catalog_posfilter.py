@@ -16,7 +16,9 @@ import pandas as pd
 import pytest
 
 from earthscope_sfg_tools.catalog.posfilter import (
+    SolverOptions,
     export_posfilter,
+    insstdev_sigmas,
     internal_delays,
     novatel_crc32,
     write_pxp_tt,
@@ -150,6 +152,42 @@ def test_export_files(tmp_path):
     assert [t["internal_delay"] for t in cfg["transponders"]] == [0.08, 0.36, 0.64]
     assert cfg["posfilter"]["input_files"]["travel_times"]["loader_kwargs"] == {"is_j2k": True}
     assert json.loads((tmp_path / "summary.json").read_text())["replies"] == 4
+    assert "solver" not in cfg
+
+
+def test_solver_section(tmp_path):
+    export_posfilter(FakeReader(frames()), SITE, SCOPE, tmp_path, solver=SolverOptions(gps_sigma_limit=2.0))
+    solver = json.loads((tmp_path / "config.yaml").read_text())["solver"]
+    assert solver["gps_sigma_limit"] == 2.0 and solver["geoid_undulation"] == 0.0
+    assert solver["input_files"]["sound_speed"]["path"] == str(tmp_path.resolve() / "sound_speed.txt")
+    with pytest.raises(ValueError, match="sound speed"):
+        export_posfilter(FakeReader(frames()), SITE, SCOPE, tmp_path, sound_speed=False, solver=SolverOptions())
+    no_sv = frames()
+    no_sv["sound_speed"] = no_sv["sound_speed"].iloc[0:0]
+    with pytest.raises(ValueError, match="sound speed"):
+        export_posfilter(FakeReader(no_sv), SITE, SCOPE, tmp_path, solver=SolverOptions())
+
+
+def test_insstdev_sigmas():
+    f = frames()
+    gps = pd.concat([f["gnss_antenna_positions"], f["gnss_antenna_positions"].iloc[[0]].assign(time=ts(10))])
+    out = insstdev_sigmas(gps, f["insstdev"])
+    sig = out[["ant_sigx", "ant_sigy", "ant_sigz"]].to_numpy()
+    # The rotation keeps the total variance; z mixes north and up only.
+    np.testing.assert_allclose((sig[:3] ** 2).sum(axis=1), 1.9**2 + 1.7**2 + 2.2**2)
+    lat = np.radians(42.13)  # the fixture antenna's latitude, to ~1e-3 deg
+    np.testing.assert_allclose(sig[:3, 2], np.hypot(np.cos(lat) * 1.9, np.sin(lat) * 2.2), rtol=1e-4)
+    assert np.isnan(sig[3]).all()  # no insstdev row within 1 s
+
+
+def test_export_insstdev_sigmas(tmp_path):
+    s = export_posfilter(FakeReader(frames()), SITE, SCOPE, tmp_path, position_sigmas="insstdev")
+    # The row without logged sigmas now has INS sigmas and is kept.
+    assert (s.gps_rows, s.gps_dropped_no_sigma, s.gps_sigmas) == (3, 0, "insstdev")
+    sigs = [[float(v) for v in ln.split()[5:]] for ln in (tmp_path / "GPS_POS_FREED").read_text().splitlines()]
+    assert all(np.isclose(sum(v * v for v in row), 1.9**2 + 1.7**2 + 2.2**2, atol=1e-3) for row in sigs)
+    with pytest.raises(ValueError, match="position_sigmas"):
+        export_posfilter(FakeReader(frames()), SITE, SCOPE, tmp_path, position_sigmas="ins")
 
 
 def test_metadata_tat_wins_over_logged():
@@ -186,7 +224,7 @@ GNATSS_PY = os.environ.get("SFG_GNATSS_PYTHON")
 
 @pytest.mark.skipif(not GNATSS_PY, reason="set SFG_GNATSS_PYTHON to a Python with gnatss")
 def test_gnatss_round_trip(tmp_path):
-    export_posfilter(FakeReader(frames()), SITE, SCOPE, tmp_path)
+    export_posfilter(FakeReader(frames()), SITE, SCOPE, tmp_path, solver=SolverOptions())
     script = textwrap.dedent(
         f"""
         import json
@@ -206,6 +244,7 @@ def test_gnatss_round_trip(tmp_path):
             "atd": [cfg.posfilter.atd_offsets.forward, cfg.posfilter.atd_offsets.rightward,
                     cfg.posfilter.atd_offsets.downward],
             "delays": [t.internal_delay for t in cfg.transponders],
+            "solver_sv": cfg.solver.input_files.sound_speed.path,
         }}))
         """
     )
@@ -224,3 +263,4 @@ def test_gnatss_round_trip(tmp_path):
     assert got["sv_n"] == 3
     assert got["atd"] == [0.0, 0.00053, 0.92813]
     assert got["delays"] == [0.08, 0.36, 0.64]
+    assert got["solver_sv"].endswith("sound_speed.txt")

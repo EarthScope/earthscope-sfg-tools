@@ -9,11 +9,16 @@ loaders read (so its time joins and column handling stay GNATSS's) and a
   ``inspva`` / ``insstdev``, with the logged time and INS statuses so
   GNATSS's FINESTEERING / INS_SOLUTION_GOOD filter applies as on raw logs.
 - ``GPS_POS_FREED``: antenna positions (``gnss_antenna_positions``), GNATSS
-  "legacy" format.
+  "legacy" format; sigmas as logged, or from ``insstdev`` (see
+  :func:`insstdev_sigmas`).
 - ``pxp_tt``: one line per ping, J2000 transmit time and the two-way travel
   time [µs] to each transponder (GNATSS "legacy" format, ``is_j2k``).
 - ``sound_speed.txt`` (optional): the sound speed profile, depth negative
-  down, for the GNATSS solver (not referenced by the posfilter config).
+  down, for the GNATSS solver.
+
+With ``solver=SolverOptions(...)`` the config also has a ``solver`` section,
+so ``gnatss run config.yaml`` goes on from the posfilter's GNSS-A Level 2
+frame (``output/gps_solution.csv``) to the array position.
 
 Travel times follow GNATSS's own DFOP00 loader: the exported time is the
 logged range minus the transceiver trigger delay, and each transponder's
@@ -33,6 +38,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from pymap3d import ecef2geodetic
 
 from ..datamodels.iceberg.schemas import Scope
 from .reader import Level1Reader
@@ -53,6 +59,26 @@ FILES = {
 }
 
 
+# Reference ellipsoid of the metadata positions and the antenna ECEF.
+WGS84 = {"semi_major_axis": 6378137.0, "reverse_flattening": 298.257223563}
+
+
+@dataclass(frozen=True)
+class SolverOptions:
+    """GNATSS solver settings an export writes to ``config.yaml``.
+
+    ``gps_sigma_limit`` drops shots whose antenna 3D sigma [m] exceeds it
+    (GNATSS takes the square root of the summed squared covariance
+    diagonals). GNATSS's default, 0.05, suits PPP; the posfilter's Kalman
+    covariances from the SV3 GNSS stream are ~0.2 m^2 per axis, which that
+    default rejects entirely.
+    """
+
+    gps_sigma_limit: float = 1.0
+    distance_limit: float = 150.0  # [m] horizontal distance from the array center
+    harmonic_mean_start_depth: float = 0.0  # [m] negative down
+
+
 @dataclass
 class ExportSummary:
     """What an export wrote, kept and dropped (also written as summary.json)."""
@@ -68,6 +94,7 @@ class ExportSummary:
     insstdev_good: int = 0
     gps_rows: int = 0
     gps_dropped_no_sigma: int = 0
+    gps_sigmas: str = "logged"  # where the antenna sigmas came from
     pings: int = 0
     replies: int = 0
     internal_delays: dict[str, float] = field(default_factory=dict)
@@ -143,6 +170,50 @@ def write_gps_pos_freed(df: pd.DataFrame, path: Path) -> tuple[int, int]:
     return int(keep.sum()), int((~keep).sum())
 
 
+def insstdev_sigmas(gps: pd.DataFrame, insstdev: pd.DataFrame, *, tolerance: float = 1.0) -> pd.DataFrame:
+    """``gps`` with its ECEF sigmas replaced by the INS position sigmas.
+
+    For the DFOP00 stream: the SV3 GNSS block logs the INS position but the
+    receiver's single-point sigmas (13-17 m at NBR1, against 1-2 m from
+    INSSTDEV), and with those GNATSS's Kalman filter follows the integrated
+    INS velocity instead, drifting metres from the track. Each row takes the
+    nearest ``insstdev`` row within ``tolerance`` seconds (lat/lon/alt sigmas as
+    north/east/up), rotated to ECEF at the row's position (the diagonal of
+    R diag(sig^2) R^T). Rows without one get null sigmas, which
+    :func:`write_gps_pos_freed` drops.
+    """
+    std = insstdev[["time", "lat_sig", "lon_sig", "alt_sig"]].dropna().sort_values("time")
+    gps = gps.sort_values("time")
+    m = _nearest(gps["time"], std, tolerance)
+    lat, lon, _ = ecef2geodetic(gps["ant_x"].to_numpy(), gps["ant_y"].to_numpy(), gps["ant_z"].to_numpy())
+    lat, lon = np.radians(lat), np.radians(lon)
+    # ECEF components of the local east, north and up unit vectors.
+    east = np.stack([-np.sin(lon), np.cos(lon), np.zeros_like(lon)])
+    north = np.stack([-np.sin(lat) * np.cos(lon), -np.sin(lat) * np.sin(lon), np.cos(lat)])
+    up = np.stack([np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)])
+    var = (
+        east**2 * m["lon_sig"].to_numpy() ** 2
+        + north**2 * m["lat_sig"].to_numpy() ** 2
+        + up**2 * m["alt_sig"].to_numpy() ** 2
+    )
+    return gps.assign(ant_sigx=np.sqrt(var[0]), ant_sigy=np.sqrt(var[1]), ant_sigz=np.sqrt(var[2]))
+
+
+def _nearest(times: pd.Series, df: pd.DataFrame, tolerance: float) -> pd.DataFrame:
+    """The row of ``df`` (sorted by ``time``) nearest each of ``times``,
+    all null where none is within ``tolerance`` seconds."""
+    t = pd.DatetimeIndex(df["time"]).as_unit("ns").asi8
+    q = pd.DatetimeIndex(times).as_unit("ns").asi8
+    if len(t) == 0:
+        return df.reindex(range(len(q)))
+    i = np.clip(np.searchsorted(t, q), 0, len(t) - 1)
+    before = np.maximum(i - 1, 0)
+    i = np.where(np.abs(t[before] - q) < np.abs(t[i] - q), before, i)
+    out = df.iloc[i].reset_index(drop=True)
+    out.loc[np.abs(t[i] - q) > tolerance * 1e9] = np.nan
+    return out
+
+
 def internal_delays(df: pd.DataFrame, site: PosfilterSite) -> tuple[dict[str, float], list[str]]:
     """Each transponder's turn-around time [s] for GNATSS ``internal_delay``,
     and warnings.
@@ -211,12 +282,19 @@ def write_sound_speed(df: pd.DataFrame, path: Path) -> int:
     return len(rows)
 
 
-def gnatss_config(site: PosfilterSite, scope: Scope, out_dir: Path, *, internal_delays: dict[str, float]) -> dict:
-    """The GNATSS posfilter configuration for an export in ``out_dir``.
+def gnatss_config(
+    site: PosfilterSite,
+    scope: Scope,
+    out_dir: Path,
+    *,
+    internal_delays: dict[str, float],
+    solver: SolverOptions | None = None,
+) -> dict:
+    """The GNATSS configuration for an export in ``out_dir``.
 
-    No ``solver`` section: GNATSS requires its ellipsoid and geoid
-    undulation once one is present, which belong to the solver phase; the
-    exported ``sound_speed.txt`` is ready for it.
+    Always a ``posfilter`` section; a ``solver`` section too when ``solver``
+    is given, reading the exported ``sound_speed.txt``. The metadata heights
+    are ellipsoidal, so the geoid undulation (which GNATSS adds to them) is 0.
     """
     out_dir = out_dir.resolve()
     lat, lon, alt = site.array_center
@@ -249,6 +327,15 @@ def gnatss_config(site: PosfilterSite, scope: Scope, out_dir: Path, *, internal_
         },
         "output": {"path": str(out_dir / "output") + "/"},
     }
+    if solver is not None:
+        cfg["solver"] = {
+            "reference_ellipsoid": WGS84,
+            "geoid_undulation": 0.0,
+            "gps_sigma_limit": solver.gps_sigma_limit,
+            "distance_limit": solver.distance_limit,
+            "harmonic_mean_start_depth": solver.harmonic_mean_start_depth,
+            "input_files": {"sound_speed": {"path": str(out_dir / FILES["sound_speed"])}},
+        }
     return cfg
 
 
@@ -260,6 +347,8 @@ def export_posfilter(
     *,
     positions: str = "DFOP00",
     sound_speed: bool = True,
+    solver: SolverOptions | None = None,
+    position_sigmas: str = "logged",
 ) -> ExportSummary:
     """Export a GNATSS posfilter run for ``site``'s window into ``out_dir``.
 
@@ -278,11 +367,18 @@ def export_posfilter(
         block) or ``"QCPIN"``; a PPP table replaces this at Level 3.
     sound_speed : bool
         Also export the latest sound speed profile at or before the window end.
+    solver : SolverOptions, optional
+        Add a GNATSS ``solver`` section; needs the sound speed profile.
+    position_sigmas : str
+        Antenna sigmas: ``"logged"`` (the stream's own) or ``"insstdev"``
+        (:func:`insstdev_sigmas`, for streams that log the INS position).
 
     Returns
     -------
     ExportSummary
     """
+    if position_sigmas not in ("logged", "insstdev"):
+        raise ValueError(f"position_sigmas must be 'logged' or 'insstdev', not {position_sigmas!r}")
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     t0, t1 = site.start, site.end
@@ -304,6 +400,9 @@ def export_posfilter(
         s.warnings.append(f"{s.inspva_rows - s.inspva_good} INSPVA rows lack good time/INS status; GNATSS drops them")
 
     gps = read("gnss_antenna_positions", file_type=positions)
+    if position_sigmas == "insstdev":
+        gps = insstdev_sigmas(gps, insstdev)
+    s.gps_sigmas = position_sigmas
     s.gps_rows, s.gps_dropped_no_sigma = write_gps_pos_freed(gps, out / FILES["gps_positions"])
 
     tt = read("travel_times")
@@ -311,6 +410,8 @@ def export_posfilter(
     s.warnings += tat_warnings
     s.pings, s.replies = write_pxp_tt(tt, site, out / FILES["travel_times"])
 
+    if solver is not None and not sound_speed:
+        raise ValueError("the solver needs the sound speed profile")
     if sound_speed:
         sv = reader.read("sound_speed", scope, end=t1)
         if sv.empty:
@@ -321,8 +422,10 @@ def export_posfilter(
                 latest = latest[latest["stream_edid"] == latest["stream_edid"].iloc[0]]
                 s.warnings.append("several sound speed profiles at the same time; exported the first stream")
             s.sound_speed_rows = write_sound_speed(latest, out / FILES["sound_speed"])
+    if solver is not None and s.sound_speed_rows == 0:
+        raise ValueError(f"no sound speed profile for {scope} at or before {t1}; the solver needs one")
 
-    cfg = gnatss_config(site, scope, out, internal_delays=s.internal_delays)
+    cfg = gnatss_config(site, scope, out, internal_delays=s.internal_delays, solver=solver)
     (out / "config.yaml").write_text(json.dumps(cfg, indent=2) + "\n")
     (out / "summary.json").write_text(json.dumps(asdict(s), indent=2) + "\n")
     for w in s.warnings:
