@@ -17,9 +17,13 @@ import (
 
 	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
 	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/ahrs00"
+	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/ctd"
 	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/dfop00"
+	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/gnss00"
 	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/novatel000"
 	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/novatel770"
+	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/qcpin"
+	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/seabird"
 )
 
 // ParseFunc parses the logType logs of one file into the rows of one table,
@@ -73,6 +77,14 @@ var Parsers = []Parser{
 	{FileType: novatel000.FileType, LogType: novatel000.LogINSSTDEVA, Table: datamodels.INSSTDEV, Parsefunc: novatel000.INSSTDEV, EDID: streamEDID(novatel000.FileType)},
 	{FileType: dfop00.FileType, LogType: dfop00.LogType, Table: datamodels.TWTT, Parsefunc: dfop00.TWTT, EDID: streamEDID(dfop00.FileType)},
 	{FileType: dfop00.FileType, LogType: dfop00.LogType, Table: datamodels.AttitudeAHRS, Parsefunc: dfop00.AttitudeAHRS, EDID: streamEDID(dfop00.FileType)},
+	{FileType: dfop00.FileType, LogType: dfop00.LogType, Table: datamodels.GNSSAntennaPositions, Parsefunc: dfop00.AntennaPositions, EDID: streamEDID(dfop00.FileType)},
+	{FileType: gnss00.FileType, LogType: gnss00.LogGGA, Table: datamodels.GNSSAntennaPositions, Parsefunc: gnss00.AntennaPositions, EDID: streamEDID(gnss00.FileType)},
+	{FileType: qcpin.FileType, LogType: qcpin.LogEvents, Table: datamodels.TWTT, Parsefunc: qcpin.TWTT, EDID: streamEDID(qcpin.FileType)},
+	{FileType: qcpin.FileType, LogType: qcpin.LogEvents, Table: datamodels.AttitudeAHRS, Parsefunc: qcpin.AttitudeAHRS, EDID: streamEDID(qcpin.FileType)},
+	{FileType: qcpin.FileType, LogType: qcpin.LogEvents, Table: datamodels.GNSSAntennaPositions, Parsefunc: qcpin.AntennaPositions, EDID: streamEDID(qcpin.FileType)},
+	{FileType: qcpin.FileType, LogType: qcpin.LogRANGEA, Table: datamodels.GNSSObs, Parsefunc: qcpin.GNSSObs, EDID: streamEDID(qcpin.FileType)},
+	{FileType: ctd.FileType, LogType: ctd.LogType, Table: datamodels.SoundSpeed, Parsefunc: ctd.SoundSpeed, EDID: streamEDID(ctd.FileType)},
+	{FileType: seabird.FileType, LogType: seabird.LogType, Table: datamodels.SoundSpeed, Parsefunc: seabird.SoundSpeed, EDID: streamEDID(seabird.FileType)},
 }
 
 // ForFileType returns the parsers of fileType (case-insensitive), in

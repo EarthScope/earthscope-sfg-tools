@@ -4,7 +4,6 @@ package novatel000
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -13,7 +12,6 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	novatelascii "gitlab.com/earthscope/gnsstools/codecs/novatel/novatel_ascii"
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
-	"gitlab.com/earthscope/gnsstools/geodata/gnssiceberg"
 
 	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
 	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/internal/logtype"
@@ -30,10 +28,6 @@ const (
 	LogINSPVAA   = "INSPVAA"   // INSPVA
 	LogINSSTDEVA = "INSSTDEVA" // INSSTDEV
 )
-
-// errBadTime marks a RANGEA whose epoch time fails gnssiceberg.ValidateEpoch:
-// a decode error (the ASCII CRC is not checked), not data.
-var errBadTime = errors.New("bad epoch time")
 
 // GNSSObs parses the logType (LogRANGEA) logs of the NOV000.bin file at path
 // into GNSSObs rows (see datamodels.ParsedSchema). The caller releases the
@@ -114,7 +108,7 @@ func scan(path, want, valid string) (records, error) {
 			continue
 		}
 		if err := decode(m, &r.epochs, &r.inspva, &r.insstdev); err != nil {
-			if errors.Is(err, errBadTime) {
+			if errors.Is(err, novatel.ErrBadEpochTime) {
 				badTime++
 			} else {
 				failed++
@@ -128,22 +122,21 @@ func scan(path, want, valid string) (records, error) {
 	return r, nil
 }
 
+// timeStatus is m's header time status, or nil when it has none.
+func timeStatus(m novatelascii.LongMessage) *string {
+	if m.TimeStatus == "" {
+		return nil
+	}
+	s := m.TimeStatus
+	return &s
+}
+
 func decode(m novatelascii.LongMessage, epochs *[]observation.Epoch, inspva *[]datamodels.INSPVARow, insstdev *[]datamodels.INSSTDEVRow) error {
 	switch m.Msg {
 	case LogRANGEA:
-		rangea, err := novatelascii.DeserializeRANGEA(m.Data)
+		epoch, err := novatel.RANGEAEpoch(m)
 		if err != nil {
 			return err
-		}
-		epoch, err := rangea.SerializeGNSSEpoch(m.Time())
-		if err != nil {
-			return err
-		}
-		if len(epoch.Satellites) == 0 {
-			return fmt.Errorf("RANGEA with no satellites")
-		}
-		if err := gnssiceberg.ValidateEpoch(epoch.Time); err != nil {
-			return fmt.Errorf("%w: %v", errBadTime, err)
 		}
 		*epochs = append(*epochs, epoch)
 	case LogINSPVAA:
@@ -151,12 +144,14 @@ func decode(m novatelascii.LongMessage, epochs *[]observation.Epoch, inspva *[]d
 		if err != nil {
 			return err
 		}
+		r.TimeStatus = timeStatus(m)
 		*inspva = append(*inspva, r)
 	case LogINSSTDEVA:
 		r, err := novatel.ParseINSSTDEV(m.Data, m.Time())
 		if err != nil {
 			return err
 		}
+		r.TimeStatus = timeStatus(m)
 		*insstdev = append(*insstdev, r)
 	}
 	return nil

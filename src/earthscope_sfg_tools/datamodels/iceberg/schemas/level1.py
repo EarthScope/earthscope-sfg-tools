@@ -79,6 +79,18 @@ INSPVA = TableDef(
         Column("roll", DOUBLE, "Roll angle [deg]", ge=-180, le=180),
         Column("pitch", DOUBLE, "Pitch angle [deg]", ge=-90, le=90),
         Column("heading", DOUBLE, "Heading angle [deg]", ge=0, lt=360),
+        Column(
+            "ins_status",
+            STRING,
+            "INS solution status as logged, e.g. INS_SOLUTION_GOOD, INS_ALIGNING",
+            required=False,
+        ),
+        Column(
+            "time_status",
+            STRING,
+            "Log header GPS time status, e.g. FINESTEERING, COARSESTEERING",
+            required=False,
+        ),
         STREAM_EDID,
     ),
 )
@@ -105,6 +117,12 @@ INSSTDEV = TableDef(
         Column("cov_hh", DOUBLE, "Heading (azimuth) std dev [deg], as logged", ge=0),
         Column("ext_sol_stat", STRING, "Extended solution status", required=False),
         Column("time_since_update", STRING, "Time since last update", required=False),
+        Column(
+            "time_status",
+            STRING,
+            "Log header GPS time status, e.g. FINESTEERING, COARSESTEERING",
+            required=False,
+        ),
         STREAM_EDID,
     ),
 )

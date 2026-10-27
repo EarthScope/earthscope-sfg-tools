@@ -28,7 +28,7 @@ func ParseINSPVA(data string, t time.Time) (datamodels.INSPVARow, error) {
 	if len(f) < 12 {
 		return datamodels.INSPVARow{}, fmt.Errorf("INSPVAA: %d fields, want 12", len(f))
 	}
-	r := datamodels.INSPVARow{Time: t}
+	r := datamodels.INSPVARow{Time: t, INSStatus: nonEmpty(strings.TrimSpace(f[11]))}
 	err := parseFloats("INSPVAA", f, 2, &r.Lat, &r.Lon, &r.Alt, &r.North, &r.East, &r.Up, &r.Roll, &r.Pitch, &r.Azimuth)
 	return r, err
 }

@@ -19,6 +19,9 @@ name = "earthscope-sfg-tools"
 requires-python = ">= 3.11"
 version = "0.2.1"
 
+[project.scripts]
+sfg-catalog = "earthscope_sfg_tools.catalog.cli:main"
+
 [project.optional-dependencies]
 tiledb = ["tiledb>=0.30"]
 iceberg = ["pyiceberg[pyiceberg-core]>=0.12", "pyarrow>=17"]

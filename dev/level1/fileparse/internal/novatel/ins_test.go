@@ -11,7 +11,8 @@ func TestParseINS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pva.Lat != 45.30245563418 || pva.Azimuth != 70.416827684 {
+	if pva.Lat != 45.30245563418 || pva.Azimuth != 70.416827684 ||
+		pva.INSStatus == nil || *pva.INSStatus != "INS_SOLUTION_GOOD" {
 		t.Errorf("INSPVA = %+v", pva)
 	}
 	std, err := ParseINSSTDEV("1.9247,1.7252,2.2174,0.0550,0.0479,0.0502,0.0325,0.0350,0.3994,2e000041,0,0,0,0", gps)

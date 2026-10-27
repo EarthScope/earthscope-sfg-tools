@@ -123,10 +123,17 @@ func TestBuildersFillEveryColumn(t *testing.T) {
 			return BuildTWTT([]TWTTRow{{MTID: "m", TTransmit: t0, TReceive: t0, TravelTime: 1, DBV: 1, Acc: 1, ASNR: f64(1), TAT: f64(1)}}, "x")
 		},
 		INSPVA.Name: func() (arrow.Table, error) {
-			return BuildINSPVA([]INSPVARow{{Time: t0}}, "x")
+			return BuildINSPVA([]INSPVARow{{Time: t0, INSStatus: strp("INS_SOLUTION_GOOD"), TimeStatus: strp("FINESTEERING")}}, "x")
 		},
 		INSSTDEV.Name: func() (arrow.Table, error) {
-			return BuildINSSTDEV([]INSSTDEVRow{{Time: t0, ExtSolStat: strp("s"), TimeSinceUpdate: strp("0")}}, "x")
+			return BuildINSSTDEV([]INSSTDEVRow{{Time: t0, ExtSolStat: strp("s"), TimeSinceUpdate: strp("0"), TimeStatus: strp("FINESTEERING")}}, "x")
+		},
+		SoundSpeed.Name: func() (arrow.Table, error) {
+			return BuildSoundSpeed([]SoundSpeedRow{{Time: t0, Depth: 1, Speed: 1500}}, "x")
+		},
+		GNSSAntennaPositions.Name: func() (arrow.Table, error) {
+			return BuildGNSSAntennaPositions([]GNSSAntennaPositionRow{{Time: t0, SigX: f64(1), SigY: f64(1), SigZ: f64(1), Q: 1,
+				NumberOfSatellites: i32(9), PDOP: f64(1), WRMS: f64(1)}}, "x")
 		},
 		GNSSObs.Name: func() (arrow.Table, error) {
 			return BuildGNSSObs("x", GNSSObsSource{LogSource: "x", Epochs: []observation.Epoch{{Time: t0,
@@ -138,7 +145,8 @@ func TestBuildersFillEveryColumn(t *testing.T) {
 	for _, def := range Level1Tables {
 		f, ok := build[def.Name]
 		if !ok {
-			continue // no parser produces it (sound_speed)
+			t.Errorf("%s: no builder in this test", def.Name)
+			continue
 		}
 		tbl, err := f()
 		if err != nil {

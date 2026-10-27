@@ -49,7 +49,7 @@ func parseFiles(ctx context.Context, cat catalog.Catalog, parsers []fileparse.Pa
 }
 
 func main() {
-	data_path, err := filepath.Abs("/Users/franklyndunbar/Project/SeaFloorGeodesy/Data/SFGMain2/cascadia-gorda/SLT1/2026_A_1126/raw")
+	data_path, err := filepath.Abs("/Volumes/DunbarSSD/Project/SeafloorGeodesy/SFGMain/cascadia-gorda/NBR1/2025_A_1126/raw")
 	if err != nil {
 		slog.Error("failed to get absolute path", "error", err)
 		os.Exit(1)
@@ -79,6 +79,16 @@ func main() {
 		slog.Error("failed to glob DFOP00 files", "error", err)
 		os.Exit(1)
 	}
+	ctd, err := filepath.Glob(filepath.Join(data_path, "*CTD*_fit"))
+	if err != nil {
+		slog.Error("failed to glob CTD files", "error", err)
+		os.Exit(1)
+	}
+	seabird, err := filepath.Glob(filepath.Join(data_path, "*.cnv"))
+	if err != nil {
+		slog.Error("failed to glob Sea-Bird files", "error", err)
+		os.Exit(1)
+	}
 
 	ctx := context.Background()
 
@@ -97,8 +107,8 @@ func main() {
 	// build the scope, then parse the nov000 files across all log types
 	scope := datamodels.Scope{
 		Network:  "cascadia-gorda",
-		Station:  "SLT1",
-		Campaign: "2026_A_1126",
+		Station:  "NBR1",
+		Campaign: "2025_A_1126",
 	}
 	// load the parsers for nov000 files
 	parsers := fileparse.ForFileType("NOV000")
@@ -112,5 +122,11 @@ func main() {
 
 	parsers = fileparse.ForFileType("NOV770")
 	parseFiles(ctx, *cat, parsers, nov770, scope)
+
+	parsers = fileparse.ForFileType("CTD")
+	parseFiles(ctx, *cat, parsers, ctd, scope)
+
+	parsers = fileparse.ForFileType("SEABIRD")
+	parseFiles(ctx, *cat, parsers, seabird, scope)
 
 }

@@ -14,6 +14,8 @@ type INSPVARow struct {
 	Lat, Lon, Alt        float64 // [deg], [deg], [m]
 	North, East, Up      float64 // [m/s]
 	Roll, Pitch, Azimuth float64 // [deg]
+	INSStatus            *string // e.g. INS_SOLUTION_GOOD
+	TimeStatus           *string // log header time status, e.g. FINESTEERING
 }
 
 // INSSTDEVRow is one INSSTDEVA log. Time is the log header time (GPS time scale).
@@ -23,6 +25,7 @@ type INSSTDEVRow struct {
 	NorthSig, EastSig, UpSig      float64 // [m/s]
 	RollSig, PitchSig, AzimuthSig float64 // [deg]
 	ExtSolStat, TimeSinceUpdate   *string
+	TimeStatus                    *string // log header time status, e.g. FINESTEERING
 }
 
 // utcMicros is the GPS-scale time gps as a UTC microsecond timestamp.
@@ -44,12 +47,16 @@ func BuildINSPVA(records []INSPVARow, logSource string) (arrow.Table, error) {
 	for _, name := range []string{"lat", "lon", "alt", "north", "east", "up", "roll", "pitch", "heading"} {
 		cols = append(cols, col[*array.Float64Builder](b, name))
 	}
+	insStatus := col[*array.StringBuilder](b, "ins_status")
+	timeStatus := col[*array.StringBuilder](b, "time_status")
 	for _, r := range records {
 		logSrc.Append(logSource)
 		tm.Append(utcMicros(r.Time))
 		for i, v := range []float64{r.Lat, r.Lon, r.Alt, r.North, r.East, r.Up, r.Roll, r.Pitch, r.Azimuth} {
 			cols[i].Append(v)
 		}
+		appendOpt(insStatus, r.INSStatus)
+		appendOpt(timeStatus, r.TimeStatus)
 	}
 	return b.Table()
 }
@@ -71,6 +78,7 @@ func BuildINSSTDEV(records []INSSTDEVRow, logSource string) (arrow.Table, error)
 	}
 	extSolStat := col[*array.StringBuilder](b, "ext_sol_stat")
 	sinceUpdate := col[*array.StringBuilder](b, "time_since_update")
+	timeStatus := col[*array.StringBuilder](b, "time_status")
 	for _, r := range records {
 		logSrc.Append(logSource)
 		tm.Append(utcMicros(r.Time))
@@ -79,6 +87,7 @@ func BuildINSSTDEV(records []INSSTDEVRow, logSource string) (arrow.Table, error)
 		}
 		appendOpt(extSolStat, r.ExtSolStat)
 		appendOpt(sinceUpdate, r.TimeSinceUpdate)
+		appendOpt(timeStatus, r.TimeStatus)
 	}
 	return b.Table()
 }

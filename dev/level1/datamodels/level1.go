@@ -45,6 +45,8 @@ var INSPVA = TableDef{
 		Column{Name: "roll", Type: float64Type, Doc: "Roll angle [deg]", Required: true, Ge: bound(-180), Le: bound(180)},
 		Column{Name: "pitch", Type: float64Type, Doc: "Pitch angle [deg]", Required: true, Ge: bound(-90), Le: bound(90)},
 		Column{Name: "heading", Type: float64Type, Doc: "Heading angle [deg]", Required: true, Ge: bound(0), Lt: bound(360)},
+		Column{Name: "ins_status", Type: str, Doc: "INS solution status as logged, e.g. INS_SOLUTION_GOOD, INS_ALIGNING"},
+		Column{Name: "time_status", Type: str, Doc: "Log header GPS time status, e.g. FINESTEERING, COARSESTEERING"},
 	),
 }
 
@@ -69,6 +71,7 @@ var INSSTDEV = TableDef{
 		Column{Name: "cov_hh", Type: float64Type, Doc: "Heading (azimuth) std dev [deg], as logged", Required: true, Ge: bound(0)},
 		Column{Name: "ext_sol_stat", Type: str, Doc: "Extended solution status"},
 		Column{Name: "time_since_update", Type: str, Doc: "Time since last update"},
+		Column{Name: "time_status", Type: str, Doc: "Log header GPS time status, e.g. FINESTEERING, COARSESTEERING"},
 	),
 }
 
@@ -147,6 +150,22 @@ var AntennaPositionColumns = []Column{
 	{Name: "ant_sigz", Type: float64Type, Doc: "Antenna position std dev Z, ECEF [m]", Ge: bound(0)},
 }
 
+// GNSSAntennaPositions mirrors level1.GNSS_ANTENNA_POSITIONS.
+var GNSSAntennaPositions = TableDef{
+	Name:       "gnss_antenna_positions",
+	Level:      1,
+	TimeColumn: "time",
+	Doc: "Antenna positions from the GNSS block of SV3 events (DFOP00, QCPIN), " +
+		"converted to ECEF at ingest. Sigmas are rotated from logged ENU; null " +
+		"when Sonardyne reports the -1.0 'not available' sentinel.",
+	Columns: level1(append(append([]Column{}, AntennaPositionColumns...),
+		Column{Name: "q", Type: int32Type, Doc: "GPS fix quality (SV3GPSQuality)", Required: true, Ge: bound(0), Le: bound(9)},
+		Column{Name: "number_of_satellites", Type: int32Type, Doc: "Number of satellites used in the solution", Ge: bound(0)},
+		Column{Name: "pdop", Type: float64Type, Doc: "Position dilution of precision", Ge: bound(0)},
+		Column{Name: "wrms", Type: float64Type, Doc: "Weighted RMS of position residuals [m]", Ge: bound(0)},
+	)...),
+}
+
 // Level1Tables lists every Level 1 table definition.
 var Level1Tables = []TableDef{
 	TWTT,
@@ -155,4 +174,5 @@ var Level1Tables = []TableDef{
 	GNSSObs,
 	AttitudeAHRS,
 	SoundSpeed,
+	GNSSAntennaPositions,
 }

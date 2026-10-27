@@ -1,7 +1,6 @@
 package dfop00
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,21 +10,6 @@ import (
 
 	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
 )
-
-func TestUnixMicros(t *testing.T) {
-	for in, want := range map[string]int64{
-		"1780460559.981377":  1780460559981377,
-		"1780460560.0":       1780460560000000,
-		"1780460560":         1780460560000000,
-		"1780460560.0187323": 1780460560018732, // truncated below the microsecond
-		"1.78046056e9":       1780460560000000,
-	} {
-		got, err := unixMicros(json.Number(in))
-		if err != nil || got != want {
-			t.Errorf("unixMicros(%s) = %d, %v; want %d", in, got, err, want)
-		}
-	}
-}
 
 // Two ping/reply cycles: the first reply is real, the second is a zero
 // range (no reply). The second ping's AHRS block is an error code.

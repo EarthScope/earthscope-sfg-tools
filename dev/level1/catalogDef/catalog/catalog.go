@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/apache/iceberg-go"
 	icecat "github.com/apache/iceberg-go/catalog"
 	"github.com/apache/iceberg-go/catalog/glue"
@@ -120,14 +122,49 @@ func (c *Catalog) Table(ctx context.Context, def datamodels.TableDef) (*table.Ta
 		return nil, fmt.Errorf("creating namespace %s: %w", def.Namespace(), err)
 	}
 	tbl, err := c.cat.LoadTable(ctx, def.Identifier())
-	if errors.Is(err, icecat.ErrNoSuchTable) {
+	switch {
+	case errors.Is(err, icecat.ErrNoSuchTable):
 		tbl, err = c.create(ctx, def)
+	case err == nil:
+		tbl, err = c.evolve(ctx, tbl, def)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", key, err)
 	}
 	c.tables[key] = tbl
 	return tbl, nil
+}
+
+// evolve adds to tbl the columns def has and tbl lacks, so a table created by
+// an earlier version of def takes new optional columns; existing rows read
+// them as null. A missing required column is an error: old rows would
+// violate it. Columns def no longer has are left alone. Tables defined by
+// another library (def.External) are not evolved.
+func (c *Catalog) evolve(ctx context.Context, tbl *table.Table, def datamodels.TableDef) (*table.Table, error) {
+	if def.External != nil {
+		return tbl, nil
+	}
+	var missing []datamodels.Column
+	for _, col := range def.Columns {
+		if _, ok := tbl.Schema().FindFieldByName(col.Name); !ok {
+			missing = append(missing, col)
+		}
+	}
+	if len(missing) == 0 {
+		return tbl, nil
+	}
+	tx := tbl.NewTransaction()
+	update := tx.UpdateSchema(true, false)
+	for _, col := range missing {
+		if col.Required {
+			return nil, fmt.Errorf("table lacks required column %q; it cannot be added to existing rows", col.Name)
+		}
+		update = update.AddColumn([]string{col.Name}, col.Type, col.Doc, false, nil)
+	}
+	if err := update.Commit(); err != nil {
+		return nil, fmt.Errorf("adding columns: %w", err)
+	}
+	return tx.Commit(ctx)
 }
 
 func (c *Catalog) create(ctx context.Context, def datamodels.TableDef) (*table.Table, error) {
@@ -152,6 +189,61 @@ func (c *Catalog) create(ctx context.Context, def datamodels.TableDef) (*table.T
 		icecat.WithSortOrder(order),
 		icecat.WithProperties(props),
 	)
+}
+
+// inTableOrder returns rows relabelled with tbl's own schema: its column
+// order and field IDs, matched by name. Rows built from a TableDef carry the
+// def's field IDs (declaration order) in their Arrow field metadata, and
+// iceberg-go maps written columns by those IDs; an evolved table (see
+// evolve) numbers its added columns after the ones it had, so def-labelled
+// rows would land values in the wrong columns. A table column missing from
+// rows is written as nulls if optional; a rows column the table lacks, or a
+// type mismatch, is an error. The caller releases the result.
+func inTableOrder(tbl *table.Table, rows arrow.Table) (arrow.Table, error) {
+	n := rows.NumRows()
+	tsc, err := table.SchemaToArrowSchema(tbl.Schema(), nil, true, false)
+	if err != nil {
+		return nil, err
+	}
+	outFields := tsc.Fields()
+	cols := make([]arrow.Column, len(outFields))
+	release := func() {
+		for i := range cols {
+			if cols[i].Data() != nil {
+				cols[i].Release()
+			}
+		}
+	}
+	used := 0
+	for i, f := range outFields {
+		idx := rows.Schema().FieldIndices(f.Name)
+		switch {
+		case len(idx) == 1:
+			data := rows.Column(idx[0]).Data()
+			if !arrow.TypeEqual(data.DataType(), f.Type) {
+				release()
+				return nil, fmt.Errorf("column %q is %s, table has %s", f.Name, data.DataType(), f.Type)
+			}
+			cols[i] = *arrow.NewColumn(f, data)
+			used++
+		case !f.Nullable:
+			release()
+			return nil, fmt.Errorf("rows lack required column %q", f.Name)
+		default:
+			nulls := array.MakeArrayOfNull(memory.DefaultAllocator, f.Type, int(n))
+			chunked := arrow.NewChunked(f.Type, []arrow.Array{nulls})
+			nulls.Release()
+			cols[i] = *arrow.NewColumn(f, chunked)
+			chunked.Release()
+		}
+	}
+	if used != int(rows.NumCols()) {
+		release()
+		return nil, fmt.Errorf("rows have columns the table lacks")
+	}
+	out := array.NewTable(tsc, cols, n)
+	release()
+	return out, nil
 }
 
 // appendBatchRows is the row count per write batch when appending.
@@ -190,8 +282,13 @@ func (c *Catalog) Append(ctx context.Context, def datamodels.TableDef, rows arro
 	if err != nil {
 		return 0, err
 	}
+	ordered, err := inTableOrder(tbl, rows)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", def.Name, err)
+	}
+	defer ordered.Release()
 	tx := tbl.NewTransaction()
-	if err := tx.OverwriteTable(ctx, rows, appendBatchRows, o.props, table.WithOverwriteFilter(filter)); err != nil {
+	if err := tx.OverwriteTable(ctx, ordered, appendBatchRows, o.props, table.WithOverwriteFilter(filter)); err != nil {
 		return 0, fmt.Errorf("writing %s: %w", def.Name, err)
 	}
 	updated, err := tx.Commit(ctx)
