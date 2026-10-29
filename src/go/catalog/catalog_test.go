@@ -35,3 +35,15 @@ func TestCatalogTable(t *testing.T) {
 		t.Fatalf("reopen: %v", err)
 	}
 }
+
+// Opening a Glue catalog only loads AWS config (no network calls), so a
+// misregistered catalog type fails here rather than at the first ingest.
+func TestOpenGlue(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "test")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
+	cat, err := Open(context.Background(), Config{Type: TypeGlue, Warehouse: "s3://bucket/prefix", Region: "us-east-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat.Close()
+}

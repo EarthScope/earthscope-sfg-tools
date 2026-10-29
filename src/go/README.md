@@ -22,6 +22,7 @@ The binary is written to `src/go/build/sfg_<os>_<arch>`. Its commands:
 - `nov0002rnx`, `nova2rnx`, `novb2rnx`: NovAtel NOV000, ASCII and binary logs to RINEX
 - `level1 parse`: one raw file to Level 1 Arrow IPC tables plus `result.json` (rows per table and log source)
 - `level1 ingest`: a campaign's raw files into the Level 1 Iceberg catalog (local SQL or AWS Glue)
+- `level1 rinex`: one GPS day of one `gnss_observations` stream (scope, file type, log source) from the catalog to RINEX
 - `nov2level1`: a NovAtel log to Level 1 Arrow IPC tables (legacy; replaced by `level1 parse`)
 - `rnxqc`: RINEX observation quality check
 - `crinex`: Hatanaka (CRINEX) compression and decompression

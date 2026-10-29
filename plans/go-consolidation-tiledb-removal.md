@@ -124,7 +124,14 @@ It pins this package to commit `8e64f62` with the `tiledb` and `iceberg` extras.
 
 ## Out of scope
 
-- **RINEX from stored data.** `tdb2rnx` (TileDB → RINEX) goes away with nothing to replace it. RINEX from `gnss_observations` in Iceberg is new work, if needed.
+- **RINEX from stored data.** `tdb2rnx` (TileDB → RINEX) goes away. Its replacement was added on 2026-10-29: `Catalog.WriteRINEX` and `sfg level1 rinex` write one GPS day of one `gnss_observations` stream.
+  - **Check:** NBR1 2025-09-15 (NOV000 RANGEA, 20 Hz) was compared with `nov0002rnx` on the same 16 files. All 40,017,492 fields in the 399,924 common epochs are identical.
+  - **Extra epochs:** the catalog file also has the day's first 93 epochs (00:00:00–00:00:18.4 GPST). They come from the previous day's last raw file, and `nov0002rnx` writes them to neither of its files.
+  - **Cost:** 7 s and 6.0 GB peak, against 26 s and 5.9 GB for `nov0002rnx`. Both hold the day's epochs, because a RINEX 3/4 header needs them all before the first epoch is written.
+  - **PRIDE:** both files were run with the production options (`pdp3 -m K -i 1 --loose-edit`).
+    - Both took 59 minutes and flagged the same 193 epochs.
+    - The catalog file gives 19 more 1 s epochs (00:00:00–00:00:18) and fixes 2 more narrow-lane ambiguities: 256 of 352 (72.7%) against 254 (72.2%). Wide-lane fixing is 97.0% in both.
+    - On the 79,869 shared epochs the median 3D difference is 0.1 mm. Hours 00–01 differ by up to 27 cm and 8 cm, where the two solutions fixed different ambiguities. From 03:00 on, no epoch differs by more than 0.5 mm.
 - **Moving generic NovAtel decoding into gnsstools** (INSPVAA/INSSTDEVA, BESTPOS). Worth doing later; Sonardyne, GPSA, SV3 and NMEA stay here.
 - **The Level 0 parser PRD's remaining API:** per-table counts in the result, and partial-failure handling. Phase 3's `parse` command reports the counts parsers already return; reworking the API follows the PRD separately. The PRD's log-source selection was dropped on 2026-10-29: parse functions map file type → table and return every log source.
 

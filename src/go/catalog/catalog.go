@@ -16,6 +16,7 @@ import (
 	icecat "github.com/apache/iceberg-go/catalog"
 	"github.com/apache/iceberg-go/catalog/glue"
 	sqlcat "github.com/apache/iceberg-go/catalog/sql"
+	icebergio "github.com/apache/iceberg-go/io"
 	_ "github.com/apache/iceberg-go/io/gocloud" // s3:// table IO for glue
 	"github.com/apache/iceberg-go/table"
 	"github.com/uptrace/bun/driver/sqliteshim"
@@ -56,11 +57,15 @@ func Open(ctx context.Context, cfg Config) (*Catalog, error) {
 		if !strings.HasPrefix(cfg.Warehouse, "s3://") {
 			return nil, fmt.Errorf("glue warehouse %q is not an s3:// URI", cfg.Warehouse)
 		}
-		props := iceberg.Properties{"warehouse": strings.TrimSuffix(cfg.Warehouse, "/")}
+		// The catalog type comes from props["type"]; Load's name argument is
+		// only the catalog's name. The table data IO reads these props too,
+		// so the region is set for S3 as well as Glue.
+		props := iceberg.Properties{"type": TypeGlue, "warehouse": strings.TrimSuffix(cfg.Warehouse, "/")}
 		if cfg.Region != "" {
 			props[glue.Region] = cfg.Region
+			props[icebergio.S3Region] = cfg.Region
 		}
-		cat, err := icecat.Load(ctx, TypeGlue, props)
+		cat, err := icecat.Load(ctx, "default", props)
 		if err != nil {
 			return nil, fmt.Errorf("opening glue catalog: %w", err)
 		}
