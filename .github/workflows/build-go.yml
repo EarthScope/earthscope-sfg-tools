@@ -18,24 +18,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            pixi-env: tiledb
-          - os: macos-latest   # arm64
-            pixi-env: tiledb
-          - os: windows-latest
-            pixi-env: tiledb
-            
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up pixi
-        uses: prefix-dev/setup-pixi@v0.8.3
-        with:
-          environments: ${{ matrix.pixi-env }}
-          locked: false
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -43,33 +31,24 @@ jobs:
           go-version-file: src/go/go.mod
           cache-dependency-path: src/go/go.sum
 
-
+      # The binary is pure Go (no CGO), so it needs no C toolchain or conda env.
       - name: Build Go binary (Unix)
         if: runner.os != 'Windows'
-        run: pixi run -e ${{ matrix.pixi-env }} build-go
+        run: make -B
+        working-directory: src/go
 
-      # The Makefile is Unix-only (make + shell conditionals) and conda-on-Windows
-      # lays headers/libs out under Library/{include,lib} rather than the Unix
-      # {include,lib}, so Windows gets its own build step instead of `make`.
-      # pixi's win-64 `go-cgo` dependency pulls in a MinGW-w64 gcc that links fine
-      # against conda-forge's (MSVC-built) tiledb win-64 package -- verified below
-      # by actually running the resulting exe, not just checking that link succeeded.
+      # The Makefile is Unix-only (make + shell conditionals), so Windows runs
+      # go build directly and checks the resulting exe starts.
       - name: Build Go binary (Windows)
         if: runner.os == 'Windows'
         shell: bash
+        working-directory: src/go
         run: |
           set -euxo pipefail
-          PREFIX="$(pwd)/.pixi/envs/${{ matrix.pixi-env }}/Library"
-          mkdir -p src/go/build
-          cd src/go
-          pixi run -e ${{ matrix.pixi-env }} bash -c "
-            set -euxo pipefail
-            CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
-            CGO_CFLAGS='-I${PREFIX}/include' \
-            CGO_LDFLAGS='-L${PREFIX}/lib -ltiledb' \
-            go build -o build/sfg_windows_amd64.exe -buildvcs=false ./cmd
-            PATH=\"${PREFIX}/bin:\$PATH\" ./build/sfg_windows_amd64.exe --help >/dev/null
-          "
+          mkdir -p build
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o build/sfg_windows_amd64.exe -buildvcs=false ./cmd
+          ./build/sfg_windows_amd64.exe --help >/dev/null
+
   commit-binaries:
     needs: build
     if: github.event_name == 'push'

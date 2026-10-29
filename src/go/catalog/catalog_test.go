@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
 )
 
 func TestCatalogTable(t *testing.T) {

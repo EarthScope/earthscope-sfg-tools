@@ -78,7 +78,7 @@ func TestGNSSObs(t *testing.T) {
 		good[40:],
 	)
 
-	tbl, err := GNSSObs(path, LogRANGEA)
+	tbl, err := GNSSObs(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,14 +110,6 @@ func TestGNSSObs(t *testing.T) {
 	}
 }
 
-func TestGNSSObsWrongLogType(t *testing.T) {
-	path := writeNOV000(t, rangea("FINESTEERING", "2326", "02000000"))
-	if tbl, err := GNSSObs(path, LogINSPVAA); err == nil {
-		tbl.Release()
-		t.Error("want an error for a log type GNSSObs is not built from")
-	}
-}
-
 // INSPVAA rows keep the logged INS status and header time status, so the
 // posfilter export can apply GNATSS's FINESTEERING/INS_SOLUTION_GOOD filter.
 func TestINSPVAStatus(t *testing.T) {
@@ -129,7 +121,7 @@ func TestINSPVAStatus(t *testing.T) {
 		inspva("FINESTEERING", "188418.000", "INS_SOLUTION_GOOD"),
 		inspva("COARSESTEERING", "188419.000", "INS_ALIGNING"),
 	)
-	tbl, err := INSPVA(path, LogINSPVAA)
+	tbl, err := INSPVA(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,5 +134,30 @@ func TestINSPVAStatus(t *testing.T) {
 	if ins.Value(0) != "INS_SOLUTION_GOOD" || ts.Value(0) != "FINESTEERING" ||
 		ins.Value(1) != "INS_ALIGNING" || ts.Value(1) != "COARSESTEERING" {
 		t.Errorf("statuses = %v %v", ins, ts)
+	}
+}
+
+// A receiver adjusting its clock can log a known time status with week 0
+// (NDP1 2023). Such a row lands in 1980 and widens the file's replace window
+// back over every earlier file of its stream, so it is skipped like UNKNOWN.
+func TestINSWeekZeroSkipped(t *testing.T) {
+	path := writeNOV000(t,
+		"#INSPVAA,USB2,0,49.0,COARSEADJUSTING,0,12.150,02440000,54e2,15823;0,12.150000000,0.00000000000,0.00000000000,0.0000,0.0000,0.0000,0.0000,0.000000000,0.000000000,0.000000000,WAITING_INITIALPOS*4633cf22\r\n",
+		"#INSSTDEVA,USB2,0,49.0,COARSEADJUSTING,0,12.150,02440000,2396,15823;0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,00000000,1,0,7fd1b3,0*3af1509c\r\n",
+		"#INSPVAA,USB2,0,69.0,FINESTEERING,2326,188418.000,02000000,5103,15823;2326,188418.000,42.13003285,-125.11183814,-31.878,-0.2412,0.6377,0.2949,2.6278,0.2994,70.4168,INS_SOLUTION_GOOD*12345678\r\n",
+	)
+	for name, parse := range map[string]func(string) (arrow.Table, error){"inspva": INSPVA, "insstdev": INSSTDEV} {
+		tbl, err := parse(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := int64(0)
+		if name == "inspva" {
+			want = 1
+		}
+		if n := tbl.NumRows(); n != want {
+			t.Errorf("%s: %d rows, want %d (the week-0 log skipped)", name, n, want)
+		}
+		tbl.Release()
 	}
 }

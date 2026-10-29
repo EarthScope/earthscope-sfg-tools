@@ -10,7 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
 )
 
 // inspvaRows is n full rows of def (INSPVA or an older version of it) for

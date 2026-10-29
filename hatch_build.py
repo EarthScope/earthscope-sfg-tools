@@ -9,10 +9,9 @@ produced a binary-less wheel, which then failed at runtime in
 ``go_utils.find_binary``.
 
 This hook runs ``make`` in ``src/go`` during the wheel build so the binary always
-exists before hatchling collects artifacts. The binaries are CGO builds that link
-TileDB, so a Go toolchain and TileDB headers/libs must be present at build time
-(the pixi ``default``/``tiledb``/``geolab`` environments provide both). When the
-toolchain is missing the hook fails loudly rather than shipping an empty wheel.
+exists before hatchling collects artifacts. The binary is pure Go (no CGO), so
+only a Go toolchain is needed at build time. Without one, the hook warns and
+builds a wheel without the binary.
 """
 
 import os
@@ -41,24 +40,9 @@ class GoBuildHook(BuildHookInterface):
             # Nothing to build (e.g. building from an sdist without the Go tree).
             return
 
-        # The CGO build links TileDB and needs a toolchain that only the
-        # conda/pixi environments provide. A plain `pip install .` with no such
-        # environment (e.g. the docs CI job, or installing only the Python
-        # package) must not fail here — skip the native build and emit a wheel
-        # that simply omits the binary. The binary is built when installing into
-        # a conda/pixi env where CONDA_PREFIX/SFG_TILEDB_PREFIX and the TileDB
-        # headers are present.
-        prefix = os.environ.get("SFG_TILEDB_PREFIX") or os.environ.get("CONDA_PREFIX")
-        tiledb_header = Path(prefix) / "include" / "tiledb" / "tiledb.h" if prefix else None
-        if tiledb_header is None or not tiledb_header.exists():
-            self.app.display_warning(
-                "Skipping Go `sfg` build: TileDB toolchain not found "
-                "(no CONDA_PREFIX/SFG_TILEDB_PREFIX with tiledb headers). "
-                "The wheel will not contain the native binary; build inside the "
-                "pixi/conda env to bundle it."
-            )
-            return
-
+        # A plain `pip install .` without Go (e.g. the docs CI job, or installing
+        # only the Python package) must not fail here — skip the native build
+        # and emit a wheel that simply omits the binary.
         if shutil.which("go") is None:
             self.app.display_warning(
                 "Skipping Go `sfg` build: `go` not found on PATH. "

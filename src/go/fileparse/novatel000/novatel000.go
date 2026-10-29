@@ -13,9 +13,8 @@ import (
 	novatelascii "gitlab.com/earthscope/gnsstools/codecs/novatel/novatel_ascii"
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/internal/logtype"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/internal/novatel"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/internal/novatel"
 )
 
 // FileType names the file type in errors and stream EDIDs.
@@ -29,37 +28,34 @@ const (
 	LogINSSTDEVA = "INSSTDEVA" // INSSTDEV
 )
 
-// GNSSObs parses the logType (LogRANGEA) logs of the NOV000.bin file at path
-// into GNSSObs rows (see datamodels.ParsedSchema). The caller releases the
-// table.
-func GNSSObs(path, logType string) (arrow.Table, error) {
-	r, err := scan(path, logType, LogRANGEA)
+// GNSSObs parses the RANGEA logs of the NOV000.bin file at path into GNSSObs
+// rows (see datamodels.ParsedSchema). The caller releases the table.
+func GNSSObs(path string) (arrow.Table, error) {
+	r, err := scan(path, LogRANGEA)
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildGNSSObs(FileType, datamodels.GNSSObsSource{LogSource: logType, Epochs: r.epochs})
+	return datamodels.BuildGNSSObs(FileType, datamodels.GNSSObsSource{LogSource: LogRANGEA, Epochs: r.epochs})
 }
 
-// INSPVA parses the logType (LogINSPVAA) logs of the NOV000.bin file at path
-// into inspva rows (see datamodels.ParsedSchema). The caller releases the
-// table.
-func INSPVA(path, logType string) (arrow.Table, error) {
-	r, err := scan(path, logType, LogINSPVAA)
+// INSPVA parses the INSPVAA logs of the NOV000.bin file at path into inspva
+// rows (see datamodels.ParsedSchema). The caller releases the table.
+func INSPVA(path string) (arrow.Table, error) {
+	r, err := scan(path, LogINSPVAA)
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildINSPVA(r.inspva, logType)
+	return datamodels.BuildINSPVA(r.inspva, LogINSPVAA)
 }
 
-// INSSTDEV parses the logType (LogINSSTDEVA) logs of the NOV000.bin file at
-// path into insstdev rows (see datamodels.ParsedSchema). The caller releases
-// the table.
-func INSSTDEV(path, logType string) (arrow.Table, error) {
-	r, err := scan(path, logType, LogINSSTDEVA)
+// INSSTDEV parses the INSSTDEVA logs of the NOV000.bin file at path into
+// insstdev rows (see datamodels.ParsedSchema). The caller releases the table.
+func INSSTDEV(path string) (arrow.Table, error) {
+	r, err := scan(path, LogINSSTDEVA)
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildINSSTDEV(r.insstdev, logType)
+	return datamodels.BuildINSSTDEV(r.insstdev, LogINSSTDEVA)
 }
 
 // records are the decoded logs of one NOV000.bin scan.
@@ -69,14 +65,11 @@ type records struct {
 	insstdev []datamodels.INSSTDEVRow
 }
 
-// scan decodes the want logs of the NOV000.bin file at path; want must be
-// valid, the log type the calling table is built from. Logs whose header
-// time status is UNKNOWN (no time fix), and RANGEA logs whose epoch time
-// fails gnssiceberg.ValidateEpoch, are skipped.
-func scan(path, want, valid string) (records, error) {
-	if err := logtype.Check(FileType, want, valid); err != nil {
-		return records{}, err
-	}
+// scan decodes the want logs of the NOV000.bin file at path. Logs with no
+// time fix (header time status UNKNOWN, or week 0, which a receiver still
+// adjusting its clock logs under other statuses), and RANGEA logs whose epoch
+// time fails gnssiceberg.ValidateEpoch, are skipped.
+func scan(path, want string) (records, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return records{}, err
@@ -103,7 +96,7 @@ func scan(path, want, valid string) (records, error) {
 		if !ok || m.Msg != want {
 			continue
 		}
-		if m.TimeStatus == "UNKNOWN" {
+		if m.TimeStatus == "UNKNOWN" || m.Week == 0 {
 			skipped++
 			continue
 		}

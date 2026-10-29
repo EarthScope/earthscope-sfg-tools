@@ -15,9 +15,9 @@ import (
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 	"gitlab.com/earthscope/gnsstools/geodata/gnssiceberg"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/catalogDef/catalog"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/novatel770"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/catalog"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/novatel770"
 )
 
 // TestBuildGNSSObsMatchesGnsstools guards datamodels.BuildGNSSObs, a copy of
@@ -48,11 +48,11 @@ func TestBuildGNSSObsMatchesGnsstools(t *testing.T) {
 			Satellites: observation.Satellites{gps, glo}},
 	}
 	scope := datamodels.Scope{Network: "n", Station: "s", Campaign: "c"}
-	p := parserFor(t, novatel770.FileType, novatel770.LogRANGECMP5B)
-	edid := p.EDID(scope, p.LogType)
+	p := parserFor(t, novatel770.FileType, datamodels.GNSSObs.Name)
+	edid := p.EDID(scope, novatel770.LogRANGECMP5B)
 
 	// Ours: BuildGNSSObs -> Parser stamping -> Catalog.Append.
-	parsed, err := datamodels.BuildGNSSObs(p.FileType, datamodels.GNSSObsSource{LogSource: p.LogType, Epochs: epochs})
+	parsed, err := datamodels.BuildGNSSObs(p.FileType, datamodels.GNSSObsSource{LogSource: novatel770.LogRANGECMP5B, Epochs: epochs})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,14 +149,14 @@ func obsKey(t *testing.T, sys gnss.System, code string) observation.ObservationK
 	return k
 }
 
-// parserFor returns the parser in Parsers for fileType and logType.
-func parserFor(t *testing.T, fileType, logType string) Parser {
+// parserFor returns the parser in Parsers for fileType and table.
+func parserFor(t *testing.T, fileType, table string) Parser {
 	t.Helper()
 	for _, p := range Parsers {
-		if p.FileType == fileType && p.LogType == logType {
+		if p.FileType == fileType && p.Table.Name == table {
 			return p
 		}
 	}
-	t.Fatalf("no parser for %s %s", fileType, logType)
+	t.Fatalf("no parser for %s %s", fileType, table)
 	return Parser{}
 }

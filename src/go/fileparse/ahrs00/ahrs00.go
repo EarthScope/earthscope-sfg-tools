@@ -13,10 +13,9 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/gpsa"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/internal/logtype"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/xsens"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/internal/gpsa"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/internal/xsens"
 )
 
 const (
@@ -120,13 +119,9 @@ func toAttitude(p gpsa.Packet, m xsens.MTData2) datamodels.AttitudeAHRSRow {
 
 func ptr(v float64) *float64 { return &v }
 
-// AttitudeAHRS parses the logType (LogType) logs of the AHRS00.bin file at
-// path into attitude_ahrs rows (see datamodels.ParsedSchema). The caller
-// releases the table.
-func AttitudeAHRS(path, logType string) (arrow.Table, error) {
-	if err := logtype.Check(FileType, logType, LogType); err != nil {
-		return nil, err
-	}
+// AttitudeAHRS parses the AHRS00.bin file at path into attitude_ahrs rows
+// (see datamodels.ParsedSchema). The caller releases the table.
+func AttitudeAHRS(path string) (arrow.Table, error) {
 	rs, stats, err := readFile(path)
 	if err != nil {
 		return nil, err

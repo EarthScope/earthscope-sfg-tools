@@ -10,9 +10,9 @@ import (
 	"gitlab.com/earthscope/gnsstools/core/gnss"
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/ahrs00"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/novatel770"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/ahrs00"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/novatel770"
 )
 
 var testScope = datamodels.Scope{Network: "net", Station: "STA", Campaign: "2026_A_0001"}
@@ -46,7 +46,7 @@ func TestStampAttitude(t *testing.T) {
 	}
 	defer parsed.Release()
 
-	p := parserFor(t, ahrs00.FileType, ahrs00.LogType)
+	p := parserFor(t, ahrs00.FileType, datamodels.AttitudeAHRS.Name)
 	tbl, err := p.stamp(parsed, testScope)
 	if err != nil {
 		t.Fatal(err)
@@ -75,10 +75,10 @@ func TestStampGNSSObsAntennas(t *testing.T) {
 		observation.Observation{Code: obsKey(t, gnss.GPS, "1C"), Pseudorange: 21007753.481})
 	epoch := observation.Epoch{Time: time.Date(2023, 6, 21, 17, 11, 1, 0, time.UTC),
 		Satellites: observation.Satellites{sat}}
-	p := parserFor(t, novatel770.FileType, novatel770.LogRANGECMP5B)
+	p := parserFor(t, novatel770.FileType, datamodels.GNSSObs.Name)
 	parsed, err := datamodels.BuildGNSSObs(p.FileType,
-		datamodels.GNSSObsSource{LogSource: p.LogType, Epochs: []observation.Epoch{epoch}},
-		datamodels.GNSSObsSource{LogSource: datamodels.LogSource(p.LogType, 1), Epochs: []observation.Epoch{epoch}},
+		datamodels.GNSSObsSource{LogSource: novatel770.LogRANGECMP5B, Epochs: []observation.Epoch{epoch}},
+		datamodels.GNSSObsSource{LogSource: datamodels.LogSource(novatel770.LogRANGECMP5B, 1), Epochs: []observation.Epoch{epoch}},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +101,7 @@ func TestStampGNSSObsAntennas(t *testing.T) {
 	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
 		t.Errorf("stream_edid = %q, want %q", got, want)
 	}
-	if e := p.EDID(testScope, datamodels.LogSource(p.LogType, 1)); e != want[1] {
+	if e := p.EDID(testScope, datamodels.LogSource(novatel770.LogRANGECMP5B, 1)); e != want[1] {
 		t.Errorf("EDID = %q, want %q", e, want[1])
 	}
 }
@@ -115,7 +115,7 @@ func TestStampMissingColumn(t *testing.T) {
 	defer rec.Release()
 	parsed := array.NewTableFromRecords(sc, []arrow.RecordBatch{rec})
 	defer parsed.Release()
-	if tbl, err := parserFor(t, ahrs00.FileType, ahrs00.LogType).stamp(parsed, testScope); err == nil {
+	if tbl, err := parserFor(t, ahrs00.FileType, datamodels.AttitudeAHRS.Name).stamp(parsed, testScope); err == nil {
 		tbl.Release()
 		t.Fatal("want an error: parsed table has no time column")
 	}
@@ -126,7 +126,7 @@ func TestStampMissingColumn(t *testing.T) {
 func TestParsersHaveEDID(t *testing.T) {
 	for _, p := range Parsers {
 		if p.Parsefunc == nil || p.EDID == nil {
-			t.Errorf("%s %s: Parsefunc or EDID is nil", p.FileType, p.LogType)
+			t.Errorf("%s %s: Parsefunc or EDID is nil", p.FileType, p.Table.Name)
 		}
 	}
 }

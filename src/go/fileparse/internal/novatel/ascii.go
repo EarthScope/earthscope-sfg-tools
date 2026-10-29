@@ -15,7 +15,7 @@ import (
 
 	novatelascii "gitlab.com/earthscope/gnsstools/codecs/novatel/novatel_ascii"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/gpsa"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/internal/gpsa"
 )
 
 // Workarounds for two bugs in gnsstools' novatel_ascii scanner (v0.88-v0.105);

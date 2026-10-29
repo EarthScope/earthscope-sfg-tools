@@ -13,8 +13,8 @@ import (
 	"github.com/apache/arrow-go/v18/parquet/file"
 	"github.com/apache/arrow-go/v18/parquet/pqarrow"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/catalogDef/catalog"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/catalog"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
 )
 
 // rows returns n rows of def with every column set to its type's zero

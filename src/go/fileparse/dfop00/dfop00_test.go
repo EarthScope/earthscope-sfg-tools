@@ -8,7 +8,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
 )
 
 // Two ping/reply cycles: the first reply is real, the second is a zero
@@ -34,7 +34,7 @@ func col[T arrow.Array](t *testing.T, tbl arrow.Table, name string) T {
 }
 
 func TestTWTT(t *testing.T) {
-	tbl, err := TWTT(writeSample(t), LogType)
+	tbl, err := TWTT(writeSample(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestTWTT(t *testing.T) {
 }
 
 func TestAttitude(t *testing.T) {
-	tbl, err := AttitudeAHRS(writeSample(t), LogType)
+	tbl, err := AttitudeAHRS(writeSample(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,11 +91,5 @@ func TestAttitude(t *testing.T) {
 	}
 	if got := col[*array.Int32](t, tbl, "time_start_count").Value(1); got != 45 {
 		t.Errorf("time_start_count = %d", got)
-	}
-}
-
-func TestUnknownLogType(t *testing.T) {
-	if _, err := TWTT(writeSample(t), "RANGEA"); err == nil {
-		t.Fatal("want an error: DFOP00 files have no RANGEA logs")
 	}
 }

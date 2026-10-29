@@ -11,7 +11,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
 )
 
 var t0 = time.Date(2026, 6, 2, 19, 54, 31, 0, time.UTC)

@@ -9,7 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
 )
 
 // A trimmed SBE .cnv header: named columns with sound speed in column 3, not
@@ -48,7 +48,7 @@ func col[T arrow.Array](tbl arrow.Table, name string) T {
 }
 
 func TestSoundSpeed(t *testing.T) {
-	tbl, err := SoundSpeed(write(t, "cast_001.cnv", cnv), LogType)
+	tbl, err := SoundSpeed(write(t, "cast_001.cnv", cnv))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestDefaultsAndStartTime(t *testing.T) {
 	data := "# start_time = Sep  2 2025 08:00:01 [Instrument's time stamp, first data scan]\n" +
 		"*END*\n" +
 		"   10.0  a  b  c  d  1500.5\n"
-	tbl, err := SoundSpeed(write(t, "svp.cnv", data), LogType)
+	tbl, err := SoundSpeed(write(t, "svp.cnv", data))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,13 +97,9 @@ func TestErrors(t *testing.T) {
 		"no *END*":     "* NMEA UTC (Time) = Sep 12 2025 10:15:00\n1 2 3 4 5 1500\n",
 		"bad time":     "* NMEA UTC (Time) = 2025-09-12T10:15:00Z\n*END*\n",
 	} {
-		if tbl, err := SoundSpeed(write(t, "x.cnv", data), LogType); err == nil {
+		if tbl, err := SoundSpeed(write(t, "x.cnv", data)); err == nil {
 			tbl.Release()
 			t.Errorf("%s: want an error", name)
 		}
-	}
-	if tbl, err := SoundSpeed(write(t, "x.cnv", cnv), "CTD"); err == nil {
-		tbl.Release()
-		t.Error("wrong log type: want an error")
 	}
 }

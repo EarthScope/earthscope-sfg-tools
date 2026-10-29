@@ -21,8 +21,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/internal/logtype"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
 )
 
 const (
@@ -60,11 +59,8 @@ type header struct {
 // SoundSpeed parses the Sea-Bird .cnv file at path into sound_speed rows (see
 // datamodels.ParsedSchema), every row at the header's cast time. Data rows
 // that are short, not numeric, flagged bad or above the surface are skipped
-// and counted. logType must be LogType. The caller releases the table.
-func SoundSpeed(path, logType string) (arrow.Table, error) {
-	if err := logtype.Check(FileType, logType, LogType); err != nil {
-		return nil, err
-	}
+// and counted. The caller releases the table.
+func SoundSpeed(path string) (arrow.Table, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err

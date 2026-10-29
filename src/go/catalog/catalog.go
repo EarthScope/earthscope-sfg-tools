@@ -20,7 +20,7 @@ import (
 	"github.com/apache/iceberg-go/table"
 	"github.com/uptrace/bun/driver/sqliteshim"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
 )
 
 // Catalog types for Config.Type.

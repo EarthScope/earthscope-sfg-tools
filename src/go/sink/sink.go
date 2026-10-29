@@ -21,8 +21,8 @@ import (
 	"github.com/apache/arrow-go/v18/parquet/compress"
 	"github.com/apache/arrow-go/v18/parquet/pqarrow"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/catalogDef/catalog"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/catalog"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
 )
 
 // Sink writes one table's rows somewhere.

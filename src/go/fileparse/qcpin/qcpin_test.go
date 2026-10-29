@@ -8,7 +8,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
 )
 
 // rangeA is a RANGEA with GPS PRN 30 L1 C/A and L2 P(Y) at GPS week 2326,
@@ -45,9 +45,9 @@ func writeSample(t *testing.T) string {
 	return path
 }
 
-func parse(t *testing.T, fn func(path, logType string) (arrow.Table, error), path, logType string, def datamodels.TableDef) arrow.Table {
+func parse(t *testing.T, fn func(path string) (arrow.Table, error), path string, def datamodels.TableDef) arrow.Table {
 	t.Helper()
-	tbl, err := fn(path, logType)
+	tbl, err := fn(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,26 +65,26 @@ func col[T arrow.Array](tbl arrow.Table, name string) T {
 func TestSample(t *testing.T) {
 	path := writeSample(t)
 
-	tt := parse(t, TWTT, path, LogEvents, datamodels.TWTT)
+	tt := parse(t, TWTT, path, datamodels.TWTT)
 	defer tt.Release()
 	if tt.NumRows() != 1 || col[*array.String](tt, "MT_ID").Value(0) != "IR5205" ||
 		col[*array.Float64](tt, "TravelTime").Value(0) != 0.330061 {
 		t.Errorf("travel_times: %d rows", tt.NumRows())
 	}
 
-	att := parse(t, AttitudeAHRS, path, LogEvents, datamodels.AttitudeAHRS)
+	att := parse(t, AttitudeAHRS, path, datamodels.AttitudeAHRS)
 	defer att.Release()
 	if att.NumRows() != 1 || col[*array.Float64](att, "h").Value(0) != 313.35 {
 		t.Errorf("attitude_ahrs: %d rows", att.NumRows())
 	}
 
-	pos := parse(t, AntennaPositions, path, LogEvents, datamodels.GNSSAntennaPositions)
+	pos := parse(t, AntennaPositions, path, datamodels.GNSSAntennaPositions)
 	defer pos.Release()
 	if pos.NumRows() != 1 || col[*array.Int32](pos, "q").Value(0) != 1 || col[*array.Float64](pos, "ant_sigx").IsNull(0) {
 		t.Errorf("gnss_antenna_positions: %d rows", pos.NumRows())
 	}
 
-	obs := parse(t, GNSSObs, path, LogRANGEA, datamodels.GNSSObs)
+	obs := parse(t, GNSSObs, path, datamodels.GNSSObs)
 	defer obs.Release()
 	// One RANGEA (logged twice) with two signals.
 	if obs.NumRows() != 2 || col[*array.String](obs, "signal").Value(0) != "1C" ||
@@ -96,18 +96,6 @@ func TestSample(t *testing.T) {
 	}
 }
 
-func TestWrongLogType(t *testing.T) {
-	path := writeSample(t)
-	if tbl, err := TWTT(path, LogRANGEA); err == nil {
-		tbl.Release()
-		t.Error("TWTT from RANGEA: want an error")
-	}
-	if tbl, err := GNSSObs(path, LogEvents); err == nil {
-		tbl.Release()
-		t.Error("GNSSObs from QCPIN events: want an error")
-	}
-}
-
 // TestParseFile runs on a real QC PIN file when SFG_QCPIN names one.
 func TestParseFile(t *testing.T) {
 	path := os.Getenv("SFG_QCPIN")
@@ -115,16 +103,15 @@ func TestParseFile(t *testing.T) {
 		t.Skip("set SFG_QCPIN to a .pin file")
 	}
 	for _, c := range []struct {
-		fn      func(path, logType string) (arrow.Table, error)
-		logType string
-		def     datamodels.TableDef
+		fn  func(path string) (arrow.Table, error)
+		def datamodels.TableDef
 	}{
-		{TWTT, LogEvents, datamodels.TWTT},
-		{AttitudeAHRS, LogEvents, datamodels.AttitudeAHRS},
-		{AntennaPositions, LogEvents, datamodels.GNSSAntennaPositions},
-		{GNSSObs, LogRANGEA, datamodels.GNSSObs},
+		{TWTT, datamodels.TWTT},
+		{AttitudeAHRS, datamodels.AttitudeAHRS},
+		{AntennaPositions, datamodels.GNSSAntennaPositions},
+		{GNSSObs, datamodels.GNSSObs},
 	} {
-		tbl := parse(t, c.fn, path, c.logType, c.def)
+		tbl := parse(t, c.fn, path, c.def)
 		t.Logf("%s: %d rows", c.def.Name, tbl.NumRows())
 		if tbl.NumRows() == 0 {
 			t.Errorf("%s: no rows", c.def.Name)

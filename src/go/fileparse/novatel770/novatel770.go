@@ -18,8 +18,7 @@ import (
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 	"gitlab.com/earthscope/gnsstools/geodata/gnssiceberg"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/internal/logtype"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
 )
 
 // FileType names the file type in errors and stream EDIDs.
@@ -31,8 +30,8 @@ const (
 	LogRANGECMP5B = "RANGECMP5B" // message ID 2537
 )
 
-// messageIDs are the NovAtel message IDs of the log types.
-var messageIDs = map[string]uint16{LogRANGECMPB: 140, LogRANGECMP5B: 2537}
+// logTypes are the log types of the NovAtel message IDs GNSSObs reads.
+var logTypes = map[uint16]string{140: LogRANGECMPB, 2537: LogRANGECMP5B}
 
 // timeStatusUnknown is the NovAtel time status UNKNOWN: no time fix, week 0.
 const timeStatusUnknown uint8 = 20
@@ -41,17 +40,14 @@ const timeStatusUnknown uint8 = 20
 // it is well above any RANGECMP/RANGECMP5 log.
 const readerSize = 64 << 10
 
-// GNSSObs parses the logType (LogRANGECMPB or LogRANGECMP5B) logs of the
-// NOV770 file at path into GNSSObs rows (see datamodels.ParsedSchema). Each
-// antenna gets its own Log_Source (datamodels.LogSource), and so its own stream
-// EDID: RANGECMP5B, RANGECMP5B_1. Messages whose time status is UNKNOWN, or whose epoch time
-// fails gnssiceberg.ValidateEpoch, are skipped. The caller releases the
-// table.
-func GNSSObs(path, logType string) (arrow.Table, error) {
-	if err := logtype.Check(FileType, logType, LogRANGECMPB, LogRANGECMP5B); err != nil {
-		return nil, err
-	}
-	want := messageIDs[logType]
+// GNSSObs parses the RANGECMPB and RANGECMP5B logs of the NOV770 file at path
+// into GNSSObs rows (see datamodels.ParsedSchema), in one pass. Each log type
+// and antenna gets its own Log_Source (datamodels.LogSource), and so its own
+// stream EDID: RANGECMP5B, RANGECMP5B_1. Messages whose time status is
+// UNKNOWN or whose week is 0 (no time fix), or whose epoch time fails
+// gnssiceberg.ValidateEpoch, are skipped.
+// The caller releases the table.
+func GNSSObs(path string) (arrow.Table, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -76,10 +72,11 @@ func GNSSObs(path, logType string) (arrow.Table, error) {
 			}
 			continue
 		}
-		if msg.MessageID != want {
+		logType, ok := logTypes[msg.MessageID]
+		if !ok {
 			continue
 		}
-		if msg.TimeStatus == timeStatusUnknown {
+		if msg.TimeStatus == timeStatusUnknown || msg.Week == 0 {
 			skipped++
 			continue
 		}

@@ -135,6 +135,32 @@ func TestBuildersFillEveryColumn(t *testing.T) {
 			return BuildGNSSAntennaPositions([]GNSSAntennaPositionRow{{Time: t0, SigX: f64(1), SigY: f64(1), SigZ: f64(1), Q: 1,
 				NumberOfSatellites: i32(9), PDOP: f64(1), WRMS: f64(1)}}, "x")
 		},
+		GNSSSatellitesInView.Name: func() (arrow.Table, error) {
+			return BuildGNSSSatellitesInView([]GNSSSatelliteInViewRow{{Time: t0, Talker: "GP", SatsInView: 9, PRN: 3,
+				Elevation: f64(10), Azimuth: f64(20), SNR: f64(40)}}, "x")
+		},
+		GNSSDOP.Name: func() (arrow.Table, error) {
+			return BuildGNSSDOP([]GNSSDOPRow{{Time: t0, Talker: "GP", Mode: strp("M"), FixType: 3, SatellitesUsed: "2,10",
+				NumberUsed: 2, PDOP: f64(3.6), HDOP: f64(1.5), VDOP: f64(3.3)}}, "x")
+		},
+		GNSSCourseSpeed.Name: func() (arrow.Table, error) {
+			return BuildGNSSCourseSpeed([]GNSSCourseSpeedRow{{Time: t0, Talker: "GP", CourseTrue: f64(1), CourseMagnetic: f64(1),
+				SpeedKnots: f64(1), SpeedKmh: f64(1.852), Mode: strp("A")}}, "x")
+		},
+		TransceiverInterrogations.Name: func() (arrow.Table, error) {
+			return BuildTransceiverInterrogations([]TransceiverInterrogationRow{{Time: t0, Unit: strp("2010"), Event: i32(0),
+				Targets: "IR5209", TargetSettings: strp("IR5209;RG0;W3600;LG26"), RxWindow: i32(3600), TxChannel: strp("CI4805"),
+				Delay: f64(130), NPL: i32(196)}}, "x")
+		},
+		TransceiverRanges.Name: func() (arrow.Table, error) {
+			dbv := float32(-20)
+			return BuildTransceiverRanges([]TransceiverRangeRow{{Time: t0, ReplyTime: t0, Unit: strp("2010"), Event: i32(0),
+				Sequence: i32(0), MTID: "IR5209", Detected: true, TravelTime: f64(3.464032), Acc: i32(93), ASNR: f64(25),
+				DBV: &dbv, Telemetry: strp("NONE"), Doppler: f64(0)}}, "x")
+		},
+		TransceiverSettings.Name: func() (arrow.Table, error) {
+			return BuildTransceiverSettings([]TransceiverSettingRow{{LogSource: "x", Time: t0, Unit: strp("2010"), Command: "CS", Key: "TAT", Value: "640"}})
+		},
 		GNSSObs.Name: func() (arrow.Table, error) {
 			return BuildGNSSObs("x", GNSSObsSource{LogSource: "x", Epochs: []observation.Epoch{{Time: t0,
 				ReceiverClockOffset: 1e-7, EpochFlag: 1, Satellites: observation.Satellites{glo}}}})

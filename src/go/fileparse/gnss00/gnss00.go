@@ -2,10 +2,13 @@
 // NMEA output, one sentence per GPSA packet, the packet stamped with the
 // SV3's UTC time.
 //
-// GGA fixes become gnss_antenna_positions rows. The receiver logs them only
-// sparsely (about one every 15 minutes); most sentences are GSV (satellites
-// in view), VTG (velocity) and GSA (DOPs), which no Level 1 table holds. GSA
-// supplies each fix's PDOP. No GST is logged, so the position sigmas are null.
+// Each sentence type is a log source with its own table: GGA fixes become
+// gnss_antenna_positions rows, GSV satellites in view gnss_satellites_in_view,
+// GSA fix type and DOPs gnss_dop, and VTG course and speed gnss_course_speed.
+// The receiver logs GGA only sparsely (about one every 15 minutes); GSV, GSA
+// and VTG arrive about every second. GSA also supplies each GGA fix's PDOP.
+// No GST is logged, so the position sigmas are null. Only GGA carries a time,
+// so GSV, GSA and VTG rows take the SV3's packet time.
 package gnss00
 
 import (
@@ -24,9 +27,8 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"gitlab.com/earthscope/gnsstools/core/coordinates"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/gpsa"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/internal/logtype"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/internal/gpsa"
 )
 
 const (
@@ -35,6 +37,12 @@ const (
 	// LogGGA is the NMEA sentence gnss_antenna_positions rows come from, and
 	// their Log_Source value.
 	LogGGA = "GGA"
+	// LogGSV is the NMEA sentence of gnss_satellites_in_view rows.
+	LogGSV = "GSV"
+	// LogGSA is the NMEA sentence of gnss_dop rows.
+	LogGSA = "GSA"
+	// LogVTG is the NMEA sentence of gnss_course_speed rows.
+	LogVTG = "VTG"
 )
 
 // pdopWindow is how far a GSA may lie from a GGA (by packet time) for its
@@ -50,17 +58,9 @@ type sentence struct {
 // AntennaPositions parses the GGA fixes of the GNSS00.bin file at path into
 // gnss_antenna_positions rows (see datamodels.ParsedSchema), one per distinct
 // fix time, in ECEF. GGA without a fix, or with a bad checksum or field, are
-// skipped and counted. logType must be LogGGA. The caller releases the table.
-func AntennaPositions(path, logType string) (arrow.Table, error) {
-	if err := logtype.Check(FileType, logType, LogGGA); err != nil {
-		return nil, err
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	sentences, badSum, err := readSentences(f)
+// skipped and counted. The caller releases the table.
+func AntennaPositions(path string) (arrow.Table, error) {
+	sentences, badSum, err := readFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -68,6 +68,59 @@ func AntennaPositions(path, logType string) (arrow.Table, error) {
 	slog.Debug("parsed GNSS00", "file", filepath.Base(path), "sentences", len(sentences),
 		"fixes", len(rs), "no_fix", noFix, "bad_gga", bad, "bad_checksum", badSum)
 	return datamodels.BuildGNSSAntennaPositions(rs, LogGGA)
+}
+
+// SatellitesInView parses the GSV sentences of the GNSS00.bin file at path
+// into gnss_satellites_in_view rows (see datamodels.ParsedSchema): one per
+// satellite of each GSV group, at the packet time of the group's first
+// sentence. Satellite entries that do not parse are skipped and counted.
+// The caller releases the table.
+func SatellitesInView(path string) (arrow.Table, error) {
+	sentences, badSum, err := readFile(path)
+	if err != nil {
+		return nil, err
+	}
+	rs, bad := satellitesInView(sentences)
+	slog.Debug("parsed GNSS00 GSV", "file", filepath.Base(path), "rows", len(rs), "bad_gsv", bad, "bad_checksum", badSum)
+	return datamodels.BuildGNSSSatellitesInView(rs, LogGSV)
+}
+
+// DOP parses the GSA sentences of the GNSS00.bin file at path into gnss_dop
+// rows (see datamodels.ParsedSchema), one per sentence. GSA reporting no DOP
+// (no fix) or that do not parse are skipped and counted. The caller releases
+// the table.
+func DOP(path string) (arrow.Table, error) {
+	sentences, badSum, err := readFile(path)
+	if err != nil {
+		return nil, err
+	}
+	rs, noFix, bad := dops(sentences)
+	slog.Debug("parsed GNSS00 GSA", "file", filepath.Base(path), "rows", len(rs), "no_fix", noFix, "bad_gsa", bad, "bad_checksum", badSum)
+	return datamodels.BuildGNSSDOP(rs, LogGSA)
+}
+
+// CourseSpeed parses the VTG sentences of the GNSS00.bin file at path into
+// gnss_course_speed rows (see datamodels.ParsedSchema), one per sentence. VTG
+// reporting neither course nor speed (no fix) or that do not parse are
+// skipped and counted. The caller releases the table.
+func CourseSpeed(path string) (arrow.Table, error) {
+	sentences, badSum, err := readFile(path)
+	if err != nil {
+		return nil, err
+	}
+	rs, noFix, bad := courseSpeeds(sentences)
+	slog.Debug("parsed GNSS00 VTG", "file", filepath.Base(path), "rows", len(rs), "no_fix", noFix, "bad_vtg", bad, "bad_checksum", badSum)
+	return datamodels.BuildGNSSCourseSpeed(rs, LogVTG)
+}
+
+// readFile reads the NMEA sentences of the GNSS00.bin file at path.
+func readFile(path string) ([]sentence, int, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer f.Close()
+	return readSentences(f)
 }
 
 // readSentences reads the NMEA sentences of a GPSA stream, dropping those

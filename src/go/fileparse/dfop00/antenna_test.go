@@ -9,7 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"gitlab.com/earthscope/gnsstools/core/coordinates"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
 )
 
 func near(a, b, tol float64) bool { return math.Abs(a-b) <= tol }
@@ -29,7 +29,7 @@ func TestAntennaPositions(t *testing.T) {
 	if err := os.WriteFile(path, []byte(gnssSample), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	tbl, err := AntennaPositions(path, LogType)
+	tbl, err := AntennaPositions(path)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,6 @@
 """
-Dev harness: parse Level 1 logs with the Go ``sfglevel1`` tool (dev/level1)
-and append them to a local Iceberg warehouse.
+Dev harness: parse Level 1 logs with ``sfg level1 parse`` (src/go) and append
+them to a local Iceberg warehouse.
 
 Go writes one Arrow IPC file per table holding full rows (the Go file
 parsers stamp scope and Log_Source); they are cast to the Iceberg schema,
@@ -23,7 +23,7 @@ from earthscope_sfg_tools.datamodels.iceberg.schemas import (
     TableDef,
 )
 
-GO_DIR = Path(__file__).parent / "level1"
+GO_DIR = Path(__file__).parents[1] / "src" / "go"
 
 data_path = Path("/Users/franklyndunbar/Project/SeaFloorGeodesy/Data/SFGMain2/cascadia-gorda/SLT1/2026_A_1126/raw")
 warehouse_path = Path("/Users/franklyndunbar/Project/SeaFloorGeodesy/Data/ICEBERG")
@@ -34,18 +34,24 @@ novbin = sorted(data_path.glob("*NOV000.bin"))
 dfop00 = sorted(data_path.glob("*DFOP00.raw"))
 
 
-def build_sfglevel1(out: Path) -> Path:
-    """Build the Go ``sfglevel1`` binary into ``out`` and return its path."""
-    binary = out / "sfglevel1"
-    subprocess.run(
-        ["go", "build", "-o", str(binary), "./cmd/sfglevel1"], cwd=GO_DIR, check=True
-    )
+def build_sfg(out: Path) -> Path:
+    """Build the Go ``sfg`` binary into ``out`` and return its path."""
+    binary = out / "sfg"
+    subprocess.run(["go", "build", "-o", str(binary), "./cmd"], cwd=GO_DIR, check=True)
     return binary
 
 
-def run_sfglevel1(binary: Path, command: str, source: Path, out: Path) -> dict[str, pa.Table]:
-    """Run one ``sfglevel1`` command; return its Arrow tables keyed by table name."""
-    subprocess.run([str(binary), command, "-out", str(out), str(source)], check=True)
+def run_level1_parse(binary: Path, file_type: str, source: Path, out: Path) -> dict[str, pa.Table]:
+    """Run ``sfg level1 parse`` on one file; return its Arrow tables keyed by table name.
+
+    The scope comes from ``data_path``: .../<network>/<station>/<campaign>/raw.
+    """
+    network, station, campaign = data_path.parts[-4:-1]
+    subprocess.run(
+        [str(binary), "level1", "parse", "--type", file_type, "--network", network,
+         "--station", station, "--campaign", campaign, "--out", str(out), str(source)],
+        check=True,
+    )
     return {p.stem: ipc.open_file(p).read_all() for p in out.glob("*.arrow")}
 
 
@@ -115,11 +121,10 @@ class IcebergCatalog:
 
 
 if __name__ == "__main__":
-    # sfglevel1 reads the scope from data_path: .../<network>/<station>/<campaign>/raw
     cat = IcebergCatalog(warehouse_path)
     with tempfile.TemporaryDirectory() as tmp:
-        binary = build_sfglevel1(Path(tmp))
+        binary = build_sfg(Path(tmp))
         for source in ahrs:
-            tables = run_sfglevel1(binary, "AHRS00", source, Path(tmp) / source.stem)
+            tables = run_level1_parse(binary, "AHRS00", source, Path(tmp) / source.stem)
             n = cat.ingest_attitude(tables["attitude_ahrs"])
             print(f"{source.name}: {n} rows -> {ATTITUDE_AHRS.qualified_name}")

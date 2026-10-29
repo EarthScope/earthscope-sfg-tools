@@ -10,7 +10,7 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "sfg",
 	Short: "EarthScope seafloor geodesy tools",
-	Long:  "A collection of tools for processing NovAtel GNSS data into RINEX and TileDB formats.",
+	Long:  "A collection of tools for processing NovAtel GNSS data into RINEX and Level 1 tables.",
 }
 
 func init() {
@@ -18,11 +18,8 @@ func init() {
 	rootCmd.AddCommand(nova2rnxCmd)
 	rootCmd.AddCommand(novb2rnxCmd)
 	rootCmd.AddCommand(nov0002rnxCmd)
-	rootCmd.AddCommand(nova2tileCmd)
-	rootCmd.AddCommand(novab2tileCmd)
-	rootCmd.AddCommand(nov0002tileCmd)
 	rootCmd.AddCommand(nov2level1Cmd)
-	rootCmd.AddCommand(tdb2rnxCmd)
+	rootCmd.AddCommand(level1Cmd)
 	rootCmd.AddCommand(rnxqcCmd)
 }
 

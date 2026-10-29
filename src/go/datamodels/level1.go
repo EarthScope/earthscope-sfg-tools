@@ -166,6 +166,131 @@ var GNSSAntennaPositions = TableDef{
 	)...),
 }
 
+// GNSSSatellitesInView is Go-only: it has no Python TableDef counterpart.
+var GNSSSatellitesInView = TableDef{
+	Name:       "gnss_satellites_in_view",
+	Level:      1,
+	TimeColumn: "time",
+	Doc: "Satellites in view from NMEA GSV sentences of the SV3 GNSS receiver " +
+		"(GNSS00): one row per satellite per GSV group. GSV carries no time, so " +
+		"time is the SV3's packet time of the group's first sentence.",
+	Columns: level1(
+		Column{Name: "time", Type: timestamptz, Doc: "SV3 packet time of the group's first GSV sentence, UTC", Required: true},
+		Column{Name: "talker", Type: str, Doc: "NMEA talker, e.g. GP (GPS), GL (GLONASS), GN (multi-GNSS)", Required: true},
+		Column{Name: "sats_in_view", Type: int32Type, Doc: "Satellites in view, as the group reports", Required: true, Ge: bound(0)},
+		Column{Name: "prn", Type: int32Type, Doc: "Satellite ID (PRN or NMEA satellite number)", Required: true, Ge: bound(1)},
+		Column{Name: "elevation", Type: float64Type, Doc: "Elevation [deg]; null when not reported", Ge: bound(-90), Le: bound(90)},
+		Column{Name: "azimuth", Type: float64Type, Doc: "Azimuth from true north [deg]; null when not reported", Ge: bound(0), Le: bound(360)},
+		Column{Name: "snr", Type: float64Type, Doc: "Carrier-to-noise density [dB-Hz]; null when not tracked", Ge: bound(0), Le: bound(99)},
+	),
+}
+
+// GNSSDOP is Go-only: it has no Python TableDef counterpart.
+var GNSSDOP = TableDef{
+	Name:       "gnss_dop",
+	Level:      1,
+	TimeColumn: "time",
+	Doc: "Fix type, satellites used and dilutions of precision from NMEA GSA " +
+		"sentences of the SV3 GNSS receiver (GNSS00). GSA carries no time, so " +
+		"time is the SV3's packet time.",
+	Columns: level1(
+		Column{Name: "time", Type: timestamptz, Doc: "SV3 packet time of the sentence, UTC", Required: true},
+		Column{Name: "talker", Type: str, Doc: "NMEA talker, e.g. GP", Required: true},
+		Column{Name: "mode", Type: str, Doc: "Selection mode: M manual, A automatic; null when not reported"},
+		Column{Name: "fix_type", Type: int32Type, Doc: "Fix type: 1 none, 2 2D, 3 3D", Required: true, Ge: bound(1), Le: bound(3)},
+		Column{Name: "satellites_used", Type: str, Doc: "IDs of the satellites used, comma-separated; empty when none", Required: true},
+		Column{Name: "number_used", Type: int32Type, Doc: "Number of satellites used", Required: true, Ge: bound(0)},
+		Column{Name: "pdop", Type: float64Type, Doc: "Position dilution of precision", Ge: bound(0)},
+		Column{Name: "hdop", Type: float64Type, Doc: "Horizontal dilution of precision", Ge: bound(0)},
+		Column{Name: "vdop", Type: float64Type, Doc: "Vertical dilution of precision", Ge: bound(0)},
+	),
+}
+
+// GNSSCourseSpeed is Go-only: it has no Python TableDef counterpart.
+var GNSSCourseSpeed = TableDef{
+	Name:       "gnss_course_speed",
+	Level:      1,
+	TimeColumn: "time",
+	Doc: "Course and speed over ground from NMEA VTG sentences of the SV3 GNSS " +
+		"receiver (GNSS00), in the units logged. VTG carries no time, so time " +
+		"is the SV3's packet time.",
+	Columns: level1(
+		Column{Name: "time", Type: timestamptz, Doc: "SV3 packet time of the sentence, UTC", Required: true},
+		Column{Name: "talker", Type: str, Doc: "NMEA talker, e.g. GP", Required: true},
+		Column{Name: "course_true", Type: float64Type, Doc: "Course over ground, true [deg]", Ge: bound(0), Le: bound(360)},
+		Column{Name: "course_magnetic", Type: float64Type, Doc: "Course over ground, magnetic [deg]", Ge: bound(0), Le: bound(360)},
+		Column{Name: "speed_knots", Type: float64Type, Doc: "Speed over ground [knots]", Ge: bound(0)},
+		Column{Name: "speed_kmh", Type: float64Type, Doc: "Speed over ground [km/h]", Ge: bound(0)},
+		Column{Name: "mode", Type: str, Doc: "Mode indicator: A autonomous, D differential, E estimated, N not valid; null when not reported"},
+	),
+}
+
+// TransceiverInterrogations is Go-only: it has no Python TableDef counterpart.
+var TransceiverInterrogations = TableDef{
+	Name:       "transceiver_interrogations",
+	Level:      1,
+	TimeColumn: "time",
+	Doc: "Acoustic interrogations (pings) from the SV3's dialogue with its " +
+		"transceiver (TCVR00): one row per trigger, with the targets and " +
+		"settings the transceiver acknowledged. time is when the SV3 sent the " +
+		"trigger; the transmit time itself is in DFOP00's interrogation events.",
+	Columns: level1(
+		Column{Name: "time", Type: timestamptz, Doc: "SV3 packet time of the trigger (TRG) request, UTC", Required: true},
+		Column{Name: "unit", Type: str, Doc: "Transceiver unit ID from its replies, e.g. 2010"},
+		Column{Name: "event", Type: int32Type, Doc: "Event number (EVT)", Ge: bound(0)},
+		Column{Name: "targets", Type: str, Doc: "Interrogated transponder addresses, comma-separated, e.g. IR5209,IR5210", Required: true},
+		Column{Name: "target_settings", Type: str, Doc: "Per-target settings as acknowledged, comma-separated, e.g. IR5209;RG0;W3600;LG26"},
+		Column{Name: "rx_window", Type: int32Type, Doc: "Receive window as logged (RXW)", Ge: bound(0)},
+		Column{Name: "tx_channel", Type: str, Doc: "Transmit channel (CI), e.g. CI4805"},
+		Column{Name: "delay", Type: float64Type, Doc: "Transmit delay (D) [ms]: the SV3 trigger delay", Ge: bound(0)},
+		Column{Name: "npl", Type: int32Type, Doc: "NPL as logged"},
+	),
+}
+
+// TransceiverRanges is Go-only: it has no Python TableDef counterpart.
+var TransceiverRanges = TableDef{
+	Name:       "transceiver_ranges",
+	Level:      1,
+	TimeColumn: "time",
+	Doc: "Per-ping range results from the SV3's transceiver (TCVR00 BR): one " +
+		"row per interrogated transponder, including pings with no reply " +
+		"(detected false). TravelTime is the range DFOP00 logs for the same " +
+		"reply; time is the trigger time of the ping it answers.",
+	Columns: level1(
+		Column{Name: "time", Type: timestamptz, Doc: "SV3 packet time of the trigger (TRG) the result answers, UTC", Required: true},
+		Column{Name: "reply_time", Type: timestamptz, Doc: "SV3 packet time of the result (BR), UTC", Required: true},
+		Column{Name: "unit", Type: str, Doc: "Transceiver unit ID, e.g. 2010"},
+		Column{Name: "event", Type: int32Type, Doc: "Event number (EVT)", Ge: bound(0)},
+		Column{Name: "sequence", Type: int32Type, Doc: "Sequence number (SQ)", Ge: bound(0)},
+		Column{Name: "MT_ID", Type: str, Doc: "Transponder address, e.g. IR5209", Required: true},
+		Column{Name: "detected", Type: boolType, Doc: "Whether a reply was detected (non-zero range)", Required: true},
+		Column{Name: "TravelTime", Type: float64Type, Doc: "Two-way range as logged (R, in microseconds) [s]; null when no reply was detected", Ge: bound(0), Le: bound(600)},
+		Column{Name: "acc", Type: int32Type, Doc: "Cross-correlation (XC) [%]", Ge: bound(0), Le: bound(100)},
+		Column{Name: "aSNR", Type: float64Type, Doc: "Signal-to-noise ratio (SNR) [dB]", Ge: bound(-100), Le: bound(100)},
+		Column{Name: "dbV", Type: float32Type, Doc: "Signal level (DBV) [dBV]"},
+		Column{Name: "telemetry", Type: str, Doc: "Telemetry (TEL), e.g. NONE"},
+		Column{Name: "doppler", Type: float64Type, Doc: "Doppler (DOP) as logged"},
+	),
+}
+
+// TransceiverSettings is Go-only: it has no Python TableDef counterpart.
+var TransceiverSettings = TableDef{
+	Name:       "transceiver_settings",
+	Level:      1,
+	TimeColumn: "time",
+	Doc: "Transceiver configuration and identity as it reported them (TCVR00): " +
+		"one row per key of each reply. Log source TCVR_CONFIG holds the CS " +
+		"(settings, including TAT) and PORT replies; TCVR_INFO holds US (unit), " +
+		"FS (firmware) and DIAG (diagnostics).",
+	Columns: level1(
+		Column{Name: "time", Type: timestamptz, Doc: "SV3 packet time of the reply, UTC", Required: true},
+		Column{Name: "unit", Type: str, Doc: "Transceiver unit ID, e.g. 2010"},
+		Column{Name: "command", Type: str, Doc: "Reply type: CS, PORT, US, FS or DIAG", Required: true},
+		Column{Name: "key", Type: str, Doc: "Setting name, e.g. TAT", Required: true},
+		Column{Name: "value", Type: str, Doc: "Setting value as logged, e.g. 640; empty for a bare flag", Required: true},
+	),
+}
+
 // Level1Tables lists every Level 1 table definition.
 var Level1Tables = []TableDef{
 	TWTT,
@@ -175,4 +300,10 @@ var Level1Tables = []TableDef{
 	AttitudeAHRS,
 	SoundSpeed,
 	GNSSAntennaPositions,
+	GNSSSatellitesInView,
+	GNSSDOP,
+	GNSSCourseSpeed,
+	TransceiverInterrogations,
+	TransceiverRanges,
+	TransceiverSettings,
 }

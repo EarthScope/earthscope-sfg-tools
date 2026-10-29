@@ -20,8 +20,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/internal/logtype"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
 )
 
 const (
@@ -50,13 +49,10 @@ func ProfileTime(path string) (time.Time, error) {
 }
 
 // SoundSpeed parses the CTD profile at path into sound_speed rows (see
-// datamodels.ParsedSchema). logType must be LogType. Lines that are not two
-// numbers, or whose depth is above the surface, are skipped and counted.
-// The caller releases the table.
-func SoundSpeed(path, logType string) (arrow.Table, error) {
-	if err := logtype.Check(FileType, logType, LogType); err != nil {
-		return nil, err
-	}
+// datamodels.ParsedSchema). Lines that are not two numbers, or whose depth
+// is above the surface, are skipped and counted. The caller releases the
+// table.
+func SoundSpeed(path string) (arrow.Table, error) {
 	at, err := ProfileTime(path)
 	if err != nil {
 		return nil, err

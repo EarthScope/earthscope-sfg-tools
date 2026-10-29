@@ -1,6 +1,6 @@
 """
 Read access to the Level 1 Iceberg catalog written by the Go ingest
-(``dev/level1``): a local SQLite catalog (``<warehouse>/catalog.db``, catalog
+(``src/go``): a local SQLite catalog (``<warehouse>/catalog.db``, catalog
 name ``default``) or AWS Glue over an S3 warehouse.
 
 Reads always go through the table's current snapshot. Never read a

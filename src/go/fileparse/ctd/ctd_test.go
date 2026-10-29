@@ -64,7 +64,7 @@ func TestSoundSpeed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tbl, err := SoundSpeed(path, LogType)
+	tbl, err := SoundSpeed(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,12 +100,8 @@ func TestSoundSpeedErrors(t *testing.T) {
 	if err := os.WriteFile(noYear, []byte("-1 1500\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if tbl, err := SoundSpeed(noYear, LogType); err == nil {
+	if tbl, err := SoundSpeed(noYear); err == nil {
 		tbl.Release()
 		t.Error("no year in the name: want an error")
-	}
-	if tbl, err := SoundSpeed(filepath.Join(dir, "CTD_2023_fit"), "SEABIRD"); err == nil {
-		tbl.Release()
-		t.Error("wrong log type: want an error")
 	}
 }

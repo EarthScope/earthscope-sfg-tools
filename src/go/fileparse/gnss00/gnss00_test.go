@@ -13,7 +13,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"gitlab.com/earthscope/gnsstools/core/coordinates"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
 )
 
 // nmea adds the checksum to "$<body>".
@@ -80,7 +80,7 @@ func TestAntennaPositions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tbl, err := AntennaPositions(path, LogGGA)
+	tbl, err := AntennaPositions(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,20 +150,13 @@ func TestDegrees(t *testing.T) {
 	}
 }
 
-func TestWrongLogType(t *testing.T) {
-	if tbl, err := AntennaPositions("unused", "GSV"); err == nil {
-		tbl.Release()
-		t.Error("want an error for a log type other than GGA")
-	}
-}
-
 // TestParseFile runs on a real GNSS00.bin when SFG_GNSS00 names one.
 func TestParseFile(t *testing.T) {
 	path := os.Getenv("SFG_GNSS00")
 	if path == "" {
 		t.Skip("set SFG_GNSS00 to a GNSS00.bin file")
 	}
-	tbl, err := AntennaPositions(path, LogGGA)
+	tbl, err := AntennaPositions(path)
 	if err != nil {
 		t.Fatal(err)
 	}

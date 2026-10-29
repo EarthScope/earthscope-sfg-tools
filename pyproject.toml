@@ -36,7 +36,7 @@ requires = ["hatchling"]
 # custom build hook (hatch_build.py) at build time, landing at
 # earthscope_sfg_tools/go/build/ where go_utils.find_binary() resolves it.
 # This means a plain `pip`/`uv install` no longer needs the manual
-# `pixi run build-go` step. Building requires Go + TileDB at build time.
+# `pixi run build-go` step. Building requires Go at build time (no CGO).
 packages = ["src/earthscope_sfg_tools"]
 
 [tool.hatch.build.targets.wheel.hooks.custom]

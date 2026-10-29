@@ -1,116 +1,56 @@
 # Go Utilities for EarthScope SFG Tools
 
-This directory contains high-performance Go utilities for converting NovAtel GNSS data to RINEX and TileDB formats.
+This directory builds `sfg`, a single Go binary for converting NovAtel GNSS data to RINEX and Level 1 tables. The Python package bundles it in its wheel.
 
 ## Building
 
 ### Prerequisites
 
-- **Go** 1.25.0 or later
-- **Conda/Micromamba** with the following environment:
-  - TileDB development libraries (libtiledb)
-  - C compiler (clang or gcc)
+- **Go** (version in `go.mod`)
+
+The binary is pure Go (no CGO), so it needs no C compiler or shared libraries at build or run time.
 
 ### Quick Start
 
 ```bash
-cd go/
-
-# Build binaries for your platform
-make build
-
-# Bundle with dependent libraries (macOS/Linux)
-make bundle
-```
-
-The binaries will be available in `go/build/` as:
-- `nova2rnx_<os>_<arch>`
-- `nova2tile_<os>_<arch>`
-- `nov0002rnx_<os>_<arch>`
-- `nov0002tile_<os>_<arch>`
-- `tdb2rnx_<os>_<arch>`
-- `rnxqc_<os>_<arch>`
-- (and others)
-
-### Environment Setup
-
-```bash
-# Ensure you have a conda environment with TileDB and C tools
-conda install tiledb clang patchelf  # patchelf needed on Linux
-
-# Set conda prefix for the build
-export CONDA_PREFIX=$CONDA_PREFIX
-cd go/
+cd src/go/
 make build
 ```
 
-### TileDB on macOS
+The binary is written to `src/go/build/sfg_<os>_<arch>`. Its commands:
 
-Ensure TileDB is available:
+- `nov0002rnx`, `nova2rnx`, `novb2rnx`: NovAtel NOV000, ASCII and binary logs to RINEX
+- `level1 parse`: one raw file to Level 1 Arrow IPC tables plus `result.json` (rows per table and log source)
+- `level1 ingest`: a campaign's raw files into the Level 1 Iceberg catalog (local SQL or AWS Glue)
+- `nov2level1`: a NovAtel log to Level 1 Arrow IPC tables (legacy; replaced by `level1 parse`)
+- `rnxqc`: RINEX observation quality check
+- `crinex`: Hatanaka (CRINEX) compression and decompression
 
-```bash
-conda install tiledb
-make build
-make bundle  # This handles RPATH linking automatically
-```
+Run `sfg <command> --help` for each command's flags.
 
 ## Python Usage
 
-Once binaries are built and available, use them via Python:
+Building the wheel (`pip install .`, or `pixi run build-go`) compiles the binary and bundles it with the package. The Python wrappers find it with `go_utils.find_binary`:
 
 ```python
-from earthscope_sfg_tools.novatel_tools import go_binaries
-
-# Convert NovAtel ASCII to RINEX
-exit_code = go_binaries.nova2rnx(
-    input_files=["data.txt"],
-    settings_file="settings.json",
-    modulo=1000  # 1 Hz decimation
-)
-
-# Convert NovAtel ASCII to TileDB
-exit_code = go_binaries.nova2tile(
-    input_files=["data.txt"],
-    tdb_path="s3://bucket/array",
-    num_procs=10
-)
+from earthscope_sfg_tools.novatel_tools.novatel_to_rinex_operations import nov0002rnx
+from earthscope_sfg_tools.novatel_tools.novatel_level1_operations import nov000_to_level1
+from earthscope_sfg_tools.rinex_tools.crinex import crinex_compress
+from earthscope_sfg_tools.rinex_tools.quality_control import rnxqc
 ```
 
 ## Troubleshooting
 
 ### Binary not found
 If you get `BinaryNotFoundError`, ensure:
-1. Binaries are built in `go/build/`
-2. Binaries are in system `PATH`
-3. Binaries match your platform (check with `file` command)
-
-### TileDB linking errors on macOS
-The `make bundle` command automatically handles RPATH. If issues persist:
-```bash
-# Inspect binary RPATH
-otool -L go/build/nova2tile_darwin_arm64
-```
-
-### CGO errors
-Ensure `CONDA_PREFIX` is set and contains TileDB:
-```bash
-echo $CONDA_PREFIX
-ls $CONDA_PREFIX/lib/libtiledb*
-```
+1. The binary is built in `src/go/build/`, or the package was installed from a wheel built with Go on the `PATH`
+2. The binary matches your platform (check with the `file` command)
 
 ## Architecture
 
-- **cmd/**: CLI entry points for each tool
-- **pkg/sfg_utils/**: Shared parsing and utility functions
-- **Makefile**: Build orchestration with platform detection
-- **bundle_dylibs.py**: Automatic library bundling for self-contained binaries
-
-## Optional in Python Package
-
-These Go utilities are **optional**. The main Python package works without them.
-To use them, either:
-1. Build and bundle them yourself (instructions above)
-2. Install a pre-built binary distribution if available
-3. Install from a package manager once available
-
-The Python wrappers gracefully fall back with clear error messages if binaries are unavailable.
+- **cmd/**: CLI entry point and one file per command
+- **fileparse/**: raw-file parsers, one per (file type, Level 1 table); `fileparse/log_sources.md` maps file types to log sources and tables
+- **datamodels/**: Level 1 table definitions and row builders
+- **catalog/**, **sink/**: Iceberg catalog access and writers
+- **pkg/sfg_utils/**: RINEX conversion helpers and legacy NovAtel parsing
+- **Makefile**: Build with platform detection

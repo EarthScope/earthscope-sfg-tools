@@ -17,10 +17,9 @@ import (
 	novatelascii "gitlab.com/earthscope/gnsstools/codecs/novatel/novatel_ascii"
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/datamodels"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/internal/logtype"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/internal/novatel"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/internal/sv3"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/internal/novatel"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/internal/sv3"
 )
 
 // FileType names the file type in stream EDIDs.
@@ -35,10 +34,9 @@ const (
 
 // TWTT parses the QCPIN file at path into travel_times rows (see
 // datamodels.ParsedSchema): each reply paired with the ping, a zero range
-// (no reply detected) yielding no row. logType must be LogEvents. The
-// caller releases the table.
-func TWTT(path, logType string) (arrow.Table, error) {
-	events, err := readEvents(path, logType, LogEvents)
+// (no reply detected) yielding no row. The caller releases the table.
+func TWTT(path string) (arrow.Table, error) {
+	events, err := readEvents(path)
 	if err != nil {
 		return nil, err
 	}
@@ -46,10 +44,10 @@ func TWTT(path, logType string) (arrow.Table, error) {
 }
 
 // AttitudeAHRS parses the QCPIN file at path into attitude_ahrs rows (see
-// datamodels.ParsedSchema), one per distinct AHRS block. logType must be
-// LogEvents. The caller releases the table.
-func AttitudeAHRS(path, logType string) (arrow.Table, error) {
-	events, err := readEvents(path, logType, LogEvents)
+// datamodels.ParsedSchema), one per distinct AHRS block. The caller
+// releases the table.
+func AttitudeAHRS(path string) (arrow.Table, error) {
+	events, err := readEvents(path)
 	if err != nil {
 		return nil, err
 	}
@@ -58,9 +56,9 @@ func AttitudeAHRS(path, logType string) (arrow.Table, error) {
 
 // AntennaPositions parses the QCPIN file at path into gnss_antenna_positions
 // rows (see datamodels.ParsedSchema), one per distinct GNSS block, in ECEF.
-// logType must be LogEvents. The caller releases the table.
-func AntennaPositions(path, logType string) (arrow.Table, error) {
-	events, err := readEvents(path, logType, LogEvents)
+// The caller releases the table.
+func AntennaPositions(path string) (arrow.Table, error) {
+	events, err := readEvents(path)
 	if err != nil {
 		return nil, err
 	}
@@ -70,10 +68,9 @@ func AntennaPositions(path, logType string) (arrow.Table, error) {
 // GNSSObs parses the RANGEA logs in the QCPIN file's NOV_RANGE blocks into
 // GNSSObs rows (see datamodels.ParsedSchema), one epoch per distinct log
 // time. Logs whose time status is UNKNOWN, or whose epoch time fails
-// gnssiceberg.ValidateEpoch, are skipped. logType must be LogRANGEA. The
-// caller releases the table.
-func GNSSObs(path, logType string) (arrow.Table, error) {
-	events, err := readEvents(path, logType, LogRANGEA)
+// gnssiceberg.ValidateEpoch, are skipped. The caller releases the table.
+func GNSSObs(path string) (arrow.Table, error) {
+	events, err := readEvents(path)
 	if err != nil {
 		return nil, err
 	}
@@ -129,12 +126,8 @@ func rangeLog(raw string) (novatelascii.LongMessage, error) {
 	return m, nil
 }
 
-// readEvents reads the QCPIN file at path after checking logType is valid,
-// the log type the calling table is built from.
-func readEvents(path, logType, valid string) ([]sv3.Event, error) {
-	if err := logtype.Check(FileType, logType, valid); err != nil {
-		return nil, err
-	}
+// readEvents reads the QCPIN file at path.
+func readEvents(path string) ([]sv3.Event, error) {
 	events, bad, err := sv3.ReadQCPIN(path)
 	if err != nil {
 		return nil, err

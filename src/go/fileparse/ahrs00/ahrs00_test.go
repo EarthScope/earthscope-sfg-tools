@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/gpsa"
-	"github.com/EarthScope/earthscope-sfg-tools/dev/level1/fileparse/xsens"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/internal/gpsa"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/internal/xsens"
 )
 
 func TestMagneticHeading(t *testing.T) {

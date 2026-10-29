@@ -5083,7 +5083,7 @@ packages:
 - pypi: ./
   name: earthscope-sfg-tools
   version: 0.2.1
-  sha256: 83431b0bc552d1680d0bf2a4fdb7d5457e957369a387364a8e832fe7540a79e8
+  sha256: 2f6f8f2838013b7ed7a775738f98c473e247560ede60cd4074f67652d998fa30
   requires_dist:
   - julian>=0.14
   - numpy>=1.26
