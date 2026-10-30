@@ -3,6 +3,8 @@ package datamodels
 import (
 	"fmt"
 	"maps"
+	"slices"
+	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/iceberg-go"
@@ -224,4 +226,33 @@ func (t TableDef) ArrowSchema() (*arrow.Schema, error) {
 		return nil, err
 	}
 	return table.SchemaToArrowSchema(sc, nil, true, false)
+}
+
+// AllTables lists every table definition, Level 1 to 3.
+func AllTables() []TableDef {
+	return slices.Concat(Level1Tables, Level2Tables, Level3Tables)
+}
+
+// TableByName returns the table named name, either qualified
+// (gnssa_l2.garpos) or bare (inspva). A bare name shared by more than one
+// level is an error.
+func TableByName(name string) (TableDef, error) {
+	var found []TableDef
+	for _, def := range AllTables() {
+		if name == def.Name || name == def.Namespace()+"."+def.Name {
+			found = append(found, def)
+		}
+	}
+	switch len(found) {
+	case 0:
+		return TableDef{}, fmt.Errorf("no table %q", name)
+	case 1:
+		return found[0], nil
+	default:
+		names := make([]string, len(found))
+		for i, def := range found {
+			names[i] = def.Namespace() + "." + def.Name
+		}
+		return TableDef{}, fmt.Errorf("table %q is ambiguous: one of %s", name, strings.Join(names, ", "))
+	}
 }

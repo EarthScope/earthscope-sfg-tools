@@ -190,3 +190,65 @@ func partitionFields(t *testing.T, spec iceberg.PartitionSpec, sc *iceberg.Schem
 	}
 	return strings.Join(parts, ",")
 }
+
+func TestDerivedTables(t *testing.T) {
+	for _, set := range []struct {
+		ns   string
+		defs []TableDef
+	}{{"gnssa_l2", Level2Tables}, {"gnssa_l3", Level3Tables}} {
+		for _, def := range set.defs {
+			t.Run(set.ns+"."+def.Name, func(t *testing.T) {
+				if def.Namespace() != set.ns {
+					t.Errorf("namespace %q", def.Namespace())
+				}
+				if _, ok := def.Column(LogSourceColumn); ok {
+					t.Error("derived tables have no Log_Source")
+				}
+				for _, s := range DerivedScope {
+					if c, ok := def.Column(s.Name); !ok || !c.Required {
+						t.Errorf("scope column %s missing or nullable", s.Name)
+					}
+				}
+				if c := def.Columns[len(def.Columns)-1]; c.Name != StreamEDIDColumn.Name || !c.Required {
+					t.Errorf("last column %q (required %v), want a required stream_edid", c.Name, c.Required)
+				}
+				if c, ok := def.Column(def.TimeColumn); !ok || c.Type != timestamptz || !c.Required {
+					t.Errorf("TimeColumn %q missing, nullable or not a timestamp", def.TimeColumn)
+				}
+				names := map[string]bool{}
+				for _, c := range def.Columns {
+					if names[c.Name] {
+						t.Errorf("duplicate column %q", c.Name)
+					}
+					names[c.Name] = true
+				}
+				if _, err := def.PartitionSpec(); err != nil {
+					t.Error(err)
+				}
+			})
+		}
+	}
+}
+
+func TestDerivedEDID(t *testing.T) {
+	scope := Scope{Network: "net", Station: "STA", Campaign: "2025_A_1126"}
+	got := DerivedEDID(scope, ProductPRIDE, "NOV000:RANGEA")
+	if want := "net:STA:2025_A_1126:PRIDE:NOV000.RANGEA"; got != want {
+		t.Errorf("DerivedEDID = %q, want %q", got, want)
+	}
+}
+
+func TestTableByName(t *testing.T) {
+	for name, want := range map[string]string{"inspva": "gnssa_l1.inspva", "gnssa_l3.garpos": "gnssa_l3.garpos",
+		"gnss_antenna_positions_ppp": "gnssa_l2.gnss_antenna_positions_ppp"} {
+		def, err := TableByName(name)
+		if err != nil || def.Namespace()+"."+def.Name != want {
+			t.Errorf("TableByName(%q) = %s.%s, %v; want %s", name, def.Namespace(), def.Name, err, want)
+		}
+	}
+	for _, name := range []string{"garpos", "nope", "gnssa_l1.garpos"} {
+		if _, err := TableByName(name); err == nil {
+			t.Errorf("TableByName(%q): no error", name)
+		}
+	}
+}

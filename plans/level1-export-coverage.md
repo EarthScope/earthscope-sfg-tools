@@ -58,7 +58,7 @@ How `earthscope-sfg-workflows` uses it, across 9 files:
    - **Long-name output:** the RINEX v3 long filename (`sfg_utils.BuildV3ObsFilename`).
    - **Python access:** there is no wrapper.
 4. **No "which days have data" query.** This replaces `get_unique_dates`; it could be a scan of `day(time_gpst)` partition values or a `distinct(date(time))`.
-5. **No generic table export from the command line.** There is no `sfg`/Python command that writes a table, scope or window to CSV or Parquet. Only Python's `Level1Reader.read` does it, by hand.
+5. **Generic table export: done 2026-10-30.** `sfg export table` writes any table to Parquet, CSV or Arrow, selected by scope, file type, log source and time window (`plans/level2-tables-and-export.md`, E1).
 6. **Glue was tested on 2026-10-29.** NBR1 2025 (one file per type, all types) was ingested into `s3://test-sfg-api/gnssa-l1-test`, Glue database `gnssa_l1`, `us-east-2`.
    - **Go write:** identical appends to the local SQL catalog.
    - **pyiceberg read:** identical rows on all 21 streams, including `gnss_observations` with `%3A` keys.

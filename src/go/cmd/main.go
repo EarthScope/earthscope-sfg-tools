@@ -20,6 +20,7 @@ func init() {
 	rootCmd.AddCommand(nov0002rnxCmd)
 	rootCmd.AddCommand(nov2level1Cmd)
 	rootCmd.AddCommand(level1Cmd)
+	rootCmd.AddCommand(exportCmd)
 	rootCmd.AddCommand(rnxqcCmd)
 }
 
