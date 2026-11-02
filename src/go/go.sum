@@ -45,6 +45,8 @@ github.com/spf13/cobra v1.10.2 h1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=
 github.com/spf13/cobra v1.10.2/go.mod h1:7C1pvHqHw5A4vrJfjNwvOdzYu0Gml16OCs2GRiTUUS4=
 github.com/spf13/pflag v1.0.9 h1:9exaQaMOCwffKiiiYk6/BndUBv+iRViNW+4lEMi0PvY=
 github.com/spf13/pflag v1.0.9/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
+github.com/spf13/pflag v1.0.10 h1:4EBh2KAYBwaONj6b2Ye1GiHfwjqyROoF4RwYO+vPwFk=
+github.com/spf13/pflag v1.0.10/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
@@ -57,6 +59,8 @@ gitlab.com/earthscope/gnsstools v0.60.0 h1:6zByEMvEIsXgsJlziRiwmF0G2yjeiuhZ505DO
 gitlab.com/earthscope/gnsstools v0.60.0/go.mod h1:vRJRBktQob9c0WdHYKH3h19gkLn0E3xkxW7vX4ATXXI=
 gitlab.com/earthscope/gnsstools v0.88.0 h1:KBS5wSGD/p6RjR4Ckrs83l5yrL6gx272a3gJUvRwmhA=
 gitlab.com/earthscope/gnsstools v0.88.0/go.mod h1:xWR2jAXhxV/6JSFCljt+Dc/G9ML8OKayBh0P2oyHxvA=
+gitlab.com/earthscope/gnsstools v0.102.0 h1:R+ZDYWSYvjIM/btSNgkFmT9XUfEa3tPvm99G87Byvp4=
+gitlab.com/earthscope/gnsstools v0.102.0/go.mod h1:LrPl8sqjkP7DiF6pRuieWvxG3wT8zyWLGYXHMNgBP1U=
 gitlab.com/earthscope/gnsstools/geodata v0.58.0 h1:JHrvCqRLpydmrkOCid01v8EXEStnmIgJfFqLi2WJexY=
 gitlab.com/earthscope/gnsstools/geodata v0.58.0/go.mod h1:+eTweWf6H476k013pYiIH+t8pYX7eXLKtwVfsebkhgA=
 go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=

@@ -1,15 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/sfg_utils"
 	"github.com/spf13/cobra"
-	"gitlab.com/earthscope/gnsstools/codecs/rinex"
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 )
 
@@ -23,20 +20,9 @@ func runNova2rnx(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--settings is required")
 	}
 
-	metaFile, err := os.Open(metaPath)
+	settings, err := sfg_utils.ReadRinexSettings(metaPath)
 	if err != nil {
-		return fmt.Errorf("opening settings file: %w", err)
-	}
-	defer metaFile.Close()
-
-	metaBytes, err := io.ReadAll(metaFile)
-	if err != nil {
-		return fmt.Errorf("reading settings file: %w", err)
-	}
-
-	settings := rinex.NewSettings()
-	if err := json.Unmarshal(metaBytes, &settings); err != nil {
-		return fmt.Errorf("parsing settings JSON: %w", err)
+		return err
 	}
 
 	epochs := []observation.Epoch{}
