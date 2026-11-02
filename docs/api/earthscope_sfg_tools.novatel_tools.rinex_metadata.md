@@ -13,6 +13,14 @@ whether the source is a dict, a JSON file path, an existing instance,
 or just a site code.  Call ``write()`` explicitly when a JSON file is
 needed on disk (e.g. to pass to a Go binary via ``-settings``).
 
+Antenna types are serialized as a 20-character field: a model padded to
+16 columns followed by a four-character radome. Legacy inputs such as
+`NOV850 NONE` are normalized to `NOV850          NONE`; an omitted radome
+becomes `NONE`. Existing correctly padded names and alternate radomes such
+as `SCIT` are preserved. Oversized or ambiguous names are rejected rather
+than silently truncated. This also applies to JSON settings passed directly
+to `nova2rnx`, `novb2rnx`, `nov0002rnx`, and `tdb2rnx`.
+
 **Fields**
 
 | Name | Type | Description |

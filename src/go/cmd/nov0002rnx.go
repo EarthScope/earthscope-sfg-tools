@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"sync"
@@ -11,7 +9,6 @@ import (
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/sfg_utils"
 	"github.com/spf13/cobra"
-	"gitlab.com/earthscope/gnsstools/codecs/rinex"
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 )
 
@@ -33,20 +30,9 @@ func runNov0002rnx(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--settings is required")
 	}
 
-	metaFile, err := os.Open(metaPath)
+	settings, err := sfg_utils.ReadRinexSettings(metaPath)
 	if err != nil {
-		return fmt.Errorf("opening settings file: %w", err)
-	}
-	defer metaFile.Close()
-
-	metaBytes, err := io.ReadAll(metaFile)
-	if err != nil {
-		return fmt.Errorf("reading settings file: %w", err)
-	}
-
-	settings := rinex.NewSettings()
-	if err := json.Unmarshal(metaBytes, &settings); err != nil {
-		return fmt.Errorf("parsing settings JSON: %w", err)
+		return err
 	}
 
 	filename_times, err := sfg_utils.SortFilesByFirstEpochNOV000(args)
@@ -123,5 +109,5 @@ func init() {
 	nov0002rnxCmd.Flags().String("settings", "", "settings file (required)")
 	nov0002rnxCmd.Flags().Int64("modulo", 0, "decimation modulo in milliseconds (e.g., 1000 for 1 Hz, 15000 for 15s). 0 disables decimation.")
 	nov0002rnxCmd.Flags().Int("numroutines", 1, "number of concurrent goroutines for processing files")
-	
+
 }

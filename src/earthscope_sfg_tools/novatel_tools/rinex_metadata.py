@@ -6,7 +6,7 @@ import json
 import uuid
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class RinexMetadata(BaseModel):
@@ -34,7 +34,7 @@ class RinexMetadata(BaseModel):
     receiver_model: str | None = Field(default="NOV")
     receiver_serial: str | None = Field(default="XXXXXXXXXX")
     receiver_firmware: str | None = Field(default="0.0.0")
-    antenna_model: str | None = Field(default="NOV850 NONE")
+    antenna_model: str | None = Field(default="NOV850 NONE", validate_default=True)
     antenna_serial: str | None = Field(default="987654321")
     antenna_position: list[float] | None = Field(
         default_factory=lambda: [0.0, 0.0, 0.0]
@@ -42,6 +42,33 @@ class RinexMetadata(BaseModel):
     antenna_offsetHEN: list[float] | None = Field(
         default_factory=lambda: [0.0, 0.0, 0.0]
     )
+
+    @field_validator("antenna_model")
+    @classmethod
+    def normalize_antenna_model(cls, value: str | None) -> str | None:
+        """Format the RINEX A20 antenna field as model (16) + radome (4).
+
+        Accept legacy combined strings and already padded fields. A missing
+        radome means NONE; reject values that would otherwise be truncated.
+        """
+        if value is None:
+            return None
+        fields = value.split()
+        if len(value) == 20 and len(fields) == 1:
+            fields = [value[:16], value[16:]]
+        if not fields:
+            return ""
+        if len(fields) > 2:
+            raise ValueError("antenna_model must contain a model and optional radome")
+        model = fields[0]
+        radome = fields[1] if len(fields) == 2 else "NONE"
+        if not model.isascii() or len(model) > 16:
+            raise ValueError("antenna model must be at most 16 ASCII characters")
+        if not radome.isascii() or len(radome) != 4 or not radome.isalnum():
+            raise ValueError(
+                "antenna radome must be four ASCII alphanumeric characters"
+            )
+        return f"{model:<16}{radome}"
 
     @classmethod
     def load(

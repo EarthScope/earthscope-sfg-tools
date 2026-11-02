@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -19,5 +21,20 @@ func TestFinalQueryRangeIncludesArrayMaximumOnlyForFinalSlice(t *testing.T) {
 	wantFinalEnd := day.End.Add(time.Millisecond)
 	if got := finalQueryRange(final, day); !got.End.Equal(wantFinalEnd) {
 		t.Fatalf("final end = %s, want %s", got.End, wantFinalEnd)
+	}
+}
+
+// TileDB consumes settings JSON directly, without Python model validation.
+func TestParseTdb2rnxSettingsNormalizesLegacyAntenna(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte(`{"antenna_model":"NOV850 NONE"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := parseTdb2rnxSettings(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.AntennaModel != "NOV850          NONE" {
+		t.Fatalf("incorrect antenna field: %q", settings.AntennaModel)
 	}
 }

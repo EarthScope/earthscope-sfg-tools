@@ -4,9 +4,7 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"sync"
@@ -27,18 +25,9 @@ type tdb2rnxBodyParameters struct {
 }
 
 func parseTdb2rnxSettings(path string) (*rinex.Settings, error) {
-	file, err := os.Open(path)
+	settings, err := sfg_utils.ReadRinexSettings(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed opening settings file: %w", err)
-	}
-	defer file.Close()
-	bytes, err := io.ReadAll(file)
-	if err != nil {
-		return nil, fmt.Errorf("failed reading settings file: %w", err)
-	}
-	settings := rinex.NewSettings()
-	if err := json.Unmarshal(bytes, settings); err != nil {
-		return nil, fmt.Errorf("failed parsing settings file: %w", err)
+		return nil, err
 	}
 	if settings.ObservationsBySystem == nil {
 		settings.ObservationsBySystem = observation.NewObservationsBySystem()
