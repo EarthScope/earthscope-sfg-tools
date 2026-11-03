@@ -692,6 +692,12 @@ func StreamFileNOVB(file string, antIndex uint8, yield func(observation.Epoch) e
 
 	reader := bufio.NewReader(f)
 	fail_counter := 0
+	invalidTime := 0
+	defer func() {
+		if invalidTime > 0 {
+			slog.Warn("Skipped NOV770 observations without established receiver time", "file", file, "count", invalidTime)
+		}
+	}()
 MessageLoop:
 	for {
 		msg, err := novatelbinary.DeserializeMessage(reader)
@@ -714,6 +720,11 @@ MessageLoop:
 			continue MessageLoop
 		}
 
+		if (msg.MessageID == 43 || msg.MessageID == 140 || msg.MessageID == 2537) && !usableNOVBObservationTime(msg) {
+			invalidTime++
+			fail_counter++
+			continue MessageLoop
+		}
 		var epoch observation.Epoch
 		switch msg.MessageID {
 		case 43:
@@ -923,13 +934,13 @@ MessageLoop:
 			//log.Warnf("failed reading message: %s", err)
 			continue MessageLoop
 		}
-		if msg.MessageID == 43 || msg.MessageID == 140 || msg.MessageID == 2537 {
+		if (msg.MessageID == 43 || msg.MessageID == 140 || msg.MessageID == 2537) && usableNOVBObservationTime(msg) {
 			return msg.Time(), nil
 		} else {
 			continue MessageLoop
 		}
 	}
-	return time.Time{}, fmt.Errorf("no RANGE/RANGECMP/RANGECMP5 message found in file")
+	return time.Time{}, fmt.Errorf("no RANGE/RANGECMP/RANGECMP5 message with established receiver time found in file")
 }
 
 type FileTime struct {
