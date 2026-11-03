@@ -12,7 +12,9 @@ import (
 )
 
 // Go counterparts of the Python TableDefs in
-// earthscope_sfg_tools.datamodels.iceberg. Keep the two in step:
+// earthscope_sfg_tools.datamodels.iceberg, except that every Go table's
+// only identity column is stream_edid (no Network, Station, Campaign or
+// Log_Source columns), so the Python definitions no longer match.
 // Iceberg tracks columns by field ID, which is assigned in declaration order
 // starting at 1, so new columns must only ever be appended.
 
@@ -41,7 +43,7 @@ type TableDef struct {
 	Level   int
 	Doc     string
 	Columns []Column
-	// PartitionBy defaults to identity on Network, Station, Campaign, or to
+	// PartitionBy defaults to identity on stream_edid, or to
 	// External's spec. Set on an External table, it overrides that spec;
 	// keys name columns of External's schema.
 	PartitionBy []PartitionKey
@@ -79,31 +81,23 @@ var (
 	timestamptz = iceberg.PrimitiveTypes.TimestampTz
 )
 
-// Level1Scope holds the columns every Level 1 table starts with.
-var Level1Scope = []Column{
-	{Name: "Network", Type: str, Doc: "Network identifier", Required: true},
-	{Name: "Station", Type: str, Doc: "Station identifier", Required: true},
-	{Name: "Campaign", Type: str, Doc: "Campaign identifier", Required: true},
-	{Name: "Log_Source", Type: str, Doc: "Source log file or log type", Required: true},
-}
-
-// StreamEDIDColumn is the last column of every Level 1 table built with
-// level1: the rows' stream EDID (see StreamEDID). It is last, and nullable,
-// because it was added after the tables were defined: Iceberg assigns field
-// IDs in declaration order and only allows new columns to be optional. The
-// Go parsers always set it; the Python ingest leaves it null.
-var StreamEDIDColumn = Column{Name: "stream_edid", Type: str,
+// StreamEDIDColumn is the first column of every table built with level1 or
+// derived: the rows' stream EDID (see StreamEDID). It is the only identity
+// column: network, station, campaign, file type and log source are its
+// fields, not columns of their own.
+var StreamEDIDColumn = Column{Name: "stream_edid", Type: str, Required: true,
 	Doc: "Stream EDID, network:station:campaign:file_type:log_source"}
 
-// level1 wraps cols in the Level 1 scope columns and StreamEDIDColumn.
+// level1 prepends StreamEDIDColumn to cols.
 func level1(cols ...Column) []Column {
-	return append(append(append([]Column{}, Level1Scope...), cols...), StreamEDIDColumn)
+	return append([]Column{StreamEDIDColumn}, cols...)
 }
 
-var scopePartitions = []PartitionKey{
-	{Source: "Network", Transform: iceberg.IdentityTransform{}},
-	{Source: "Station", Transform: iceberg.IdentityTransform{}},
-	{Source: "Campaign", Transform: iceberg.IdentityTransform{}},
+// streamPartitions is the default partitioning: one partition per stream.
+// A stream EDID starts network:station:, so its partitions nest within
+// each network and station.
+var streamPartitions = []PartitionKey{
+	{Source: StreamEDIDColumn.Name, Transform: iceberg.IdentityTransform{}},
 }
 
 // Namespace is the catalog namespace of the table's level, e.g. gnssa_l1.
@@ -143,8 +137,8 @@ func (t TableDef) columnSchema() *iceberg.Schema {
 }
 
 // PartitionSpec is built from PartitionBy when set, against External's
-// schema for an External table; otherwise it is External's spec, or scope
-// identity.
+// schema for an External table; otherwise it is External's spec, or
+// stream_edid identity.
 func (t TableDef) PartitionSpec() (iceberg.PartitionSpec, error) {
 	if t.External != nil {
 		ext, err := t.External()
@@ -155,7 +149,7 @@ func (t TableDef) PartitionSpec() (iceberg.PartitionSpec, error) {
 	}
 	keys := t.PartitionBy
 	if keys == nil {
-		keys = scopePartitions
+		keys = streamPartitions
 	}
 	return t.buildSpec(t.columnSchema(), keys)
 }

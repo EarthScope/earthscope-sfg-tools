@@ -19,19 +19,18 @@ func TestAttitudeAHRS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := len(sc.Fields()); n != 16 {
-		t.Fatalf("schema has %d fields, want 16", n)
+	if n := len(sc.Fields()); n != 12 {
+		t.Fatalf("schema has %d fields, want 12", n)
 	}
-	// stream_edid was added last, so it is the last field ID and nullable.
-	if f, ok := sc.FindFieldByName("stream_edid"); !ok || f.ID != 16 || f.Required {
-		t.Errorf("stream_edid: id %d required %v ok %v, want id 16, nullable", f.ID, f.Required, ok)
-	}
-	// Field IDs must follow declaration order (and match the Python TableDef).
-	for i, name := range []string{"Network", "Station", "Campaign", "Log_Source", "time", "time_instrument", "time_start_count"} {
+	// Field IDs follow declaration order; stream_edid is first and required.
+	for i, name := range []string{"stream_edid", "time", "time_instrument", "time_start_count"} {
 		f, ok := sc.FindFieldByName(name)
 		if !ok || f.ID != i+1 {
 			t.Errorf("%s: id %d ok %v, want id %d", name, f.ID, ok, i+1)
 		}
+	}
+	if f, _ := sc.FindFieldByName("stream_edid"); !f.Required {
+		t.Error("stream_edid should be required")
 	}
 	if f, _ := sc.FindFieldByName("time_start_count"); f.Required {
 		t.Error("time_start_count should be nullable")
@@ -41,14 +40,8 @@ func TestAttitudeAHRS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec.NumFields() != 3 {
-		t.Fatalf("spec has %d fields, want 3", spec.NumFields())
-	}
-	for i, name := range []string{"Network", "Station", "Campaign"} {
-		f := spec.Field(i)
-		if f.Name != name || f.SourceIDs[0] != i+1 || !f.Transform.Equals(iceberg.IdentityTransform{}) {
-			t.Errorf("partition field %d = %+v", i, f)
-		}
+	if got := partitionFields(t, spec, sc); got != "stream_edid=identity(stream_edid)" {
+		t.Errorf("partition spec = %s", got)
 	}
 
 	if so, err := def.SortOrder(); err != nil || !so.IsUnsorted() {
@@ -59,8 +52,8 @@ func TestAttitudeAHRS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if as.NumFields() != 16 || as.Field(4).Nullable {
-		t.Errorf("arrow schema: %d fields, time nullable %v", as.NumFields(), as.Field(4).Nullable)
+	if as.NumFields() != 12 || as.Field(1).Nullable {
+		t.Errorf("arrow schema: %d fields, time nullable %v", as.NumFields(), as.Field(1).Nullable)
 	}
 }
 
@@ -83,12 +76,11 @@ func TestLevel1Tables(t *testing.T) {
 				names[c.Name] = true
 			}
 			if def.External == nil {
-				for _, s := range Level1Scope {
-					if c, ok := def.Column(s.Name); !ok || !c.Required {
-						t.Errorf("scope column %s missing or nullable", s.Name)
-					}
+				if c := def.Columns[0]; c.Name != StreamEDIDColumn.Name || !c.Required {
+					t.Errorf("first column %q (required %v), want a required stream_edid", c.Name, c.Required)
 				}
 			}
+			noScopeColumns(t, def)
 			as, err := def.ArrowSchema()
 			if err != nil {
 				t.Fatal(err)
@@ -102,15 +94,19 @@ func TestLevel1Tables(t *testing.T) {
 			if idx := as.FieldIndices(def.TimeColumn); len(idx) == 1 && as.Field(idx[0]).Type.ID() != arrow.TIMESTAMP {
 				t.Errorf("TimeColumn %q is %s, want a timestamp", def.TimeColumn, as.Field(idx[0]).Type)
 			}
-			if _, err := def.PartitionSpec(); err != nil {
-				t.Error(err)
-			}
-			if _, err := def.SortOrder(); err != nil {
-				t.Error(err)
+			spec, err := def.PartitionSpec()
+			if err != nil {
+				t.Fatal(err)
 			}
 			sc, err := def.Schema()
 			if err != nil {
 				t.Fatal(err)
+			}
+			if got := partitionFields(t, spec, sc); def.External == nil && got != "stream_edid=identity(stream_edid)" {
+				t.Errorf("partition spec = %s", got)
+			}
+			if _, err := def.SortOrder(); err != nil {
+				t.Error(err)
 			}
 			if as.NumFields() != len(sc.Fields()) {
 				t.Errorf("arrow schema has %d fields, want %d", as.NumFields(), len(sc.Fields()))
@@ -132,11 +128,6 @@ func TestGNSSObsFromGnsstools(t *testing.T) {
 	for _, name := range []string{"stream_edid", "time_utc", "time_gpst", "time_sub_us_ps", "constellation", "satellite_id", "signal"} {
 		if f, ok := sc.FindFieldByName(name); !ok || !f.Required {
 			t.Errorf("%s: missing or nullable", name)
-		}
-	}
-	for _, name := range []string{"Network", "Station", "Campaign", "Log_Source"} {
-		if _, ok := sc.FindFieldByName(name); ok {
-			t.Errorf("%s: gnsstools table has no scope columns", name)
 		}
 	}
 
@@ -177,6 +168,20 @@ func TestGNSSObsFromGnsstools(t *testing.T) {
 	}
 }
 
+// noScopeColumns checks that def's only identity column is stream_edid.
+func noScopeColumns(t *testing.T, def TableDef) {
+	t.Helper()
+	sc, err := def.Schema()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"Network", "Station", "Campaign", LogSourceColumn} {
+		if _, ok := sc.FindFieldByName(name); ok {
+			t.Errorf("%s has a %s column", def.Name, name)
+		}
+	}
+}
+
 // partitionFields describes spec's fields as name=transform(source column).
 func partitionFields(t *testing.T, spec iceberg.PartitionSpec, sc *iceberg.Schema) string {
 	t.Helper()
@@ -201,16 +206,9 @@ func TestDerivedTables(t *testing.T) {
 				if def.Namespace() != set.ns {
 					t.Errorf("namespace %q", def.Namespace())
 				}
-				if _, ok := def.Column(LogSourceColumn); ok {
-					t.Error("derived tables have no Log_Source")
-				}
-				for _, s := range DerivedScope {
-					if c, ok := def.Column(s.Name); !ok || !c.Required {
-						t.Errorf("scope column %s missing or nullable", s.Name)
-					}
-				}
-				if c := def.Columns[len(def.Columns)-1]; c.Name != StreamEDIDColumn.Name || !c.Required {
-					t.Errorf("last column %q (required %v), want a required stream_edid", c.Name, c.Required)
+				noScopeColumns(t, def)
+				if c := def.Columns[0]; c.Name != StreamEDIDColumn.Name || !c.Required {
+					t.Errorf("first column %q (required %v), want a required stream_edid", c.Name, c.Required)
 				}
 				if c, ok := def.Column(def.TimeColumn); !ok || c.Type != timestamptz || !c.Required {
 					t.Errorf("TimeColumn %q missing, nullable or not a timestamp", def.TimeColumn)
@@ -222,8 +220,16 @@ func TestDerivedTables(t *testing.T) {
 					}
 					names[c.Name] = true
 				}
-				if _, err := def.PartitionSpec(); err != nil {
-					t.Error(err)
+				spec, err := def.PartitionSpec()
+				if err != nil {
+					t.Fatal(err)
+				}
+				sc, err := def.Schema()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got := partitionFields(t, spec, sc); got != "stream_edid=identity(stream_edid)" {
+					t.Errorf("partition spec = %s", got)
 				}
 			})
 		}

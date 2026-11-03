@@ -77,8 +77,8 @@ var INSSTDEV = TableDef{
 
 // GNSSObs is the gnsstools observations table, defined by gnsstools
 // (gitlab.com/earthscope/gnsstools/geodata gnssiceberg): schema, sort order
-// and table properties. It has no scope or Log_Source columns; stream_edid
-// carries both, as network:station:campaign:filetype:logsource.
+// and table properties. Like every table, its only identity column is
+// stream_edid, network:station:campaign:filetype:logsource.
 //
 // Partitioning overrides gnsstools' day(time_gpst), bucket[64](stream_edid)
 // with day(time_gpst), identity(stream_edid): one partition per stream per

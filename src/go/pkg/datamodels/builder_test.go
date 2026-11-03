@@ -70,12 +70,6 @@ func TestParsedSchema(t *testing.T) {
 		}
 		full, _ := def.ArrowSchema()
 		want := full.NumFields() - len(StampedColumns) + 1 // + Log_Source
-		if full.HasField(LogSourceColumn) {
-			want--
-		}
-		if def.Name == GNSSObs.Name {
-			want += 3 // GNSSObs has no Network/Station/Campaign to drop
-		}
 		if sc.NumFields() != want {
 			t.Errorf("%s: parsed schema has %d fields, want %d", def.Name, sc.NumFields(), want)
 		}

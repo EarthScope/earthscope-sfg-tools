@@ -8,7 +8,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
 // rangeA is a RANGEA with GPS PRN 30 L1 C/A and L2 P(Y) at GPS week 2326,

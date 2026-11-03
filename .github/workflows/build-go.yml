@@ -46,7 +46,7 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p build
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o build/sfg_windows_amd64.exe -buildvcs=false ./cmd
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o build/sfg_windows_amd64.exe -buildvcs=false ./cmd/sfg
           ./build/sfg_windows_amd64.exe --help >/dev/null
 
   commit-binaries:

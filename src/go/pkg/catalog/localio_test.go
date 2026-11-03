@@ -8,7 +8,7 @@ import (
 
 	"github.com/apache/iceberg-go"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
 // A partition value that needs escaping (stream_edid's ':') must land at the

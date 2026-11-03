@@ -13,8 +13,8 @@ import (
 	novatelascii "gitlab.com/earthscope/gnsstools/codecs/novatel/novatel_ascii"
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/internal/novatel"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/internal/novatel"
 )
 
 // FileType names the file type in errors and stream EDIDs.

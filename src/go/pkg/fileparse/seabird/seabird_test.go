@@ -9,7 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
 // A trimmed SBE .cnv header: named columns with sound speed in column 3, not

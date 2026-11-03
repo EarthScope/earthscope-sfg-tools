@@ -16,7 +16,7 @@ build:
 	@mkdir -p $(BUILD_DIR)
 	@BINARY_NAME=$(BINARY)_$(OS)_$(ARCH); \
 	echo "Building $$BINARY_NAME for $(OS)/$(ARCH)..."; \
-	env CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -o $(BUILD_DIR)/$$BINARY_NAME -buildvcs=false ./cmd
+	env CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -o $(BUILD_DIR)/$$BINARY_NAME -buildvcs=false ./cmd/sfg
 
 debug:
 	@echo "SHELL = $(SHELL)"

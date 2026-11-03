@@ -16,25 +16,24 @@ type Builder struct {
 	rb  *array.RecordBuilder
 }
 
-// LogSourceColumn is the Log_Source column every parsed table has.
+// LogSourceColumn is the Log_Source column parsers return: each row's log
+// source, from which fileparse.Parser.Parse derives its stream_edid. No
+// table stores it.
 const LogSourceColumn = "Log_Source"
 
 // StampedColumns are the columns of a table that parsers do not produce:
 // fileparse.Parser.Parse fills them from the scope and Log_Source.
-var StampedColumns = []string{"Network", "Station", "Campaign", StreamEDIDColumn.Name}
+var StampedColumns = []string{StreamEDIDColumn.Name}
 
-// ParsedSchema is the schema of def's rows as a parser returns them: def's
-// Arrow schema without the StampedColumns columns, with a required Log_Source
-// column first if def has none (GNSSObs).
+// ParsedSchema is the schema of def's rows as a parser returns them: a
+// required Log_Source column, then def's Arrow schema without the
+// StampedColumns columns.
 func ParsedSchema(def TableDef) (*arrow.Schema, error) {
 	full, err := def.ArrowSchema()
 	if err != nil {
 		return nil, err
 	}
-	var fields []arrow.Field
-	if !full.HasField(LogSourceColumn) {
-		fields = append(fields, arrow.Field{Name: LogSourceColumn, Type: arrow.BinaryTypes.String})
-	}
+	fields := []arrow.Field{{Name: LogSourceColumn, Type: arrow.BinaryTypes.String}}
 	for _, f := range full.Fields() {
 		if !slices.Contains(StampedColumns, f.Name) {
 			fields = append(fields, f)

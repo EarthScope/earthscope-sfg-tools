@@ -2,7 +2,6 @@ package catalog
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -10,10 +9,10 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
-// derivedRows is n rows of def in stream edid and its scope, def.TimeColumn
+// derivedRows is n rows of def in stream edid, def.TimeColumn
 // one second apart from start, other required columns zero and optional
 // ones null.
 func derivedRows(t *testing.T, def datamodels.TableDef, edid string, start time.Time, n int) arrow.Table {
@@ -24,8 +23,7 @@ func derivedRows(t *testing.T, def datamodels.TableDef, edid string, start time.
 	}
 	b := array.NewRecordBuilder(memory.DefaultAllocator, sc)
 	defer b.Release()
-	parts := strings.Split(edid, ":")
-	str := map[string]string{"stream_edid": edid, "Network": parts[0], "Station": parts[1], "Campaign": parts[2]}
+	str := map[string]string{"stream_edid": edid}
 	for i := range n {
 		ts := arrow.Timestamp(start.Add(time.Duration(i) * time.Second).UnixMicro())
 		for j, f := range sc.Fields() {

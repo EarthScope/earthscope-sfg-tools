@@ -7,13 +7,13 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
 // stamp returns parsed (rows in datamodels.ParsedSchema form) as a table
-// with p.Table's full schema: Network, Station and Campaign from scope,
-// stream_edid from each row's Log_Source, every other column taken from
-// parsed by name. Columns keep parsed's chunking.
+// with p.Table's full schema: stream_edid from scope and each row's
+// Log_Source, every other column taken from parsed by name; Log_Source is
+// dropped. Columns keep parsed's chunking.
 func (p Parser) stamp(parsed arrow.Table, scope datamodels.Scope) (arrow.Table, error) {
 	sc, err := p.Table.ArrowSchema()
 	if err != nil {
@@ -42,12 +42,6 @@ func (p Parser) stamp(parsed arrow.Table, scope datamodels.Scope) (arrow.Table, 
 	for _, f := range sc.Fields() {
 		var data *arrow.Chunked
 		switch f.Name {
-		case "Network":
-			data = constant(logSource, scope.Network)
-		case "Station":
-			data = constant(logSource, scope.Station)
-		case "Campaign":
-			data = constant(logSource, scope.Campaign)
 		case datamodels.StreamEDIDColumn.Name:
 			data = mapStrings(logSource, edid)
 		default:
@@ -75,11 +69,6 @@ func parsedColumn(parsed arrow.Table, name string, typ arrow.DataType) (*arrow.C
 		return nil, fmt.Errorf("parser returned %q as %s, want %s", name, c.DataType(), typ)
 	}
 	return c, nil
-}
-
-// constant is a string column of v, chunked like like.
-func constant(like *arrow.Column, v string) *arrow.Chunked {
-	return mapStrings(like, func(string) string { return v })
 }
 
 // mapStrings is f applied to each value of the string column src, chunked

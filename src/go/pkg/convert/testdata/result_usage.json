@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "command": "convert",
+  "ok": false,
+  "inputs": [],
+  "streams": [],
+  "outputs": [],
+  "errors": [
+    {
+      "stage": "usage",
+      "message": "--source iceberg --sink files needs --source-uri, --sink-uri, --scope, --source-catalog, --table, --table-format\n--max-files doesn't apply to --source iceberg --sink files"
+    }
+  ]
+}

@@ -27,8 +27,8 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"gitlab.com/earthscope/gnsstools/core/coordinates"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/internal/gpsa"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/internal/gpsa"
 )
 
 const (

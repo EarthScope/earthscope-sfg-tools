@@ -15,9 +15,9 @@ import (
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 	"gitlab.com/earthscope/gnsstools/geodata/gnssiceberg"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/catalog"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/novatel770"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/novatel770"
 )
 
 // TestBuildGNSSObsMatchesGnsstools guards datamodels.BuildGNSSObs, a copy of

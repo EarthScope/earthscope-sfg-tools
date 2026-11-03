@@ -20,7 +20,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
 const (

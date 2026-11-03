@@ -13,7 +13,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/iceberg-go"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
 // Snapshot summary properties Append records with WithSource.
@@ -48,6 +48,20 @@ func WithSource(path string) AppendOption {
 		}
 		o.props[PropSourceFile] = path
 		o.props[PropSourceSHA256] = hex.EncodeToString(h.Sum(nil))
+		return nil
+	}
+}
+
+// WithProperties adds props to the snapshot's summary properties, e.g. to
+// record where copied rows came from.
+func WithProperties(props map[string]string) AppendOption {
+	return func(o *appendOptions) error {
+		if o.props == nil {
+			o.props = iceberg.Properties{}
+		}
+		for k, v := range props {
+			o.props[k] = v
+		}
 		return nil
 	}
 }

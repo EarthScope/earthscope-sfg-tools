@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
 // parseFloats parses fields[from:from+len(dst)] into dst.

@@ -21,7 +21,7 @@ import (
 	"github.com/apache/iceberg-go/table"
 	"github.com/uptrace/bun/driver/sqliteshim"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
 // Catalog types for Config.Type.
@@ -267,10 +267,52 @@ const appendBatchRows = 1 << 20
 // in the overlap. Only the new rows' range is replaced, so if a re-parse
 // covers a narrower range than before, the old rows outside it remain.
 func (c *Catalog) Append(ctx context.Context, def datamodels.TableDef, rows arrow.Table, opts ...AppendOption) (int64, error) {
+	b, err := c.NewBatch(ctx, def)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := b.Append(ctx, rows, opts...); err != nil {
+		return 0, err
+	}
+	return b.Commit(ctx)
+}
+
+// A Batch stages appends to one table and commits them together: each
+// Append is its own snapshot, with its own summary properties, as with
+// Catalog.Append, but the catalog is updated once, at Commit. Each staged
+// Append sees the ones before it, so a batch leaves the table as the same
+// appends committed one by one would. Staged rows are written to storage at
+// Append; only the commit is deferred.
+type Batch struct {
+	c      *Catalog
+	def    datamodels.TableDef
+	tbl    *table.Table
+	tx     *table.Transaction
+	staged int64 // rows staged since the last Commit
+	n      int   // appends staged since the last Commit
+}
+
+// NewBatch starts a batch of appends to def's table, creating or evolving
+// the table as Table does.
+func (c *Catalog) NewBatch(ctx context.Context, def datamodels.TableDef) (*Batch, error) {
+	tbl, err := c.Table(ctx, def)
+	if err != nil {
+		return nil, err
+	}
+	return &Batch{c: c, def: def, tbl: tbl, tx: tbl.NewTransaction()}, nil
+}
+
+// Append stages rows as one snapshot, as Catalog.Append would commit them,
+// and returns the rows staged. An error before anything is staged leaves
+// the batch as it was; Failed reports whether an error left it unusable.
+func (b *Batch) Append(ctx context.Context, rows arrow.Table, opts ...AppendOption) (int64, error) {
 	if rows.NumRows() == 0 {
 		return 0, nil
 	}
-	if err := def.Validate(rows); err != nil {
+	if b.tx == nil {
+		return 0, fmt.Errorf("%s: batch failed earlier", b.def.Name)
+	}
+	if err := b.def.Validate(rows); err != nil {
 		return 0, err
 	}
 	var o appendOptions
@@ -279,27 +321,48 @@ func (c *Catalog) Append(ctx context.Context, def datamodels.TableDef, rows arro
 			return 0, err
 		}
 	}
-	filter, err := ReplaceFilter(def, rows)
+	filter, err := ReplaceFilter(b.def, rows)
 	if err != nil {
-		return 0, fmt.Errorf("%s: %w", def.Name, err)
+		return 0, fmt.Errorf("%s: %w", b.def.Name, err)
 	}
-	tbl, err := c.Table(ctx, def)
+	ordered, err := inTableOrder(b.tbl, rows)
 	if err != nil {
-		return 0, err
-	}
-	ordered, err := inTableOrder(tbl, rows)
-	if err != nil {
-		return 0, fmt.Errorf("%s: %w", def.Name, err)
+		return 0, fmt.Errorf("%s: %w", b.def.Name, err)
 	}
 	defer ordered.Release()
-	tx := tbl.NewTransaction()
-	if err := tx.OverwriteTable(ctx, ordered, appendBatchRows, o.props, table.WithOverwriteFilter(filter)); err != nil {
-		return 0, fmt.Errorf("writing %s: %w", def.Name, err)
+	if err := b.tx.OverwriteTable(ctx, ordered, appendBatchRows, o.props, table.WithOverwriteFilter(filter)); err != nil {
+		b.tx = nil // the transaction may hold part of this write
+		return 0, fmt.Errorf("writing %s: %w", b.def.Name, err)
 	}
-	updated, err := tx.Commit(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("committing %s: %w", def.Name, err)
-	}
-	c.tables[def.Namespace()+"."+def.Name] = updated
+	b.staged += rows.NumRows()
+	b.n++
 	return rows.NumRows(), nil
+}
+
+// Failed reports whether an Append error left the batch unable to stage
+// or commit; what it had staged is lost.
+func (b *Batch) Failed() bool { return b.tx == nil }
+
+// Staged is the number of appends staged since the last Commit.
+func (b *Batch) Staged() int { return b.n }
+
+// Commit commits the staged appends in one catalog update and returns
+// their rows. The batch can then stage more.
+func (b *Batch) Commit(ctx context.Context) (int64, error) {
+	if b.tx == nil {
+		return 0, fmt.Errorf("%s: batch failed earlier", b.def.Name)
+	}
+	if b.n == 0 {
+		return 0, nil
+	}
+	updated, err := b.tx.Commit(ctx)
+	b.n, b.tx = 0, nil
+	if err != nil {
+		return 0, fmt.Errorf("committing %s: %w", b.def.Name, err)
+	}
+	n := b.staged
+	b.staged = 0
+	b.tbl, b.tx = updated, updated.NewTransaction()
+	b.c.tables[b.def.Namespace()+"."+b.def.Name] = updated
+	return n, nil
 }

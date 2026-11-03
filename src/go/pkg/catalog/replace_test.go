@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
 var t0 = time.Date(2026, 6, 2, 19, 54, 31, 0, time.UTC)
@@ -37,10 +38,6 @@ func attitudeRows(t *testing.T, edid string, start time.Time, n int) arrow.Table
 		}
 	}
 	for i := range n {
-		set("Network", "net")
-		set("Station", "STA")
-		set("Campaign", "2026_A_1126")
-		set("Log_Source", "AHRS00")
 		set("stream_edid", edid)
 		set("time", arrow.Timestamp(start.Add(time.Duration(i)*time.Second).UnixMicro()))
 		set("time_instrument", float64(i))
@@ -133,4 +130,66 @@ func TestAppendIsIdempotent(t *testing.T) {
 	// on Append).
 	write(attitudeRows(t, a, t0, 8))
 	check("narrower re-parse", 22, 15)
+}
+
+// A batch commits once and leaves the table as the same appends committed
+// one by one would, with one snapshot per append.
+func TestBatch(t *testing.T) {
+	ctx := context.Background()
+	cat, err := Open(ctx, Config{Type: TypeSQL, Warehouse: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cat.Close()
+	def := datamodels.AttitudeAHRS
+	const a = "net:STA:2026_A_1126:AHRS00:AHRS00"
+	b, err := cat.NewBatch(ctx, def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage := func(start time.Time, n int, file string) {
+		t.Helper()
+		rows := attitudeRows(t, a, start, n)
+		defer rows.Release()
+		if _, err := b.Append(ctx, rows, WithProperties(map[string]string{"file": file})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stage(t0, 10, "1")                    // :31 to :40
+	stage(t0.Add(9*time.Second), 5, "2")  // :40 to :44, replacing file 1's :40
+	stage(t0.Add(20*time.Second), 3, "3") // :51 to :53
+	if all, _ := count(t, cat, def, a); all != 0 {
+		t.Errorf("%d rows visible before Commit", all)
+	}
+	n, err := b.Commit(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 18 || b.Staged() != 0 {
+		t.Errorf("committed %d rows, %d still staged; want 18, 0", n, b.Staged())
+	}
+	if all, _ := count(t, cat, def, a); all != 17 {
+		t.Errorf("%d rows, want 17 (file 2 replaces file 1's last row)", all)
+	}
+	tbl, _ := cat.Table(ctx, def)
+	var files []string
+	for snap := tbl.CurrentSnapshot(); snap != nil; {
+		files = append([]string{snap.Summary.Properties["file"]}, files...)
+		if snap.ParentSnapshotID == nil {
+			break
+		}
+		snap = tbl.Metadata().SnapshotByID(*snap.ParentSnapshotID)
+	}
+	if strings.Join(files, ",") != "1,2,3" {
+		t.Errorf("snapshot files %v, want 1,2,3", files)
+	}
+
+	// The batch stages more after a commit.
+	stage(t0.Add(30*time.Second), 2, "4")
+	if _, err := b.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if all, _ := count(t, cat, def, a); all != 19 {
+		t.Errorf("%d rows after a second commit, want 19", all)
+	}
 }

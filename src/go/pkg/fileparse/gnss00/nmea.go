@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
 // talker is a sentence's talker, e.g. "GP" for $GPGSV.

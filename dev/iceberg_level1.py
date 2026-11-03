@@ -37,7 +37,7 @@ dfop00 = sorted(data_path.glob("*DFOP00.raw"))
 def build_sfg(out: Path) -> Path:
     """Build the Go ``sfg`` binary into ``out`` and return its path."""
     binary = out / "sfg"
-    subprocess.run(["go", "build", "-o", str(binary), "./cmd"], cwd=GO_DIR, check=True)
+    subprocess.run(["go", "build", "-o", str(binary), "./cmd/sfg"], cwd=GO_DIR, check=True)
     return binary
 
 

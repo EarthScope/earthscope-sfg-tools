@@ -7,10 +7,9 @@ import (
 
 // Level 2 and Level 3 tables: derived from Level 1 by downstream processing
 // (PRIDE, the GNATSS smoother, shot building), not parsed from raw files. A
-// derived row can combine several source logs, so these tables carry the
-// scope columns but no Log_Source. stream_edid
-// names the derived stream (see DerivedEDID), so Catalog.Append replaces a
-// rebuilt product the same way it replaces a re-ingested file.
+// derived row can combine several source logs. stream_edid names the
+// derived stream (see DerivedEDID), so Catalog.Append replaces a rebuilt
+// product the same way it replaces a re-ingested file.
 //
 // The levels follow plans/iceberg-gnatss-proposal.md: Level 2 holds the PPP
 // and smoothed antenna tracks, and GNSS-A built with the Level 1 (SV3)
@@ -18,17 +17,13 @@ import (
 // GNSS-A schemas are the same at both levels; the tables share a name and
 // differ only by namespace.
 
-// DerivedScope holds the columns every derived table starts with.
-var DerivedScope = Level1Scope[:3]
-
-// derivedStreamColumn is the last column of every derived table. Unlike
-// Level 1's StreamEDIDColumn it is required: the tables are new.
+// derivedStreamColumn is the first column of every derived table.
 var derivedStreamColumn = Column{Name: StreamEDIDColumn.Name, Type: str, Required: true,
 	Doc: "Derived stream EDID, network:station:campaign:product:input"}
 
-// derived wraps cols in the scope columns and the derived stream column.
+// derived prepends the derived stream column to cols.
 func derived(cols ...Column) []Column {
-	return append(append(append([]Column{}, DerivedScope...), cols...), derivedStreamColumn)
+	return append([]Column{derivedStreamColumn}, cols...)
 }
 
 // Derived products, the fourth field of a derived stream EDID.

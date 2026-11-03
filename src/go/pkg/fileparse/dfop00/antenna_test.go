@@ -9,7 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"gitlab.com/earthscope/gnsstools/core/coordinates"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
 func near(a, b, tol float64) bool { return math.Abs(a-b) <= tol }

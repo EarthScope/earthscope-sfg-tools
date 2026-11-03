@@ -13,9 +13,9 @@ import (
 	"gitlab.com/earthscope/gnsstools/core/gnss"
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/catalog"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse"
 )
 
 // epochs is n one-satellite (G05, L1C) epochs every 30 s from start (GPST).

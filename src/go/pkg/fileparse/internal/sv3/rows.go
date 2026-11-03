@@ -9,7 +9,7 @@ import (
 
 	"gitlab.com/earthscope/gnsstools/core/coordinates"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
 // TravelTimes pairs each range event with the most recent preceding

@@ -8,7 +8,7 @@ Decisions (2026-10-30):
 - **Level 3 positions:** the smoother's antenna track (PPP positions fused with INSPVA velocities) is stored as its own Level 2 table, and Level 3 GNSS-A is built from it.
 - **Export:** a generic table export, a "days with data" query, and named exporters for the formats a table can't simply be dumped to.
 
-## Tables (`src/go/datamodels/level2.go`, done)
+## Tables (`src/go/pkg/datamodels/level2.go`, done)
 
 Derived tables carry `Network`, `Station`, `Campaign` and a required `stream_edid`, with no `Log_Source` (proposal decision 3). The stream EDID is `network:station:campaign:<product>:<input>`, built by `DerivedEDID`. The input is the stream the product was built from, minus its scope, with `:` turned into `.`. `Catalog.Append` therefore replaces a rebuilt product the same way it replaces a re-ingested file, with no catalog changes.
 
@@ -41,6 +41,8 @@ P1 is a product parser, not a raw-file one: its rows have no `Log_Source`, and i
 ## Export
 
 All export is a library function on `*catalog.Catalog` plus a `sfg export` subcommand. `sfg level1 rinex` moves to `sfg export rinex`.
+
+**Superseded 2026-11-02:** `sfg export table` is now `sfg convert --source iceberg --sink files` (`catalog.Catalog.Scan` plus `pkg/convert`), and E2–E5 become `convert` sources and sinks plus `sfg ls`; see `plans/sfg-convert-cli.md`.
 
 | # | Command | Output | Replaces |
 |---|---|---|---|

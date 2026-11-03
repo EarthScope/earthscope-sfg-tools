@@ -78,7 +78,7 @@ Each phase builds and passes its checks before the next starts.
 **Phase 1 (2026-10-29): done.** `sfg` builds with `CGO_ENABLED=0` and links only system libraries. A wheel built outside conda includes it. Python's `tiledb_integration` wrappers still call the removed commands until phase 5.
 
 **Phase 2 (2026-10-29): done.**
-- **Layout:** `src/go` now holds `datamodels`, `fileparse` (with `gpsa`/`xsens` under `internal/`), `catalog` and `sink`. The two drivers sit in `src/go/devcmd/` until phase 3 replaces them.
+- **Layout:** `src/go` now holds `datamodels`, `fileparse` (with `gpsa`/`xsens` under `internal/`), `catalog` and `sink`. The two drivers sit in `src/go/devcmd/` until phase 3 replaces them. (2026-11-02: the libraries moved to `src/go/pkg/` and the binary to `src/go/cmd/sfg/`.)
 - **Dependencies:** gnsstools and geodata are at v0.117. iceberg-go v0.7.0, arrow-go v18.8.0 and sqliteshim v1.3.0 are pinned as `dev/level1` had them, and no dependency is older than it was there. sqliteshim uses pure-Go SQLite without CGO, so the binary stays cgo-free.
 - **Tests:** all Go tests pass.
 - **RINEX before and after the gnsstools bump:**

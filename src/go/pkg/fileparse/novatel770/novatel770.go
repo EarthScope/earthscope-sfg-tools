@@ -18,7 +18,7 @@ import (
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 	"gitlab.com/earthscope/gnsstools/geodata/gnssiceberg"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
 // FileType names the file type in errors and stream EDIDs.

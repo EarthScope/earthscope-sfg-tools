@@ -10,9 +10,9 @@ import (
 	"gitlab.com/earthscope/gnsstools/core/gnss"
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/ahrs00"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/novatel770"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/ahrs00"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/novatel770"
 )
 
 var testScope = datamodels.Scope{Network: "net", Station: "STA", Campaign: "2026_A_0001"}
@@ -34,7 +34,8 @@ func stringCol(t *testing.T, tbl arrow.Table, name string) []string {
 }
 
 // TestStampAttitude stamps parsed attitude_ahrs rows: the result has the
-// full schema, with scope columns and one stream_edid from Log_Source.
+// full schema, with one stream_edid from scope and Log_Source, and no
+// Log_Source.
 func TestStampAttitude(t *testing.T) {
 	t0 := time.UnixMicro(1_700_000_000_000_000).UTC()
 	parsed, err := datamodels.BuildAttitudeAHRS([]datamodels.AttitudeAHRSRow{
@@ -55,20 +56,19 @@ func TestStampAttitude(t *testing.T) {
 	if err := datamodels.AttitudeAHRS.Validate(tbl); err != nil {
 		t.Fatal(err)
 	}
-	for name, want := range map[string]string{
-		"Network": "net", "Station": "STA", "Campaign": "2026_A_0001", "Log_Source": "AHRS00",
-		"stream_edid": "net:STA:2026_A_0001:AHRS00:AHRS00",
-	} {
-		got := stringCol(t, tbl, name)
-		if len(got) != 2 || got[0] != want || got[1] != want {
-			t.Errorf("%s = %q, want %q", name, got, want)
+	for _, name := range []string{"Network", "Station", "Campaign", datamodels.LogSourceColumn} {
+		if tbl.Schema().HasField(name) {
+			t.Errorf("stamped table has a %s column", name)
 		}
+	}
+	const want = "net:STA:2026_A_0001:AHRS00:AHRS00"
+	if got := stringCol(t, tbl, "stream_edid"); len(got) != 2 || got[0] != want || got[1] != want {
+		t.Errorf("stream_edid = %q, want %q", got, want)
 	}
 }
 
 // TestStampGNSSObsAntennas stamps NOV770 rows from two antennas: each row's
-// stream_edid follows its Log_Source, and Log_Source (not a GNSSObs column)
-// is dropped.
+// stream_edid follows its Log_Source, and Log_Source is dropped.
 func TestStampGNSSObsAntennas(t *testing.T) {
 	sat := observation.NewSatellite(gnss.GPS, 30)
 	sat.Observations = append(sat.Observations,
@@ -94,7 +94,7 @@ func TestStampGNSSObsAntennas(t *testing.T) {
 		t.Fatal(err)
 	}
 	if tbl.Schema().HasField(datamodels.LogSourceColumn) {
-		t.Error("GNSSObs has no Log_Source column; stamp should drop it")
+		t.Error("stamp should drop Log_Source")
 	}
 	got := stringCol(t, tbl, "stream_edid")
 	want := []string{"net:STA:2026_A_0001:NOV770:RANGECMP5B", "net:STA:2026_A_0001:NOV770:RANGECMP5B_1"}

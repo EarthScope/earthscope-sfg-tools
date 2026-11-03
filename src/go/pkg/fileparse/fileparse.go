@@ -14,20 +14,20 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/datamodels"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/ahrs00"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/ctd"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/dfop00"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/gnss00"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/novatel000"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/novatel770"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/qcpin"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/seabird"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/fileparse/tcvr00"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/ahrs00"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/ctd"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/dfop00"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/gnss00"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/novatel000"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/novatel770"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/qcpin"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/seabird"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/tcvr00"
 )
 
 // ParseFunc parses one file into the rows of one table, from every log source
-// in the file that feeds it, without the scope and EDID columns (see
+// in the file that feeds it, with Log_Source and without stream_edid (see
 // datamodels.ParsedSchema).
 type ParseFunc func(path string) (arrow.Table, error)
 
@@ -46,9 +46,8 @@ type Parser struct {
 
 // Parse takes in the file path and scope, returning an arrow table of the
 // parsed rows for the Parser's table definition. It calls
-// p.Parsefunc(path), then adds the Network, Station and Campaign
-// columns from scope and maps p.EDID of each row's Log_Source to the
-// "stream_edid" column, dropping Log_Source if p.Table has none (see stamp).
+// p.Parsefunc(path), then maps p.EDID of scope and each row's Log_Source to
+// the "stream_edid" column, dropping Log_Source (see stamp).
 // The caller releases the table.
 func (p *Parser) Parse(path string, scope datamodels.Scope) (arrow.Table, error) {
 	parsed, err := p.Parsefunc(path)
