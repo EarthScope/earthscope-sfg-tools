@@ -47,7 +47,9 @@ def as_py_datetime_object_col(s: pd.Series) -> pd.Series:
         pd.Series: A pandas Series with Python datetime objects.
     """
     dt = pd.to_datetime(s, errors="coerce", utc=True)
-    py = np.array(dt.dt.to_pydatetime())
+    # The Series.dt API changes return type across pandas versions. The
+    # DatetimeIndex API consistently returns Python datetime objects.
+    py = pd.DatetimeIndex(dt).to_pydatetime()
     return pd.Series(py, index=s.index, dtype=object)
 
 
