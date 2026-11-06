@@ -25,7 +25,7 @@ func TestConvertExitCodes(t *testing.T) {
 	// A warehouse holding an empty attitude_ahrs table and no inspva.
 	wh := filepath.Join(dir, "warehouse")
 	ctx := context.Background()
-	cat, err := catalog.Open(ctx, catalog.Config{Type: catalog.TypeSQL, Warehouse: wh})
+	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestConvertExitCodes(t *testing.T) {
 	}
 	cat.Close()
 
-	base := []string{"convert", "--source", "iceberg", "--source-catalog", "sql", "--source-uri", wh,
+	base := []string{"convert", "--source", "iceberg", "--source-catalog", "local", "--source-uri", wh,
 		"--scope", "net/STA/2026_A_1126", "--sink", "files", "--table-format", "csv"}
 	for _, tc := range []struct {
 		name string

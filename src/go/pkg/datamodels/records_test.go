@@ -166,9 +166,9 @@ func TestBuildersFillEveryColumn(t *testing.T) {
 				ReceiverClockOffset: 1e-7, EpochFlag: 1, Satellites: observation.Satellites{glo}}}})
 		},
 	}
-	// Columns no Level 1 source supplies yet.
+	// Columns no Level 0 source supplies yet.
 	alwaysNull := map[string]bool{"arrival_time": true}
-	for _, def := range Level1Tables {
+	for _, def := range Level0Tables {
 		f, ok := build[def.Name]
 		if !ok {
 			t.Errorf("%s: no builder in this test", def.Name)

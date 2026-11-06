@@ -5,7 +5,7 @@
 // ping's interrogation and replies as one JSON object.
 //
 // Pairing and units follow sonardyne_tools/sv3_operations.py, except that
-// Level 1 keeps the raw range and turn-around time (no trigger-delay
+// Level 0 keeps the raw range and turn-around time (no trigger-delay
 // correction) and both event times as logged.
 package sv3
 
@@ -55,6 +55,25 @@ type GNSSBlock struct {
 	Time      TimeBlock `json:"time"`
 }
 
+// INSBlock is the NOV_INS block: the NovAtel INS solution (INSPVA) current at
+// the event, with numeric status codes. Velocities are local-level north
+// (vx), east (vy) and up (vz); north and east were checked against the
+// positions' rate of change, up only weakly.
+type INSBlock struct {
+	GPST         float64 `json:"gpst"`          // GPS seconds since 1980-01-06
+	Latitude     float64 `json:"latitude"`      // [deg]
+	Longitude    float64 `json:"longitude"`     // [deg]
+	HAE          float64 `json:"hae"`           // height above ellipsoid [m]
+	VX           float64 `json:"vx"`            // north [m/s]
+	VY           float64 `json:"vy"`            // east [m/s]
+	VZ           float64 `json:"vz"`            // up [m/s]
+	R            float64 `json:"r"`             // roll [deg]
+	P            float64 `json:"p"`             // pitch [deg]
+	H            float64 `json:"h"`             // azimuth [deg]
+	SolutionType int     `json:"solution_type"` // NovAtel inertial solution status
+	TimeStatus   int     `json:"time_status"`   // NovAtel GPS reference time status
+}
+
 // rangeLogBlock is the NOV_RANGE block: a NovAtel RANGEA log as logged.
 type rangeLogBlock struct {
 	Raw string `json:"raw"`
@@ -99,6 +118,7 @@ type Event struct {
 		// of its block.
 		AHRS     json.RawMessage `json:"AHRS"`
 		GNSS     json.RawMessage `json:"GNSS"`
+		NOVINS   json.RawMessage `json:"NOV_INS"`
 		NOVRange json.RawMessage `json:"NOV_RANGE"`
 	} `json:"observations"`
 	Range *RangeBlock `json:"range"`
@@ -131,6 +151,15 @@ func (e *Event) GNSS() (*GNSSBlock, error) {
 		return nil, err
 	}
 	return &g, nil
+}
+
+// INS returns the event's NOV_INS block, or nil when there is none.
+func (e *Event) INS() (*INSBlock, error) {
+	var b INSBlock
+	if ok, err := block(e.Observations.NOVINS, &b); !ok || err != nil {
+		return nil, err
+	}
+	return &b, nil
 }
 
 // RangeLog returns the NovAtel log in the event's NOV_RANGE block, or "" when

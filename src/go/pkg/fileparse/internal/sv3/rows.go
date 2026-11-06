@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"gitlab.com/earthscope/gnsstools/core/coordinates"
+	"gitlab.com/earthscope/gnsstools/core/gnss/gnsstime"
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/internal/novatel"
 )
 
 // TravelTimes pairs each range event with the most recent preceding
@@ -94,6 +96,44 @@ func Attitudes(events []Event) []datamodels.AttitudeAHRSRow {
 	}
 	if bad > 0 {
 		slog.Debug("SV3 bad AHRS blocks", "count", bad)
+	}
+	return out
+}
+
+// INSPVA is one inspva row per distinct NOV_INS block, keyed by its GPS time
+// (events repeat the current block). Blocks with no time fix (time status
+// UNKNOWN) are skipped.
+func INSPVA(events []Event) []datamodels.INSPVARow {
+	var (
+		out            []datamodels.INSPVARow
+		last           float64
+		bad, unknownTS int
+	)
+	for i := range events {
+		b, err := events[i].INS()
+		if err != nil {
+			bad++
+			continue
+		}
+		if b == nil || b.GPST == last {
+			continue
+		}
+		last = b.GPST
+		if b.TimeStatus == novatel.TimeStatusUnknown {
+			unknownTS++
+			continue
+		}
+		ins, ts := novatel.INSStatusName(b.SolutionType), novatel.TimeStatusName(b.TimeStatus)
+		out = append(out, datamodels.INSPVARow{
+			Time: gnsstime.GPSEpoch().Add(time.Duration(math.Round(b.GPST*1e6)) * time.Microsecond),
+			Lat:  b.Latitude, Lon: b.Longitude, Alt: b.HAE,
+			North: b.VX, East: b.VY, Up: b.VZ,
+			Roll: b.R, Pitch: b.P, Azimuth: b.H,
+			INSStatus: &ins, TimeStatus: &ts,
+		})
+	}
+	if bad > 0 || unknownTS > 0 {
+		slog.Debug("SV3 skipped NOV_INS blocks", "bad", bad, "unknown_time", unknownTS)
 	}
 	return out
 }

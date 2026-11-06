@@ -1,4 +1,4 @@
-// Package sink is the Level 1 write layer: a Sink takes the full-row Arrow
+// Package sink is the Level 0 write layer: a Sink takes the full-row Arrow
 // table a file parser produced for a table def and writes it somewhere (an
 // Iceberg catalog, Parquet files).
 //

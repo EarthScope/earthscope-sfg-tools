@@ -1,13 +1,13 @@
 """
-Level 1 parsers for Sonardyne SV3 event logs (DFOP00 JSONL and QCPIN JSON).
+Level 0 parsers for Sonardyne SV3 event logs (DFOP00 JSONL and QCPIN JSON).
 
 Each SV3 event carries several observation blocks, so one source file feeds
-three Level 1 tables: travel times (range + interrogation events), GNSS
+three Level 0 tables: travel times (range + interrogation events), GNSS
 antenna positions (``GNSS`` block) and attitude (``AHRS`` block).
 
 Unlike :mod:`.sv3_operations`, these parsers keep the raw two-way range
 and do not require a ``NOV_INS`` block: travel-time correction and QC
-belong to Level 2. Each ``*_to_*`` function returns a ``pyarrow.Table``
+belong to Level 1. Each ``*_to_*`` function returns a ``pyarrow.Table``
 matching the Iceberg table definition in
 :mod:`earthscope_sfg_tools.datamodels.iceberg.schemas`.
 """
@@ -205,13 +205,13 @@ def ahrs_rows(events: Iterable[SV3Event]) -> list[dict[str, Any]]:
 
 def dfop00_to_travel_times(source: str | Path, scope: Scope) -> pa.Table:
     return TRAVEL_TIMES.to_arrow(
-        travel_time_rows(read_dfop00_events(source)), scope, "DFOP00"
+        travel_time_rows(read_dfop00_events(source)), scope, "INTG-RPLY"
     )
 
 
 def qcpin_to_travel_times(source: str | Path, scope: Scope) -> pa.Table:
     return TRAVEL_TIMES.to_arrow(
-        travel_time_rows(read_qcpin_events(source)), scope, "QCPIN"
+        travel_time_rows(read_qcpin_events(source)), scope, "INTG-RPLY"
     )
 
 
@@ -219,7 +219,7 @@ def dfop00_to_gnss_antenna_positions(source: str | Path, scope: Scope) -> pa.Tab
     return GNSS_ANTENNA_POSITIONS.to_arrow(
         antenna_position_rows(read_dfop00_events(source)),
         scope,
-        "DFOP00",
+        "GNSSINS",
     )
 
 
@@ -227,15 +227,15 @@ def qcpin_to_gnss_antenna_positions(source: str | Path, scope: Scope) -> pa.Tabl
     return GNSS_ANTENNA_POSITIONS.to_arrow(
         antenna_position_rows(read_qcpin_events(source)),
         scope,
-        "QCPIN",
+        "GNSSINS",
     )
 
 
 def dfop00_to_attitude_ahrs(source: str | Path, scope: Scope) -> pa.Table:
     return ATTITUDE_AHRS.to_arrow(
-        ahrs_rows(read_dfop00_events(source)), scope, "DFOP00"
+        ahrs_rows(read_dfop00_events(source)), scope, "AHRS"
     )
 
 
 def qcpin_to_attitude_ahrs(source: str | Path, scope: Scope) -> pa.Table:
-    return ATTITUDE_AHRS.to_arrow(ahrs_rows(read_qcpin_events(source)), scope, "QCPIN")
+    return ATTITUDE_AHRS.to_arrow(ahrs_rows(read_qcpin_events(source)), scope, "AHRS")

@@ -43,10 +43,9 @@ func appendObs(t *testing.T, cat *catalog.Catalog, scope datamodels.Scope, fileT
 	p := fileparse.Parser{
 		FileType: fileType,
 		Table:    datamodels.GNSSObs,
-		Parsefunc: func(string) (arrow.Table, error) {
+		ParseFile: func(string) (arrow.Table, error) {
 			return datamodels.BuildGNSSObs(fileType, datamodels.GNSSObsSource{LogSource: logSource, Epochs: eps})
 		},
-		EDID: func(s datamodels.Scope, ls string) string { return datamodels.StreamEDID(s, fileType, ls) },
 	}
 	rows, err := p.Parse("", scope)
 	if err != nil {
@@ -60,7 +59,7 @@ func appendObs(t *testing.T, cat *catalog.Catalog, scope datamodels.Scope, fileT
 
 func TestWriteRINEX(t *testing.T) {
 	ctx := context.Background()
-	cat, err := catalog.Open(ctx, catalog.Config{Type: catalog.TypeSQL, Warehouse: t.TempDir()})
+	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

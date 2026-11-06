@@ -62,12 +62,12 @@ func derivedRows(t *testing.T, def datamodels.TableDef, edid string, start time.
 // without touching the same table at the other level.
 func TestDerivedTables(t *testing.T) {
 	ctx := context.Background()
-	cat, err := Open(ctx, Config{Type: TypeSQL, Warehouse: t.TempDir()})
+	cat, err := Open(ctx, Config{Name: Local, Warehouse: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cat.Close()
-	for _, def := range append(append([]datamodels.TableDef{}, datamodels.Level2Tables...), datamodels.Level3Tables...) {
+	for _, def := range append(append([]datamodels.TableDef{}, datamodels.Level1Tables...), datamodels.Level2Tables...) {
 		if _, err := cat.Table(ctx, def); err != nil {
 			t.Fatalf("%s.%s: %v", def.Namespace(), def.Name, err)
 		}
@@ -83,13 +83,13 @@ func TestDerivedTables(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(datamodels.GarposL2, sv3, 10)
-	write(datamodels.GarposL3, smoothed, 10)
-	write(datamodels.GarposL2, sv3, 6) // rebuilt over the first 6 s
-	if all, got := count(t, cat, datamodels.GarposL2, sv3); all != 10 || got != 10 {
+	write(datamodels.GarposL1, sv3, 10)
+	write(datamodels.GarposL2, smoothed, 10)
+	write(datamodels.GarposL1, sv3, 6) // rebuilt over the first 6 s
+	if all, got := count(t, cat, datamodels.GarposL1, sv3); all != 10 || got != 10 {
 		t.Errorf("L2 garpos: %d rows (%d of stream), want 10", all, got)
 	}
-	if all, _ := count(t, cat, datamodels.GarposL3, smoothed); all != 10 {
+	if all, _ := count(t, cat, datamodels.GarposL2, smoothed); all != 10 {
 		t.Errorf("L3 garpos: %d rows, want 10", all)
 	}
 }

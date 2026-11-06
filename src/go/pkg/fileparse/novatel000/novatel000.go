@@ -23,9 +23,9 @@ const FileType = "NOV000"
 // The NovAtel ASCII log types NOV000.bin files carry, one per table. Each is
 // also the Log_Source value of its rows.
 const (
-	LogRANGEA    = "RANGEA"    // GNSSObs
-	LogINSPVAA   = "INSPVAA"   // INSPVA
-	LogINSSTDEVA = "INSSTDEVA" // INSSTDEV
+	LogRANGEA    = "RANGEA"              // GNSSObs
+	LogINSPVAA   = datamodels.LogINSPVAA // INSPVA
+	LogINSSTDEVA = "INSSTDEVA"           // INSSTDEV
 )
 
 // GNSSObs parses the RANGEA logs of the NOV000.bin file at path into GNSSObs

@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apache/iceberg-go/config"
+
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
@@ -17,7 +19,7 @@ import (
 func rawToIcebergSpec(raw, wh string) Spec {
 	return Spec{
 		Source: SourceRaw, SourceURIs: []string{raw}, SourceTypes: []string{"DFOP00"},
-		Sink: SinkIceberg, SinkURI: wh, SinkCatalog: catalog.TypeSQL, Scope: scope,
+		Sink: SinkIceberg, SinkURI: wh, SinkCatalog: catalog.Local, Scope: scope,
 	}
 }
 
@@ -25,7 +27,7 @@ func rawToIcebergSpec(raw, wh string) Spec {
 func tableRows(t *testing.T, wh string, defs ...datamodels.TableDef) map[string]int64 {
 	t.Helper()
 	ctx := context.Background()
-	cat, err := catalog.Open(ctx, catalog.Config{Type: catalog.TypeSQL, Warehouse: wh})
+	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +59,7 @@ func oneFileDir(t *testing.T) string {
 	return dir
 }
 
-var dfop00Tables = []datamodels.TableDef{datamodels.TWTT, datamodels.AttitudeAHRS, datamodels.GNSSAntennaPositions}
+var dfop00Tables = []datamodels.TableDef{datamodels.TWTT, datamodels.INSPVA}
 
 func TestRawToIceberg(t *testing.T) {
 	raw, wh, want := oneFileDir(t), t.TempDir(), sampleRows(t)
@@ -66,18 +68,18 @@ func TestRawToIceberg(t *testing.T) {
 		if !res.OK {
 			t.Fatalf("errors %+v", res.Errors)
 		}
-		if got := outputRows(res); got["gnssa_l1.travel_times"] != want["gnssa_l1.travel_times"] {
+		if got := outputRows(res); got["gnssa_l0.travel_times"] != want["gnssa_l0.travel_times"] {
 			t.Errorf("outputs %v, want %v", got, want)
 		}
-		if got := tableRows(t, wh, dfop00Tables...); got["gnssa_l1.travel_times"] != want["gnssa_l1.travel_times"] ||
-			got["gnssa_l1.attitude_ahrs"] != want["gnssa_l1.attitude_ahrs"] {
+		if got := tableRows(t, wh, dfop00Tables...); got["gnssa_l0.travel_times"] != want["gnssa_l0.travel_times"] ||
+			got["gnssa_l0.inspva"] != want["gnssa_l0.inspva"] {
 			t.Errorf("catalog holds %v, want %v", got, want)
 		}
 	}
 
 	// Each snapshot records the file its rows came from.
 	ctx := context.Background()
-	cat, err := catalog.Open(ctx, catalog.Config{Type: catalog.TypeSQL, Warehouse: wh})
+	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +102,7 @@ func TestFilesPerCommit(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	want := sampleRows(t)["gnssa_l1.travel_times"] // each file replaces the one before
+	want := sampleRows(t)["gnssa_l0.travel_times"] // each file replaces the one before
 	commits := map[int]int{}
 	for _, perCommit := range []int{0, 1, 2} {
 		wh := t.TempDir()
@@ -109,11 +111,11 @@ func TestFilesPerCommit(t *testing.T) {
 		if res := run(t, s); !res.OK {
 			t.Fatalf("--files-per-commit %d: errors %+v", perCommit, res.Errors)
 		}
-		if got := tableRows(t, wh, datamodels.TWTT)["gnssa_l1.travel_times"]; got != want {
+		if got := tableRows(t, wh, datamodels.TWTT)["gnssa_l0.travel_times"]; got != want {
 			t.Errorf("--files-per-commit %d: %d rows, want %d", perCommit, got, want)
 		}
 		ctx := context.Background()
-		cat, err := catalog.Open(ctx, catalog.Config{Type: catalog.TypeSQL, Warehouse: wh})
+		cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -156,8 +158,45 @@ func TestRawToIcebergPartial(t *testing.T) {
 	if code := ExitCode(res, nil); code != ExitPartial {
 		t.Fatalf("exit code %d, want %d; errors %+v", code, ExitPartial, res.Errors)
 	}
-	if got := tableRows(t, wh, datamodels.TWTT); got["gnssa_l1.travel_times"] != want["gnssa_l1.travel_times"] {
+	if got := tableRows(t, wh, datamodels.TWTT); got["gnssa_l0.travel_times"] != want["gnssa_l0.travel_times"] {
 		t.Errorf("good file's rows not committed: %v", got)
+	}
+}
+
+// TestCatalogWarehouseDefault: a Spec's Iceberg endpoint without a URI
+// takes its catalog's configured warehouse (as sfg iceberg passes it); a
+// local catalog, or one configuring none, still needs one. The convert
+// flags still require every URI.
+func TestCatalogWarehouseDefault(t *testing.T) {
+	saved := config.EnvConfig.Catalogs
+	t.Cleanup(func() { config.EnvConfig.Catalogs = saved })
+	config.EnvConfig.Catalogs = map[string]config.CatalogConfig{
+		"cloud": {CatalogType: "glue", Warehouse: "s3://bucket/wh"},
+		"bare":  {CatalogType: "glue"},
+	}
+	if err := CheckFlags(SourceRaw, SinkIceberg, []string{"source", "source-uri", "source-type", "sink", "sink-catalog", "scope"}); err == nil {
+		t.Error("convert without --sink-uri: no error")
+	}
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "x_DFOP00.raw"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	spec := rawSpec(filepath.Join(dir, "x_DFOP00.raw"), "")
+	spec.Sink, spec.TableFormat, spec.SinkCatalog = SinkIceberg, "", "cloud"
+	c, err := New(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.spec.SinkURI != "s3://bucket/wh" {
+		t.Errorf("sink URI %q, want the configured warehouse", c.spec.SinkURI)
+	}
+	for _, name := range []string{"bare", catalog.Local} {
+		spec.SinkCatalog = name
+		var usage *UsageError
+		if _, err := New(spec); !errors.As(err, &usage) || !strings.Contains(err.Error(), "--sink-uri is required") {
+			t.Errorf("--sink-catalog %s without --sink-uri: got %v", name, err)
+		}
 	}
 }
 
@@ -186,14 +225,14 @@ func TestIcebergSinkErrors(t *testing.T) {
 		name string
 		edit func(*Spec)
 	}{
-		{"unknown catalog", func(s *Spec) { s.SinkCatalog = "rest" }},
+		{"unknown catalog", func(s *Spec) { s.SinkCatalog = "no-such-catalog" }},
 		{"negative files per commit", func(s *Spec) { s.FilesPerCommit = -1 }},
 		{"two warehouses", func(s *Spec) {
-			s.Source, s.SourceCatalog, s.SourceTypes, s.Tables = SourceIceberg, catalog.TypeSQL, nil, []string{"inspva"}
+			s.Source, s.SourceCatalog, s.SourceTypes, s.Tables = SourceIceberg, catalog.Local, nil, []string{"inspva"}
 			s.SourceURIs = []string{t.TempDir(), t.TempDir()}
 		}},
 		{"copy onto itself", func(s *Spec) {
-			s.Source, s.SourceCatalog, s.SourceTypes, s.Tables = SourceIceberg, catalog.TypeSQL, nil, []string{"inspva"}
+			s.Source, s.SourceCatalog, s.SourceTypes, s.Tables = SourceIceberg, catalog.Local, nil, []string{"inspva"}
 			s.SourceURIs = []string{s.SinkURI + "/"}
 		}},
 	} {
@@ -208,8 +247,8 @@ func TestIcebergSinkErrors(t *testing.T) {
 
 func copySpec(src, dst string) Spec {
 	return Spec{
-		Source: SourceIceberg, SourceURIs: []string{src}, SourceCatalog: catalog.TypeSQL, Tables: []string{"attitude_ahrs"},
-		Sink: SinkIceberg, SinkURI: dst, SinkCatalog: catalog.TypeSQL, Scope: scope,
+		Source: SourceIceberg, SourceURIs: []string{src}, SourceCatalog: catalog.Local, Tables: []string{"attitude_ahrs"},
+		Sink: SinkIceberg, SinkURI: dst, SinkCatalog: catalog.Local, Scope: scope,
 	}
 }
 
@@ -246,7 +285,7 @@ func TestCopy(t *testing.T) {
 
 	// Each snapshot records where its rows came from.
 	ctx := context.Background()
-	cat, err := catalog.Open(ctx, catalog.Config{Type: catalog.TypeSQL, Warehouse: dst})
+	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: dst})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +295,7 @@ func TestCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := tbl.CurrentSnapshot().Summary.Properties
-	if p[PropCopySource] != "sql:"+src || p[PropCopySelection] != "--scope net/STA/2026_A_1126" {
+	if p[PropCopySource] != catalog.Local+":"+src || p[PropCopySelection] != "--scope net/STA/2026_A_1126" {
 		t.Errorf("snapshot summary %v", p)
 	}
 }
@@ -267,7 +306,7 @@ func TestCopyWindow(t *testing.T) {
 	ctx := context.Background()
 	src, dst := t.TempDir(), t.TempDir()
 	write := func(wh string, start time.Time, n int) {
-		cat, err := catalog.Open(ctx, catalog.Config{Type: catalog.TypeSQL, Warehouse: wh})
+		cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -311,7 +350,7 @@ func TestCopyEvolvesSink(t *testing.T) {
 	src, dst := warehouse(t), t.TempDir()
 	old := datamodels.AttitudeAHRS
 	old.Columns = slices.DeleteFunc(slices.Clone(old.Columns), func(c datamodels.Column) bool { return c.Name == "h_mag" })
-	cat, err := catalog.Open(ctx, catalog.Config{Type: catalog.TypeSQL, Warehouse: dst})
+	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: dst})
 	if err != nil {
 		t.Fatal(err)
 	}

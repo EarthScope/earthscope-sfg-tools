@@ -12,7 +12,7 @@ import (
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 )
 
-func runNov2level1(cmd *cobra.Command, args []string) error {
+func runNov2level0(cmd *cobra.Command, args []string) error {
 	format, _ := cmd.Flags().GetString("format")
 	outDir, _ := cmd.Flags().GetString("out")
 	antenna, _ := cmd.Flags().GetUint8("antenna")
@@ -62,18 +62,18 @@ func runNov2level1(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-var nov2level1Cmd = &cobra.Command{
-	Use:   "nov2level1 [file]",
-	Short: "Parse a NovAtel log into Level 1 Arrow IPC tables",
-	Long: "Parse a NovAtel log into Arrow IPC files in --out, one per Level 1 table: " +
+var nov2level0Cmd = &cobra.Command{
+	Use:   "nov2level0 [file]",
+	Short: "Parse a NovAtel log into Level 0 Arrow IPC tables",
+	Long: "Parse a NovAtel log into Arrow IPC files in --out, one per Level 0 table: " +
 		"gnss_observations.arrow, plus inspva.arrow and insstdev.arrow for nov000. " +
 		"Logs whose header time status is UNKNOWN (no time fix yet) are skipped.",
 	Args: cobra.ExactArgs(1),
-	RunE: runNov2level1,
+	RunE: runNov2level0,
 }
 
 func init() {
-	nov2level1Cmd.Flags().String("format", "nov000", "input format: nov000 (NOV000.bin), novb (NovAtel binary, e.g. NOV770) or nova (NovAtel ASCII)")
-	nov2level1Cmd.Flags().String("out", "", "output directory for the Arrow IPC files (required)")
-	nov2level1Cmd.Flags().Uint8("antenna", 0, "measurement-source (antenna) index for novb")
+	nov2level0Cmd.Flags().String("format", "nov000", "input format: nov000 (NOV000.bin), novb (NovAtel binary, e.g. NOV770) or nova (NovAtel ASCII)")
+	nov2level0Cmd.Flags().String("out", "", "output directory for the Arrow IPC files (required)")
+	nov2level0Cmd.Flags().Uint8("antenna", 0, "measurement-source (antenna) index for novb")
 }

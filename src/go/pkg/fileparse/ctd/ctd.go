@@ -2,7 +2,7 @@
 // files (e.g. CTD_NBR1_2023_fit, NTH1_2025_CTD_fit) of depth and sound speed,
 // separated by whitespace or commas, with depth logged negative-down.
 //
-// Level 1 stores the profile as logged: depth is flipped to positive-down,
+// Level 0 stores the profile as logged: depth is flipped to positive-down,
 // but the profile is not extrapolated or jittered (compare
 // soundspeed_operations.ctd_to_svp_v1/_v2 in the Python package).
 package ctd

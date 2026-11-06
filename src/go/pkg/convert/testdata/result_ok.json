@@ -5,9 +5,9 @@
   "source": {
     "kind": "iceberg",
     "uri": "$WAREHOUSE",
-    "catalog": "sql",
+    "catalog": "local",
     "tables": [
-      "gnssa_l1.attitude_ahrs"
+      "gnssa_l0.attitude_ahrs"
     ],
     "types": [
       "AHRS00"
@@ -26,8 +26,8 @@
   "inputs": [],
   "streams": [
     {
-      "edid": "net:STA:2026_A_1126:AHRS00:AHRS00",
-      "table": "gnssa_l1.attitude_ahrs",
+      "edid": "net.STA.2026_A_1126.AHRS00.AHRS00",
+      "table": "gnssa_l0.attitude_ahrs",
       "rows": 10,
       "start": "2026-06-02T19:54:31Z",
       "end": "2026-06-02T19:54:40Z"
@@ -37,7 +37,7 @@
     {
       "kind": "file",
       "path": "$SINK/attitude_ahrs.csv",
-      "table": "gnssa_l1.attitude_ahrs",
+      "table": "gnssa_l0.attitude_ahrs",
       "rows": 10,
       "bytes": 746
     }

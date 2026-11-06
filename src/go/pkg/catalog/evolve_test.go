@@ -62,9 +62,9 @@ func TestEvolveAddsOptionalColumns(t *testing.T) {
 	old.Columns = slices.DeleteFunc(slices.Clone(old.Columns), func(c datamodels.Column) bool {
 		return slices.Contains(newCols, c.Name)
 	})
-	const edidOld, edidNew = "net:STA:C:NOV000:old", "net:STA:C:NOV000:new"
+	const edidOld, edidNew = "net.STA.C.NOV000.old", "net.STA.C.NOV000.new"
 
-	cat, err := Open(ctx, Config{Type: TypeSQL, Warehouse: dir})
+	cat, err := Open(ctx, Config{Name: Local, Warehouse: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestEvolveAddsOptionalColumns(t *testing.T) {
 	rows.Release()
 	cat.Close()
 
-	cat, err = Open(ctx, Config{Type: TypeSQL, Warehouse: dir})
+	cat, err = Open(ctx, Config{Name: Local, Warehouse: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func TestEvolveAddsOptionalColumns(t *testing.T) {
 func TestEvolveRefusesRequiredColumn(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	cat, err := Open(ctx, Config{Type: TypeSQL, Warehouse: dir})
+	cat, err := Open(ctx, Config{Name: Local, Warehouse: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestEvolveRefusesRequiredColumn(t *testing.T) {
 
 	grown := datamodels.SoundSpeed
 	grown.Columns = append(slices.Clone(grown.Columns), datamodels.Column{Name: "cast_id", Type: datamodels.SoundSpeed.Columns[0].Type, Required: true})
-	cat, err = Open(ctx, Config{Type: TypeSQL, Warehouse: dir})
+	cat, err = Open(ctx, Config{Name: Local, Warehouse: dir})
 	if err != nil {
 		t.Fatal(err)
 	}

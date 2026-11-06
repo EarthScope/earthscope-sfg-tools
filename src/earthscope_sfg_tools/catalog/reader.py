@@ -1,5 +1,5 @@
 """
-Read access to the Level 1 Iceberg catalog written by the Go ingest
+Read access to the Level 0 Iceberg catalog written by the Go ingest
 (``src/go``): a local SQLite catalog (``<warehouse>/catalog.db``, catalog
 name ``default``) or AWS Glue over an S3 warehouse.
 
@@ -25,10 +25,10 @@ from pyiceberg.expressions import (
     StartsWith,
 )
 
-from ..datamodels.iceberg.schemas import LEVEL1_TABLES, Scope, TableDef
+from ..datamodels.iceberg.schemas import LEVEL0_TABLES, Scope, TableDef
 from .timescales import as_utc, gps_minus_utc
 
-# Column each Level 1 table's time window filters on; "time" otherwise.
+# Column each Level 0 table's time window filters on; "time" otherwise.
 _TIME_COLUMN = {"travel_times": "T_transmit", "gnss_observations": "time_gpst"}
 
 
@@ -60,13 +60,17 @@ def open_catalog(
     raise ValueError(f"unknown catalog type {type!r} (want 'sql' or 'glue')")
 
 
+# Separates stream EDID fields; matches the Go datamodels.EDIDSep.
+EDID_SEP = "."
+
+
 def stream_edid(scope: Scope, file_type: str, log_source: str) -> str:
-    """The stream EDID of a Level 1 stream: network:station:campaign:file_type:log_source."""
-    return ":".join((scope.network, scope.station, scope.campaign, file_type, log_source))
+    """The stream EDID of a Level 0 stream: network.station.campaign.file_type.log_source."""
+    return EDID_SEP.join((scope.network, scope.station, scope.campaign, file_type, log_source))
 
 
-class Level1Reader:
-    """Scope- and time-windowed reads of the Level 1 tables.
+class Level0Reader:
+    """Scope- and time-windowed reads of the Level 0 tables.
 
     Parameters
     ----------
@@ -76,13 +80,13 @@ class Level1Reader:
 
     def __init__(self, catalog: Catalog):
         self.catalog = catalog
-        self._defs = {d.name: d for d in LEVEL1_TABLES}
+        self._defs = {d.name: d for d in LEVEL0_TABLES}
 
     def table_def(self, name: str) -> TableDef:
         try:
             return self._defs[name]
         except KeyError:
-            raise KeyError(f"no Level 1 table {name!r}") from None
+            raise KeyError(f"no Level 0 table {name!r}") from None
 
     def read(
         self,
@@ -97,12 +101,12 @@ class Level1Reader:
         streams: Iterable[str] | None = None,
         where: BooleanExpression | None = None,
     ) -> pd.DataFrame:
-        """Rows of a Level 1 table for one scope and UTC window, sorted by time.
+        """Rows of a Level 0 table for one scope and UTC window, sorted by time.
 
         Parameters
         ----------
         table : str
-            Level 1 table name, e.g. ``"inspva"``.
+            Level 0 table name, e.g. ``"inspva"``.
         scope : Scope
             Network, station, campaign.
         start, end : datetime or ISO str, optional
@@ -127,7 +131,7 @@ class Level1Reader:
             if log_source is not None:
                 expr = And(expr, EqualTo("stream_edid", stream_edid(scope, file_type, log_source)))
             else:
-                prefix = ":".join((scope.network, scope.station, scope.campaign, file_type, ""))
+                prefix = EDID_SEP.join((scope.network, scope.station, scope.campaign, file_type, ""))
                 expr = And(expr, StartsWith("stream_edid", prefix))
         if streams is not None:
             expr = And(expr, In("stream_edid", set(streams)))
@@ -151,7 +155,7 @@ class Level1Reader:
     def _scope_filter(tdef: TableDef, scope: Scope) -> BooleanExpression:
         if tdef.name == "gnss_observations":
             # gnsstools layout: no scope columns; the scope leads stream_edid.
-            prefix = ":".join((scope.network, scope.station, scope.campaign, ""))
+            prefix = EDID_SEP.join((scope.network, scope.station, scope.campaign, ""))
             return StartsWith("stream_edid", prefix)
         if all(n in (c.name for c in tdef.columns) for n in tdef.scope_names):
             return tdef.scope_filter(scope.network, scope.station, scope.campaign)

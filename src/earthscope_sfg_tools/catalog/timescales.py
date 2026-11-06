@@ -1,7 +1,7 @@
 """
 Time-scale conversions between the catalog (UTC) and the processing codes.
 
-Level 1 stores every time as UTC (``timestamptz``). GNATSS works on the GPS
+Level 0 stores every time as UTC (``timestamptz``). GNATSS works on the GPS
 clock: NovAtel logs carry GPS week + time of week, and GNATSS's single
 "J2000" scale is seconds of the GPS calendar since 2000-01-01T12:00:00
 (``gps_ws_time_to_astrotime`` labels the GPS calendar as TT and subtracts

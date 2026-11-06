@@ -1,5 +1,5 @@
 """
-Export a GNATSS posfilter run from the Level 1 catalog.
+Export a GNATSS posfilter run from the Level 0 catalog.
 
 :func:`export_posfilter` writes, for one site window, the files GNATSS's own
 loaders read (so its time joins and column handling stay GNATSS's) and a
@@ -8,16 +8,19 @@ loaders read (so its time joins and column handling stay GNATSS's) and a
 - ``INSPVAA.dat`` / ``INSSTDEVA.dat``: NovAtel ASCII logs rebuilt from
   ``inspva`` / ``insstdev``, with the logged time and INS statuses so
   GNATSS's FINESTEERING / INS_SOLUTION_GOOD filter applies as on raw logs.
-- ``GPS_POS_FREED``: antenna positions (``gnss_antenna_positions``), GNATSS
-  "legacy" format; sigmas as logged, or from ``insstdev`` (see
-  :func:`insstdev_sigmas`).
+  The ``inspva`` rows of a positions stream (DFOP00) are left out: they
+  repeat the NOV000 solution at ping times.
+- ``GPS_POS_FREED``: antenna positions, GNATSS "legacy" format. For DFOP00,
+  the INS positions its ``inspva`` rows log at each ping, with the INS
+  position sigmas (see :func:`insstdev_sigmas`); for other file types,
+  ``gnss_antenna_positions`` with its sigmas as logged or from ``insstdev``.
 - ``pxp_tt``: one line per ping, J2000 transmit time and the two-way travel
   time [µs] to each transponder (GNATSS "legacy" format, ``is_j2k``).
 - ``sound_speed.txt`` (optional): the sound speed profile, depth negative
   down, for the GNATSS solver.
 
 With ``solver=SolverOptions(...)`` the config also has a ``solver`` section,
-so ``gnatss run config.yaml`` goes on from the posfilter's GNSS-A Level 2
+so ``gnatss run config.yaml`` goes on from the posfilter's GNSS-A Level 1
 frame (``output/gps_solution.csv``) to the array position.
 
 Travel times follow GNATSS's own DFOP00 loader: the exported time is the
@@ -38,10 +41,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from pymap3d import ecef2geodetic
+from pymap3d import ecef2geodetic, geodetic2ecef
 
 from ..datamodels.iceberg.schemas import Scope
-from .reader import Level1Reader
+from .reader import EDID_SEP, Level0Reader
 from .site import PosfilterSite
 from .timescales import gps_week_tow, utc_to_j2000
 
@@ -58,6 +61,11 @@ FILES = {
     "sound_speed": "sound_speed.txt",
 }
 
+
+# File types whose antenna positions are the INS positions of their inspva
+# rows (DFOP00: the NOV_INS block at each event); others' are in
+# gnss_antenna_positions.
+INSPVA_POSITIONS = frozenset({"DFOP00"})
 
 # Reference ellipsoid of the metadata positions and the antenna ECEF.
 WGS84 = {"semi_major_axis": 6378137.0, "reverse_flattening": 298.257223563}
@@ -94,7 +102,8 @@ class ExportSummary:
     insstdev_good: int = 0
     gps_rows: int = 0
     gps_dropped_no_sigma: int = 0
-    gps_sigmas: str = "logged"  # where the antenna sigmas came from
+    gps_table: str = "inspva"  # where the antenna positions came from
+    gps_sigmas: str = "insstdev"  # where the antenna sigmas came from
     pings: int = 0
     replies: int = 0
     internal_delays: dict[str, float] = field(default_factory=dict)
@@ -170,13 +179,31 @@ def write_gps_pos_freed(df: pd.DataFrame, path: Path) -> tuple[int, int]:
     return int(keep.sum()), int((~keep).sum())
 
 
+def inspva_positions(df: pd.DataFrame) -> pd.DataFrame:
+    """``inspva`` rows as antenna positions: ECEF from lat/lon/alt (WGS84,
+    ellipsoidal height), one row per time, null sigmas (``inspva`` has none;
+    take them from :func:`insstdev_sigmas`)."""
+    df = df.drop_duplicates("time").sort_values("time")
+    x, y, z = geodetic2ecef(df["lat"].to_numpy(), df["lon"].to_numpy(), df["alt"].to_numpy())
+    return pd.DataFrame(
+        {"time": df["time"].to_numpy(), "ant_x": x, "ant_y": y, "ant_z": z,
+         "ant_sigx": np.nan, "ant_sigy": np.nan, "ant_sigz": np.nan}
+    )  # fmt: skip
+
+
+def _file_types(stream_edids: pd.Series) -> pd.Series:
+    """The file type of each stream EDID (network.station.campaign.file_type.log_source)."""
+    return stream_edids.str.split(EDID_SEP, n=4).str[3]
+
+
 def insstdev_sigmas(gps: pd.DataFrame, insstdev: pd.DataFrame, *, tolerance: float = 1.0) -> pd.DataFrame:
     """``gps`` with its ECEF sigmas replaced by the INS position sigmas.
 
-    For the DFOP00 stream: the SV3 GNSS block logs the INS position but the
-    receiver's single-point sigmas (13-17 m at NBR1, against 1-2 m from
-    INSSTDEV), and with those GNATSS's Kalman filter follows the integrated
-    INS velocity instead, drifting metres from the track. Each row takes the
+    For positions from the INS solution: the SV3 GNSS block logged the INS
+    position with the receiver's single-point sigmas (13-17 m at NBR1,
+    against 1-2 m from INSSTDEV), and with those GNATSS's Kalman filter
+    follows the integrated INS velocity instead, drifting metres from the
+    track; ``inspva`` positions have no sigmas at all. Each row takes the
     nearest ``insstdev`` row within ``tolerance`` seconds (lat/lon/alt sigmas as
     north/east/up), rotated to ECEF at the row's position (the diagonal of
     R diag(sig^2) R^T). Rows without one get null sigmas, which
@@ -340,7 +367,7 @@ def gnatss_config(
 
 
 def export_posfilter(
-    reader: Level1Reader,
+    reader: Level0Reader,
     site: PosfilterSite,
     scope: Scope,
     out_dir: str | Path,
@@ -348,37 +375,45 @@ def export_posfilter(
     positions: str = "DFOP00",
     sound_speed: bool = True,
     solver: SolverOptions | None = None,
-    position_sigmas: str = "logged",
+    position_sigmas: str | None = None,
 ) -> ExportSummary:
     """Export a GNATSS posfilter run for ``site``'s window into ``out_dir``.
 
     Parameters
     ----------
-    reader : Level1Reader
-        Over the Level 1 catalog.
+    reader : Level0Reader
+        Over the Level 0 catalog.
     site : PosfilterSite
         Site parameters and window (:meth:`PosfilterSite.from_metadata`).
     scope : Scope
-        Network, station, campaign of the Level 1 rows.
+        Network, station, campaign of the Level 0 rows.
     out_dir : str or Path
         Directory to write; created if needed.
     positions : str
-        File type of the antenna position stream: ``"DFOP00"`` (SV3 GNSS
-        block) or ``"QCPIN"``; a PPP table replaces this at Level 3.
+        File type of the antenna position stream: ``"DFOP00"`` (its
+        ``inspva`` rows, the INS position at each ping) or ``"QCPIN"``
+        (``gnss_antenna_positions``); a PPP table replaces this at Level 2.
     sound_speed : bool
         Also export the latest sound speed profile at or before the window end.
     solver : SolverOptions, optional
         Add a GNATSS ``solver`` section; needs the sound speed profile.
-    position_sigmas : str
+    position_sigmas : str, optional
         Antenna sigmas: ``"logged"`` (the stream's own) or ``"insstdev"``
         (:func:`insstdev_sigmas`, for streams that log the INS position).
+        By default ``"insstdev"`` for ``inspva`` positions, which have no
+        sigmas of their own, and ``"logged"`` otherwise.
 
     Returns
     -------
     ExportSummary
     """
+    from_inspva = positions in INSPVA_POSITIONS
+    if position_sigmas is None:
+        position_sigmas = "insstdev" if from_inspva else "logged"
     if position_sigmas not in ("logged", "insstdev"):
         raise ValueError(f"position_sigmas must be 'logged' or 'insstdev', not {position_sigmas!r}")
+    if from_inspva and position_sigmas == "logged":
+        raise ValueError(f"{positions} positions come from inspva, which logs no sigmas; use position_sigmas='insstdev'")
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     t0, t1 = site.start, site.end
@@ -390,7 +425,11 @@ def export_posfilter(
             raise ValueError(f"no {table} rows for {scope} in {t0} - {t1}")
         return df
 
-    inspva = read("inspva")
+    pva = read("inspva")
+    at_pings = _file_types(pva["stream_edid"]) == positions
+    inspva = pva[~at_pings]
+    if inspva.empty:
+        raise ValueError(f"no inspva rows for {scope} in {t0} - {t1} outside the {positions} stream")
     s.inspva_rows, s.inspva_good = len(inspva), write_inspvaa(inspva, out / FILES["novatel"])
     insstdev = read("insstdev")
     s.insstdev_rows, s.insstdev_good = len(insstdev), write_insstdeva(insstdev, out / FILES["novatel_std"])
@@ -399,7 +438,14 @@ def export_posfilter(
     elif s.inspva_good < s.inspva_rows:
         s.warnings.append(f"{s.inspva_rows - s.inspva_good} INSPVA rows lack good time/INS status; GNATSS drops them")
 
-    gps = read("gnss_antenna_positions", file_type=positions)
+    if from_inspva:
+        if not at_pings.any():
+            raise ValueError(f"no {positions} inspva rows for {scope} in {t0} - {t1}")
+        gps = inspva_positions(pva[at_pings])
+        s.gps_table = "inspva"
+    else:
+        gps = read("gnss_antenna_positions", file_type=positions)
+        s.gps_table = "gnss_antenna_positions"
     if position_sigmas == "insstdev":
         gps = insstdev_sigmas(gps, insstdev)
     s.gps_sigmas = position_sigmas

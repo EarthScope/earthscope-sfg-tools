@@ -1,14 +1,14 @@
 """
-Level 1 parsers for NovAtel logs, backed by the ``sfg nov2level1`` Go command.
+Level 0 parsers for NovAtel logs, backed by the ``sfg nov2level0`` Go command.
 
 Parsing uses the gnsstools NovAtel codecs (RANGEA, RANGECMP, RANGECMP5) and
 the sfg_utils INSPVAA/INSSTDEVA deserializers. The Go command writes one
-Arrow IPC file per Level 1 table holding only the parsed columns; this module
+Arrow IPC file per Level 0 table holding only the parsed columns; this module
 stamps scope and ``Log_Source`` and conforms each to its Iceberg table
 definition in :mod:`earthscope_sfg_tools.datamodels.iceberg.schemas`.
 
 One NOV000.bin file feeds three tables (GNSS observations, INSPVA,
-INSSTDEV), so :func:`nov000_to_level1` returns all three from one parse.
+INSSTDEV), so :func:`nov000_to_level0` returns all three from one parse.
 """
 
 import logging
@@ -34,17 +34,17 @@ _TABLES: dict[str, TableDef] = {
 }
 
 
-def _run_nov2level1(
+def _run_nov2level0(
     source: str | Path, fmt: str, antenna: int = 0
 ) -> dict[str, pa.Table]:
-    """Run ``sfg nov2level1`` on one file; return its tables keyed by name."""
+    """Run ``sfg nov2level0`` on one file; return its tables keyed by name."""
     source = Path(source)
     if not source.exists():
         raise FileNotFoundError(source)
     with tempfile.TemporaryDirectory() as out:
         cmd = [
             str(find_binary()),
-            "nov2level1",
+            "nov2level0",
             "--format",
             fmt,
             "--antenna",
@@ -57,7 +57,7 @@ def _run_nov2level1(
         parse_cli_logs(result, logger)
         if result.returncode != 0:
             raise RuntimeError(
-                f"sfg nov2level1 failed on {source}: {result.stderr.strip()}"
+                f"sfg nov2level0 failed on {source}: {result.stderr.strip()}"
             )
         tables = {}
         for path in Path(out).glob("*.arrow"):
@@ -75,10 +75,10 @@ def _conform(
     }
 
 
-def nov000_to_level1(source: str | Path, scope: Scope) -> dict[str, pa.Table]:
+def nov000_to_level0(source: str | Path, scope: Scope) -> dict[str, pa.Table]:
     """Parse a NOV000.bin file into its ``gnss_observations``, ``inspva`` and
-    ``insstdev`` Level 1 tables."""
-    return _conform(_run_nov2level1(source, "nov000"), scope, "NOV000")
+    ``insstdev`` Level 0 tables."""
+    return _conform(_run_nov2level0(source, "nov000"), scope, "NOV000")
 
 
 def nov770_to_gnss_observations(
@@ -88,11 +88,11 @@ def nov770_to_gnss_observations(
 
     ``Log_Source`` is ``NOV770_ANT<antenna>`` so the antennas stay separate.
     """
-    tables = _run_nov2level1(source, "novb", antenna)
+    tables = _run_nov2level0(source, "novb", antenna)
     return _conform(tables, scope, f"NOV770_ANT{antenna}")["gnss_observations"]
 
 
 def novatel_ascii_to_gnss_observations(source: str | Path, scope: Scope) -> pa.Table:
     """Parse a NovAtel ASCII (RANGEA) log into GNSS observations."""
-    tables = _run_nov2level1(source, "nova")
+    tables = _run_nov2level0(source, "nova")
     return _conform(tables, scope, "NOVATEL")["gnss_observations"]

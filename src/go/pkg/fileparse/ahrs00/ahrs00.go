@@ -1,5 +1,5 @@
 // Package ahrs00 parses Sonardyne AHRS00.bin logs (XSENS MTData2 wrapped in
-// GPSA packets) into the Level 1 attitude_ahrs table.
+// GPSA packets) into the Level 0 attitude_ahrs table.
 package ahrs00
 
 import (
@@ -18,13 +18,9 @@ import (
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/internal/xsens"
 )
 
-const (
-	// FileType names the file type in stream EDIDs.
-	FileType = "AHRS00"
-	// LogType is the one log type AHRS00.bin files carry, and the
-	// Log_Source value of their rows.
-	LogType = "AHRS00"
-)
+// FileType names the file type in stream EDIDs. Its rows' Log_Source is
+// datamodels.LogAHRS.
+const FileType = "AHRS00"
 
 // Stats summarises a parse.
 type Stats struct {
@@ -32,6 +28,11 @@ type Stats struct {
 	CorruptPackets int // GPSA packets dropped (checksum/framing)
 	Messages       int // MTData2 messages decoded
 	BadMessages    int // XSENS candidates dropped by checksum
+}
+
+type packetStart struct {
+	offset int64 // stream offset of the packet's first data byte
+	pkt    gpsa.Packet
 }
 
 // wrap360 maps an angle in degrees onto [0, 360).
@@ -50,10 +51,7 @@ func magneticHeading(x, y float64) float64 {
 	return wrap360(math.Atan2(-y, x) * 180 / math.Pi)
 }
 
-type packetStart struct {
-	offset int64 // stream offset of the packet's first data byte
-	pkt    gpsa.Packet
-}
+func ptr(v float64) *float64 { return &v }
 
 // Parse reads an AHRS00.bin stream. Each XSENS message takes the time of
 // the GPSA packet holding its first byte.
@@ -117,20 +115,6 @@ func toAttitude(p gpsa.Packet, m xsens.MTData2) datamodels.AttitudeAHRSRow {
 	return a
 }
 
-func ptr(v float64) *float64 { return &v }
-
-// AttitudeAHRS parses the AHRS00.bin file at path into attitude_ahrs rows
-// (see datamodels.ParsedSchema). The caller releases the table.
-func AttitudeAHRS(path string) (arrow.Table, error) {
-	rs, stats, err := readFile(path)
-	if err != nil {
-		return nil, err
-	}
-	slog.Debug("parsed AHRS00", "file", filepath.Base(path), "rows", len(rs),
-		"packets", stats.Packets, "corrupt_packets", stats.CorruptPackets, "bad_messages", stats.BadMessages)
-	return datamodels.BuildAttitudeAHRS(rs, LogType)
-}
-
 func readFile(path string) ([]datamodels.AttitudeAHRSRow, Stats, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -142,4 +126,16 @@ func readFile(path string) ([]datamodels.AttitudeAHRSRow, Stats, error) {
 		return nil, stats, fmt.Errorf("parsing %s: %w", path, err)
 	}
 	return rs, stats, nil
+}
+
+// AttitudeAHRS parses the AHRS00.bin file at path into attitude_ahrs rows
+// (see datamodels.ParsedSchema). The caller releases the table.
+func AttitudeAHRS(path string) (arrow.Table, error) {
+	rs, stats, err := readFile(path)
+	if err != nil {
+		return nil, err
+	}
+	slog.Debug("parsed AHRS00", "file", filepath.Base(path), "rows", len(rs),
+		"packets", stats.Packets, "corrupt_packets", stats.CorruptPackets, "bad_messages", stats.BadMessages)
+	return datamodels.BuildAttitudeAHRS(rs, datamodels.LogAHRS)
 }

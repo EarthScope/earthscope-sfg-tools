@@ -17,7 +17,7 @@ from pandera.typing import Series
 
 
 class INSPVAASchema(pa.DataFrameModel):
-    """Schema for the INSPVAA (NovAtel Level-1) DataFrame.
+    """Schema for the INSPVAA (NovAtel Level-0) DataFrame.
 
     Loaded via :func:`gnatss.loaders.load_novatel`.
     Specification: https://docs.novatel.com/OEM7/Content/SPAN_Logs/INSPVA.htm
@@ -57,7 +57,7 @@ class INSPVAASchema(pa.DataFrameModel):
 
 
 class INSSTDEVSchema(pa.DataFrameModel):
-    """Schema for the INSSTDEVA (NovAtel Level-1) DataFrame.
+    """Schema for the INSSTDEVA (NovAtel Level-0) DataFrame.
 
     Loaded via :func:`gnatss.loaders.load_novatel_std`.
     Specification: https://docs.novatel.com/OEM7/Content/SPAN_Logs/INSSTDEV.htm

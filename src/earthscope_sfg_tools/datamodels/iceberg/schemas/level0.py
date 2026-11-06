@@ -1,7 +1,7 @@
 """
-Level 1 tables: raw parsed output from full-rate log files.
+Level 0 tables: raw parsed output from full-rate log files.
 
-Every Level 1 table carries the scope columns plus ``Log_Source`` and is
+Every Level 0 table carries the scope columns plus ``Log_Source`` and is
 stored at the native sampling rate of its source log. Times are UTC
 ``timestamptz``; other time scales are derived by the access API. The one
 exception is ``gnss_observations.epoch``, which holds GPS time to stay
@@ -15,7 +15,7 @@ from ._base import (
     DOUBLE,
     FLOAT,
     INT,
-    LEVEL1_SCOPE,
+    LEVEL0_SCOPE,
     LOG_SOURCE,
     STREAM_EDID,
     STRING,
@@ -27,14 +27,14 @@ from ._base import (
 
 TRAVEL_TIMES = TableDef(
     name="travel_times",
-    level=1,
+    level=0,
     doc=(
         "Two-way travel times per transponder from SV3 range and interrogation "
         "events (DFOP00, QCPIN). Stores the raw range and tat; the "
-        "tat/trigger-delay correction is applied when building Level 2."
+        "tat/trigger-delay correction is applied when building Level 1."
     ),
     columns=(
-        *LEVEL1_SCOPE,
+        *LEVEL0_SCOPE,
         Column("MT_ID", STRING, "ID of mirror / seafloor transponder"),
         Column("T_transmit", TIMESTAMPTZ, "Transmission (ping) time, UTC"),
         Column("T_receive", TIMESTAMPTZ, "Reception (return) time, UTC"),
@@ -65,10 +65,13 @@ TRAVEL_TIMES = TableDef(
 
 INSPVA = TableDef(
     name="inspva",
-    level=1,
-    doc="NovAtel INSPVAA position, velocity and attitude (NOV000.bin).",
+    level=0,
+    doc=(
+        "NovAtel INSPVAA position, velocity and attitude (NOV000.bin), and the "
+        "NOV_INS block of SV3 events (DFOP00) at each event."
+    ),
     columns=(
-        *LEVEL1_SCOPE,
+        *LEVEL0_SCOPE,
         Column("time", TIMESTAMPTZ, "Epoch, UTC (converted from GPS time)"),
         Column("lat", DOUBLE, "Geodetic latitude [deg]", ge=-90, le=90),
         Column("lon", DOUBLE, "Geodetic longitude [deg]", ge=-180, le=180),
@@ -97,14 +100,14 @@ INSPVA = TableDef(
 
 INSSTDEV = TableDef(
     name="insstdev",
-    level=1,
+    level=0,
     doc=(
         "NovAtel INSSTDEVA solution standard deviations (NOV000.bin). The "
         "cov_* columns keep GNATSS's names but hold the logged attitude std "
         "devs, not variances."
     ),
     columns=(
-        *LEVEL1_SCOPE,
+        *LEVEL0_SCOPE,
         Column("time", TIMESTAMPTZ, "Epoch, UTC (converted from GPS time)"),
         Column("lat_sig", DOUBLE, "Latitude std dev [deg]", ge=0),
         Column("lon_sig", DOUBLE, "Longitude std dev [deg]", ge=0),
@@ -143,7 +146,7 @@ GNSSICEBERG_CONSTELLATIONS: tuple[str, ...] = (
 
 GNSS_OBSERVATIONS = TableDef(
     name="gnss_observations",
-    level=1,
+    level=0,
     doc=(
         "GNSS observations, one row per (epoch, satellite, signal), from RANGEA "
         "(NOVATEL, NOV000.bin, QCPIN) and RANGECMP/RANGECMP5 (NOV770). Extends "
@@ -247,15 +250,15 @@ GNSS_OBSERVATIONS = TableDef(
 
 ATTITUDE_AHRS = TableDef(
     name="attitude_ahrs",
-    level=1,
+    level=0,
     doc=(
-        "Attitude from the Sonardyne AHRS block of SV3 events (DFOP00, QCPIN) "
+        "Attitude from the Sonardyne AHRS block of SV3 events (QCPIN) "
         "and the full-rate XSENS log (AHRS00). Measurement columns are "
         "nullable: some events report only magnetic heading. time_start_count "
         "and time_status come from the SV3 time block and are null for AHRS00."
     ),
     columns=(
-        *LEVEL1_SCOPE,
+        *LEVEL0_SCOPE,
         Column("time", TIMESTAMPTZ, "Epoch, UTC"),
         Column(
             "time_instrument",
@@ -285,13 +288,13 @@ ATTITUDE_AHRS = TableDef(
 
 SOUND_SPEED = TableDef(
     name="sound_speed",
-    level=1,
+    level=0,
     doc=(
         "Sound speed profiles from CTD casts and Sea-Bird profiles. speed must "
         "be unique per profile (per time), not table-wide."
     ),
     columns=(
-        *LEVEL1_SCOPE,
+        *LEVEL0_SCOPE,
         Column("time", TIMESTAMPTZ, "Cast/profile time, UTC"),
         Column("depth", DOUBLE, "Depth [m]", ge=0, le=10_000),
         Column("speed", DOUBLE, "Sound speed [m/s]", ge=0, le=3800),
@@ -299,7 +302,7 @@ SOUND_SPEED = TableDef(
     ),
 )
 
-# Shared with the Level 2 PPP table; only nullability of the solution-quality
+# Shared with the Level 1 PPP table; only nullability of the solution-quality
 # columns differs between the two.
 ANTENNA_POSITION_COLUMNS: tuple[Column, ...] = (
     Column("time", TIMESTAMPTZ, "Epoch, UTC"),
@@ -319,14 +322,14 @@ ANTENNA_POSITION_COLUMNS: tuple[Column, ...] = (
 
 GNSS_ANTENNA_POSITIONS = TableDef(
     name="gnss_antenna_positions",
-    level=1,
+    level=0,
     doc=(
-        "Antenna positions from the GNSS block of SV3 events (DFOP00, QCPIN), "
+        "Antenna positions from the GNSS block of SV3 events (QCPIN), "
         "converted to ECEF at ingest. Sigmas are rotated from logged ENU; null "
         "when Sonardyne reports the -1.0 'not available' sentinel."
     ),
     columns=(
-        *LEVEL1_SCOPE,
+        *LEVEL0_SCOPE,
         *ANTENNA_POSITION_COLUMNS,
         Column("q", INT, "GPS fix quality (SV3GPSQuality)", ge=0, le=9),
         Column(
@@ -347,7 +350,7 @@ GNSS_ANTENNA_POSITIONS = TableDef(
     ),
 )
 
-LEVEL1_TABLES: tuple[TableDef, ...] = (
+LEVEL0_TABLES: tuple[TableDef, ...] = (
     TRAVEL_TIMES,
     INSPVA,
     INSSTDEV,

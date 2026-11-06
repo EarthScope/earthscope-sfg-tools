@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"strings"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -51,7 +50,7 @@ func (sel Selection) Filter(def datamodels.TableDef) (iceberg.BooleanExpression,
 	edid := iceberg.Reference(datamodels.StreamEDIDColumn.Name)
 
 	streamEDID := datamodels.StreamEDID
-	if def.Level > 1 {
+	if def.Level > 0 {
 		streamEDID = datamodels.DerivedEDID
 	}
 	var preds []iceberg.BooleanExpression
@@ -61,10 +60,10 @@ func (sel Selection) Filter(def datamodels.TableDef) (iceberg.BooleanExpression,
 	case sel.FileType != "":
 		preds = append(preds, hasPrefix(edid, streamEDID(s, sel.FileType, "")))
 	default:
-		prefix := s.Network + ":"
+		prefix := s.Network + datamodels.EDIDSep
 		for _, p := range []string{s.Station, s.Campaign} {
 			if p != "" {
-				prefix += p + ":"
+				prefix += p + datamodels.EDIDSep
 			}
 		}
 		preds = append(preds, hasPrefix(edid, prefix))
@@ -82,12 +81,12 @@ func (sel Selection) Filter(def datamodels.TableDef) (iceberg.BooleanExpression,
 	return iceberg.NewAnd(preds[0], preds[1], preds[2:]...), nil
 }
 
-// hasPrefix matches strings starting with prefix, which ends in ':'. It is
-// the range [prefix, prefix with ':' replaced by ';'), since iceberg-go
-// scans do not implement starts_with; the range also prunes data files by
-// their column bounds.
+// hasPrefix matches strings starting with prefix, which ends in
+// datamodels.EDIDSep. It is the range [prefix, prefix with its last byte
+// raised by one), since iceberg-go scans do not implement starts_with; the
+// range also prunes data files by their column bounds.
 func hasPrefix(ref iceberg.UnboundTerm, prefix string) iceberg.BooleanExpression {
-	upper := strings.TrimSuffix(prefix, ":") + ";"
+	upper := prefix[:len(prefix)-1] + string(prefix[len(prefix)-1]+1)
 	return iceberg.NewAnd(iceberg.GreaterThanEqual(ref, prefix), iceberg.LessThan(ref, upper))
 }
 

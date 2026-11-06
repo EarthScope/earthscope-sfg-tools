@@ -5,21 +5,21 @@ import (
 	"strings"
 )
 
-// Level 2 and Level 3 tables: derived from Level 1 by downstream processing
+// Level 1 and Level 2 tables: derived from Level 0 by downstream processing
 // (PRIDE, the GNATSS smoother, shot building), not parsed from raw files. A
 // derived row can combine several source logs. stream_edid names the
 // derived stream (see DerivedEDID), so Catalog.Append replaces a rebuilt
 // product the same way it replaces a re-ingested file.
 //
-// The levels follow plans/iceberg-gnatss-proposal.md: Level 2 holds the PPP
-// and smoothed antenna tracks, and GNSS-A built with the Level 1 (SV3)
-// antenna positions; Level 3 holds GNSS-A built with the smoothed track. The
+// The levels follow plans/iceberg-gnatss-proposal.md: Level 1 holds the PPP
+// and smoothed antenna tracks, and GNSS-A built with the Level 0 (SV3)
+// antenna positions; Level 2 holds GNSS-A built with the smoothed track. The
 // GNSS-A schemas are the same at both levels; the tables share a name and
 // differ only by namespace.
 
 // derivedStreamColumn is the first column of every derived table.
 var derivedStreamColumn = Column{Name: StreamEDIDColumn.Name, Type: str, Required: true,
-	Doc: "Derived stream EDID, network:station:campaign:product:input"}
+	Doc: "Derived stream EDID, network.station.campaign.product.input"}
 
 // derived prepends the derived stream column to cols.
 func derived(cols ...Column) []Column {
@@ -35,18 +35,18 @@ const (
 
 // DerivedEDID is the stream EDID of a derived product built from input, the
 // stream it was built from with its scope dropped: e.g. PRIDE from
-// NOV000:RANGEA is net:sta:camp:PRIDE:NOV000.RANGEA. Colons in input become
-// dots so the EDID keeps five fields.
+// NOV000:RANGEA (or NOV000.RANGEA) is net.sta.camp.PRIDE.NOV000.RANGEA. The
+// input is the last field, so it may hold EDIDSep (see SplitEDID).
 func DerivedEDID(scope Scope, product, input string) string {
-	return StreamEDID(scope, product, strings.ReplaceAll(input, ":", "."))
+	return StreamEDID(scope, product, strings.ReplaceAll(input, ":", EDIDSep))
 }
 
-// GNSSAntennaPositionsPPP mirrors level2.GNSS_ANTENNA_POSITIONS_PPP.
+// GNSSAntennaPositionsPPP mirrors level1.GNSS_ANTENNA_POSITIONS_PPP.
 var GNSSAntennaPositionsPPP = TableDef{
 	Name:       "gnss_antenna_positions_ppp",
-	Level:      2,
+	Level:      1,
 	TimeColumn: "time",
-	Doc: "Antenna positions from PRIDE PPP-AR kinematic solutions of Level 1 " +
+	Doc: "Antenna positions from PRIDE PPP-AR kinematic solutions of Level 0 " +
 		"GNSS observations; lat/lon/height converted to ECEF at build. Input " +
 		"is the gnss_observations stream, e.g. NOV000.RANGEA.",
 	Columns: derived(append(append([]Column{}, AntennaPositionColumns...),
@@ -61,7 +61,7 @@ var GNSSAntennaPositionsPPP = TableDef{
 // memory between the smoother and the shot refinement.
 var GNSSAntennaPositionsSmoothed = TableDef{
 	Name:       "gnss_antenna_positions_smoothed",
-	Level:      2,
+	Level:      1,
 	TimeColumn: "time",
 	Doc: "Antenna track from the GNATSS Kalman filter and smoother over PPP " +
 		"positions and INSPVA velocities, at the epochs of its inputs. Input " +
@@ -149,22 +149,22 @@ var communityColumns = derived(slices.Concat(
 	attitudeColumns("1", "receive"),
 )...)
 
-// GNSS-A tables; the antenna positions come from Level 1
-// gnss_antenna_positions (SV3 GNSS block) at Level 2, and from
-// gnss_antenna_positions_smoothed at Level 3. Input is that positions stream.
+// GNSS-A tables; the antenna positions come from Level 0
+// gnss_antenna_positions (SV3 GNSS block) at Level 1, and from
+// gnss_antenna_positions_smoothed at Level 2. Input is that positions stream.
 var (
+	GarposL1 = TableDef{Name: "garpos", Level: 1, TimeColumn: "ST", Columns: garposColumns,
+		Doc: "GNSS-A in GARPOS format, antenna positions from Level 0 SV3 GNSS (local ENU about the array center)."}
 	GarposL2 = TableDef{Name: "garpos", Level: 2, TimeColumn: "ST", Columns: garposColumns,
-		Doc: "GNSS-A in GARPOS format, antenna positions from Level 1 SV3 GNSS (local ENU about the array center)."}
-	GarposL3 = TableDef{Name: "garpos", Level: 3, TimeColumn: "ST", Columns: garposColumns,
-		Doc: "GNSS-A in GARPOS format, antenna positions from the Level 2 smoothed track (local ENU about the array center)."}
+		Doc: "GNSS-A in GARPOS format, antenna positions from the Level 1 smoothed track (local ENU about the array center)."}
+	CommunityStandardL1 = TableDef{Name: "community_standard", Level: 1, TimeColumn: "T_transmit", Columns: communityColumns,
+		Doc: "GNSS-A community standard format, antenna positions from Level 0 SV3 GNSS (ECEF)."}
 	CommunityStandardL2 = TableDef{Name: "community_standard", Level: 2, TimeColumn: "T_transmit", Columns: communityColumns,
-		Doc: "GNSS-A community standard format, antenna positions from Level 1 SV3 GNSS (ECEF)."}
-	CommunityStandardL3 = TableDef{Name: "community_standard", Level: 3, TimeColumn: "T_transmit", Columns: communityColumns,
-		Doc: "GNSS-A community standard format, antenna positions from the Level 2 smoothed track (ECEF)."}
+		Doc: "GNSS-A community standard format, antenna positions from the Level 1 smoothed track (ECEF)."}
 )
 
-// Level2Tables lists every Level 2 table definition.
-var Level2Tables = []TableDef{GNSSAntennaPositionsPPP, GNSSAntennaPositionsSmoothed, GarposL2, CommunityStandardL2}
+// Level1Tables lists every Level 1 table definition.
+var Level1Tables = []TableDef{GNSSAntennaPositionsPPP, GNSSAntennaPositionsSmoothed, GarposL1, CommunityStandardL1}
 
-// Level3Tables lists every Level 3 table definition.
-var Level3Tables = []TableDef{GarposL3, CommunityStandardL3}
+// Level2Tables lists every Level 2 table definition.
+var Level2Tables = []TableDef{GarposL2, CommunityStandardL2}

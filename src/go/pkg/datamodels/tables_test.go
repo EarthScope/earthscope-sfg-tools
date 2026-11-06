@@ -11,7 +11,7 @@ import (
 
 func TestAttitudeAHRS(t *testing.T) {
 	def := AttitudeAHRS
-	if got := def.Identifier(); got[0] != "gnssa_l1" || got[1] != "attitude_ahrs" {
+	if got := def.Identifier(); got[0] != "gnssa_l0" || got[1] != "attitude_ahrs" {
 		t.Errorf("Identifier = %v", got)
 	}
 
@@ -57,15 +57,15 @@ func TestAttitudeAHRS(t *testing.T) {
 	}
 }
 
-func TestLevel1Tables(t *testing.T) {
+func TestLevel0Tables(t *testing.T) {
 	seen := map[string]bool{}
-	for _, def := range Level1Tables {
+	for _, def := range Level0Tables {
 		t.Run(def.Name, func(t *testing.T) {
 			if seen[def.Name] {
 				t.Fatalf("duplicate table name %q", def.Name)
 			}
 			seen[def.Name] = true
-			if def.Namespace() != "gnssa_l1" {
+			if def.Namespace() != "gnssa_l0" {
 				t.Errorf("namespace %q", def.Namespace())
 			}
 			names := map[string]bool{}
@@ -200,7 +200,7 @@ func TestDerivedTables(t *testing.T) {
 	for _, set := range []struct {
 		ns   string
 		defs []TableDef
-	}{{"gnssa_l2", Level2Tables}, {"gnssa_l3", Level3Tables}} {
+	}{{"gnssa_l1", Level1Tables}, {"gnssa_l2", Level2Tables}} {
 		for _, def := range set.defs {
 			t.Run(set.ns+"."+def.Name, func(t *testing.T) {
 				if def.Namespace() != set.ns {
@@ -239,20 +239,20 @@ func TestDerivedTables(t *testing.T) {
 func TestDerivedEDID(t *testing.T) {
 	scope := Scope{Network: "net", Station: "STA", Campaign: "2025_A_1126"}
 	got := DerivedEDID(scope, ProductPRIDE, "NOV000:RANGEA")
-	if want := "net:STA:2025_A_1126:PRIDE:NOV000.RANGEA"; got != want {
+	if want := "net.STA.2025_A_1126.PRIDE.NOV000.RANGEA"; got != want {
 		t.Errorf("DerivedEDID = %q, want %q", got, want)
 	}
 }
 
 func TestTableByName(t *testing.T) {
-	for name, want := range map[string]string{"inspva": "gnssa_l1.inspva", "gnssa_l3.garpos": "gnssa_l3.garpos",
-		"gnss_antenna_positions_ppp": "gnssa_l2.gnss_antenna_positions_ppp"} {
+	for name, want := range map[string]string{"inspva": "gnssa_l0.inspva", "gnssa_l2.garpos": "gnssa_l2.garpos",
+		"gnss_antenna_positions_ppp": "gnssa_l1.gnss_antenna_positions_ppp"} {
 		def, err := TableByName(name)
 		if err != nil || def.Namespace()+"."+def.Name != want {
 			t.Errorf("TableByName(%q) = %s.%s, %v; want %s", name, def.Namespace(), def.Name, err, want)
 		}
 	}
-	for _, name := range []string{"garpos", "nope", "gnssa_l1.garpos"} {
+	for _, name := range []string{"garpos", "nope", "gnssa_l0.garpos"} {
 		if _, err := TableByName(name); err == nil {
 			t.Errorf("TableByName(%q): no error", name)
 		}

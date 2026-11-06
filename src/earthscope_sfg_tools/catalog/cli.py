@@ -19,12 +19,12 @@ from pathlib import Path
 from ..datamodels.iceberg.schemas import Scope
 from ..datamodels.metadata.earthscope.site import Site
 from .posfilter import SolverOptions, export_posfilter
-from .reader import Level1Reader, open_catalog
+from .reader import Level0Reader, open_catalog
 from .site import PosfilterSite
 
 
 def _export_posfilter(args: argparse.Namespace) -> int:
-    reader = Level1Reader(open_catalog(args.warehouse, type=args.catalog, region=args.region))
+    reader = Level0Reader(open_catalog(args.warehouse, type=args.catalog, region=args.region))
     site_meta = Site.from_json(str(args.site_metadata))
     scope = Scope(args.network, args.station, args.campaign)
     out = Path(args.out)
@@ -76,10 +76,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--survey", help="survey id (default: every survey of the campaign)")
     p.add_argument("--start", help="UTC window start (ISO), instead of a survey")
     p.add_argument("--end", help="UTC window end (ISO), instead of a survey")
-    p.add_argument("--positions", default="DFOP00", help="antenna position stream file type (default DFOP00)")
     p.add_argument(
-        "--position-sigmas", default="logged", choices=["logged", "insstdev"],
-        help="antenna sigmas: as logged, or the INS position sigmas (for DFOP00, which logs the INS position)",
+        "--positions", default="DFOP00",
+        help="antenna position stream file type: DFOP00 (its inspva rows) or QCPIN (default DFOP00)",
+    )  # fmt: skip
+    p.add_argument(
+        "--position-sigmas", choices=["logged", "insstdev"],
+        help="antenna sigmas: as logged, or the INS position sigmas (default insstdev for DFOP00, else logged)",
     )  # fmt: skip
     p.add_argument("--no-sound-speed", action="store_true", help="skip the sound speed profile")
     p.add_argument("--solver", action="store_true", help="add a GNATSS solver section (array position)")

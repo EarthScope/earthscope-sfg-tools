@@ -15,9 +15,9 @@ import (
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
-var level1Cmd = &cobra.Command{
-	Use:   "level1",
-	Short: "Write RINEX from the Level 1 catalog",
+var level0Cmd = &cobra.Command{
+	Use:   "level0",
+	Short: "Write RINEX from the Level 0 catalog",
 	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
 		if v, _ := cmd.Flags().GetBool("verbose"); v {
 			slog.SetLogLoggerLevel(slog.LevelDebug)
@@ -25,18 +25,21 @@ var level1Cmd = &cobra.Command{
 	},
 }
 
-var level1RINEXCmd = &cobra.Command{
+var level0RINEXCmd = &cobra.Command{
 	Use:   "rinex",
 	Short: "Write one day of a gnss_observations stream from the catalog as RINEX",
 	Long: "Read the gnss_observations stream of --log-source from --type files in the " +
 		"--network/--station/--campaign scope for one GPS day (--day, 00:00-24:00 GPST) " +
 		"and write it to --out as RINEX observations. --settings is a rinex.Settings JSON " +
-		"file for the header, as nov0002rnx takes; without it the marker name is the station.",
+		"file for the header, as nov0002rnx takes; without it the marker name is the station. " +
+		"--catalog is local (--warehouse is then a directory) or a catalog of the iceberg-go " +
+		"configuration (.iceberg-go.yaml in $GOICEBERG_HOME or the home directory), whose " +
+		"warehouse --warehouse overrides.",
 	Args: cobra.NoArgs,
-	RunE: runLevel1RINEX,
+	RunE: runLevel0RINEX,
 }
 
-func runLevel1RINEX(cmd *cobra.Command, _ []string) error {
+func runLevel0RINEX(cmd *cobra.Command, _ []string) error {
 	f := cmd.Flags()
 	var scope datamodels.Scope
 	scope.Network, _ = f.GetString("network")
@@ -47,10 +50,12 @@ func runLevel1RINEX(cmd *cobra.Command, _ []string) error {
 	dayStr, _ := f.GetString("day")
 	settingsPath, _ := f.GetString("settings")
 	outPath, _ := f.GetString("out")
-	catalogType, _ := f.GetString("catalog")
-	region, _ := f.GetString("region")
+	catalogName, _ := f.GetString("catalog")
 	warehouse, _ := f.GetString("warehouse")
 
+	if err := datamodels.CheckScope(scope); err != nil {
+		return err
+	}
 	day, err := time.Parse(time.DateOnly, dayStr)
 	if err != nil {
 		return fmt.Errorf("--day: %w", err)
@@ -68,7 +73,7 @@ func runLevel1RINEX(cmd *cobra.Command, _ []string) error {
 	}
 
 	ctx := cmd.Context()
-	cat, err := catalog.Open(ctx, catalog.Config{Type: catalogType, Warehouse: warehouse, Region: region})
+	cat, err := catalog.Open(ctx, catalog.Config{Name: catalogName, Warehouse: warehouse})
 	if err != nil {
 		return err
 	}
@@ -95,12 +100,11 @@ func runLevel1RINEX(cmd *cobra.Command, _ []string) error {
 }
 
 func init() {
-	level1Cmd.PersistentFlags().BoolP("verbose", "v", false, "log per-file parser details")
+	level0Cmd.PersistentFlags().BoolP("verbose", "v", false, "log per-file parser details")
 
-	f := level1RINEXCmd.Flags()
-	f.String("warehouse", "", "Iceberg warehouse: local directory (sql) or s3:// URI (glue) (required)")
-	f.String("catalog", catalog.TypeSQL, "catalog type: sql (local) or glue")
-	f.String("region", "", "AWS region for --catalog glue (default: AWS config)")
+	f := level0RINEXCmd.Flags()
+	f.String("warehouse", "", "Iceberg warehouse: the directory for --catalog local (required then), else overrides the catalog's")
+	f.String("catalog", catalog.Local, "catalog: local, or a catalog of the iceberg-go configuration")
 	f.String("network", "", "network of the stream's scope (required)")
 	f.String("station", "", "station of the stream's scope (required)")
 	f.String("campaign", "", "campaign of the stream's scope (required)")
@@ -109,9 +113,9 @@ func init() {
 	f.String("day", "", "GPS day, YYYY-MM-DD (required)")
 	f.String("settings", "", "rinex.Settings JSON file for the header")
 	f.String("out", "", "output RINEX file (required)")
-	for _, name := range []string{"warehouse", "network", "station", "campaign", "type", "log-source", "day", "out"} {
-		_ = level1RINEXCmd.MarkFlagRequired(name)
+	for _, name := range []string{"network", "station", "campaign", "type", "log-source", "day", "out"} {
+		_ = level0RINEXCmd.MarkFlagRequired(name)
 	}
 
-	level1Cmd.AddCommand(level1RINEXCmd)
+	level0Cmd.AddCommand(level0RINEXCmd)
 }

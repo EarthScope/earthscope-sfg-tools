@@ -14,8 +14,8 @@ import (
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 )
 
-// Level 1 Arrow batches hold only the parsed payload columns of each table in
-// earthscope_sfg_tools.datamodels.iceberg.schemas.level1; the Python ingest
+// Level 0 Arrow batches hold only the parsed payload columns of each table in
+// earthscope_sfg_tools.datamodels.iceberg.schemas.level0; the Python ingest
 // layer stamps the scope and Log_Source columns and conforms the batch to the
 // Iceberg schema, rejecting any column it does not know.
 

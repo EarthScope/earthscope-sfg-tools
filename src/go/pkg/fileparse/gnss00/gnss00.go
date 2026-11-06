@@ -34,9 +34,10 @@ import (
 const (
 	// FileType names the file type in stream EDIDs.
 	FileType = "GNSS00"
-	// LogGGA is the NMEA sentence gnss_antenna_positions rows come from, and
-	// their Log_Source value.
-	LogGGA = "GGA"
+
+	// GGA sentences, single-antenna pseudorange fixes, give the
+	// gnss_antenna_positions rows, with Log_Source datamodels.LogGNSSPSEUDO.
+
 	// LogGSV is the NMEA sentence of gnss_satellites_in_view rows.
 	LogGSV = "GSV"
 	// LogGSA is the NMEA sentence of gnss_dop rows.
@@ -67,7 +68,7 @@ func AntennaPositions(path string) (arrow.Table, error) {
 	rs, noFix, bad := antennaPositions(sentences)
 	slog.Debug("parsed GNSS00", "file", filepath.Base(path), "sentences", len(sentences),
 		"fixes", len(rs), "no_fix", noFix, "bad_gga", bad, "bad_checksum", badSum)
-	return datamodels.BuildGNSSAntennaPositions(rs, LogGGA)
+	return datamodels.BuildGNSSAntennaPositions(rs, datamodels.LogGNSSPSEUDO)
 }
 
 // SatellitesInView parses the GSV sentences of the GNSS00.bin file at path

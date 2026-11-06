@@ -2,111 +2,154 @@ package catalog
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
+	"io"
+	"maps"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/apache/iceberg-go"
 	icecat "github.com/apache/iceberg-go/catalog"
-	"github.com/apache/iceberg-go/catalog/glue"
+	_ "github.com/apache/iceberg-go/catalog/glue"
+	_ "github.com/apache/iceberg-go/catalog/hadoop"
+	_ "github.com/apache/iceberg-go/catalog/rest"
 	sqlcat "github.com/apache/iceberg-go/catalog/sql"
-	icebergio "github.com/apache/iceberg-go/io"
-	_ "github.com/apache/iceberg-go/io/gocloud" // s3:// table IO for glue
+	"github.com/apache/iceberg-go/config"
+	_ "github.com/apache/iceberg-go/io/gocloud" // s3://, gs:// and abfs[s]:// table IO
 	"github.com/apache/iceberg-go/table"
 	"github.com/uptrace/bun/driver/sqliteshim"
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
-// Catalog types for Config.Type.
-const (
-	TypeSQL  = "sql"  // SQLite catalog.db in a local warehouse directory
-	TypeGlue = "glue" // AWS Glue catalog over an S3 warehouse
-)
+// Local is the Config.Name of a local warehouse: a directory holding an
+// SQLite catalog.db and the table data. Any other name is a catalog of the
+// iceberg-go configuration file.
+const Local = "local"
 
-// Config selects and locates the Iceberg catalog.
+// Config names the Iceberg catalog, as iceberg-go configures one: Name is a
+// catalog of .iceberg-go.yaml (in $GOICEBERG_HOME, else the home
+// directory), or "" for its default-catalog, and gives the catalog type
+// (rest, glue, sql, hadoop), URI, credential and warehouse. Table data
+// can be on any storage iceberg-go's FileIO reads: s3://, gs://, abfs[s]://
+// or file://. Cloud credentials come from each cloud's default chain (env,
+// profile, workload identity), or from Props.
+//
+// The catalog Local is a warehouse directory instead: Warehouse is the
+// directory, created if needed, with an SQLite catalog in catalog.db.
 type Config struct {
-	Type      string // TypeSQL or TypeGlue
-	Warehouse string // local directory (sql) or s3://bucket/prefix (glue)
-	Region    string // glue only; empty uses the AWS default chain
+	Name      string
+	Warehouse string             // overrides the configured warehouse; Local: the directory
+	Props     iceberg.Properties // catalog and FileIO properties, overriding the configuration
 }
 
-// Catalog is an Iceberg catalog holding the Level 1 tables: either SQLite
-// over a local warehouse directory (catalog.db holds the catalog, table data
-// lives beside it) or AWS Glue over an S3 warehouse.
+// String describes the catalog for messages: name:warehouse.
+func (cfg Config) String() string {
+	name := cfg.Name
+	if name == "" {
+		name = "default"
+	}
+	if cfg.Warehouse == "" {
+		return name
+	}
+	return name + ":" + cfg.Warehouse
+}
+
+// Catalog is an Iceberg catalog holding the tables (see Config).
 type Catalog struct {
-	cfg    Config
 	cat    icecat.Catalog
-	db     *sql.DB // sql only
 	tables map[string]*table.Table
 }
 
-// Open opens (creating if needed, for sql) the catalog cfg describes. Glue
-// credentials come from the standard AWS chain (env, profile, IAM role).
+// Open opens the catalog cfg names, creating a Local warehouse if needed.
 func Open(ctx context.Context, cfg Config) (*Catalog, error) {
-	switch cfg.Type {
-	case TypeSQL:
-		return openSQL(cfg)
-	case TypeGlue:
-		if !strings.HasPrefix(cfg.Warehouse, "s3://") {
-			return nil, fmt.Errorf("glue warehouse %q is not an s3:// URI", cfg.Warehouse)
-		}
-		// The catalog type comes from props["type"]; Load's name argument is
-		// only the catalog's name. The table data IO reads these props too,
-		// so the region is set for S3 as well as Glue.
-		props := iceberg.Properties{"type": TypeGlue, "warehouse": strings.TrimSuffix(cfg.Warehouse, "/")}
-		if cfg.Region != "" {
-			props[glue.Region] = cfg.Region
-			props[icebergio.S3Region] = cfg.Region
-		}
-		cat, err := icecat.Load(ctx, "default", props)
-		if err != nil {
-			return nil, fmt.Errorf("opening glue catalog: %w", err)
-		}
-		return &Catalog{cfg: cfg, cat: cat, tables: make(map[string]*table.Table)}, nil
-	default:
-		return nil, fmt.Errorf("unknown catalog type %q (want %q or %q)", cfg.Type, TypeSQL, TypeGlue)
+	name, props := cfg.Name, maps.Clone(cfg.Props)
+	if props == nil {
+		props = iceberg.Properties{}
 	}
+	if cfg.Name == Local {
+		local, err := localProps(cfg.Warehouse)
+		if err != nil {
+			return nil, err
+		}
+		maps.Copy(props, local)
+		// The sql catalog keys its rows by catalog name; existing local
+		// warehouses and pyiceberg's load_catalog("default", ...) use "default".
+		name = "default"
+	} else {
+		if props["type"] == "" {
+			if err := Check(name); err != nil {
+				return nil, err
+			}
+		}
+		if cfg.Warehouse != "" {
+			props["warehouse"] = cfg.Warehouse
+		}
+	}
+	cat, err := icecat.Load(ctx, name, props)
+	if err != nil {
+		return nil, fmt.Errorf("opening catalog %s: %w", cfg, err)
+	}
+	return &Catalog{cat: cat, tables: make(map[string]*table.Table)}, nil
 }
 
-// openSQL opens the SQLite catalog in the warehouse directory. The catalog
-// name stays "default" so existing warehouses and pyiceberg's
-// load_catalog("default", ...) still see the tables.
-func openSQL(cfg Config) (*Catalog, error) {
-	warehouse, err := filepath.Abs(cfg.Warehouse)
+// Check reports whether name is a catalog Open can find: Local, a catalog of
+// the iceberg-go configuration, or "" for its default-catalog.
+func Check(name string) error {
+	if name == Local || name == "" {
+		return nil
+	}
+	if _, ok := config.EnvConfig.Catalogs[name]; !ok {
+		return fmt.Errorf("no catalog %q: want %s or a catalog of the iceberg-go configuration (.iceberg-go.yaml in $GOICEBERG_HOME or the home directory)", name, Local)
+	}
+	return nil
+}
+
+// Warehouse is the warehouse the iceberg-go configuration gives catalog
+// name ("" for its default-catalog), or "" when it gives none. Local has
+// no configured warehouse: its warehouse is the directory.
+func Warehouse(name string) string {
+	if name == Local {
+		return ""
+	}
+	if name == "" {
+		name = config.EnvConfig.DefaultCatalog
+	}
+	return config.EnvConfig.Catalogs[name].Warehouse
+}
+
+// localProps are the sql catalog properties of a Local warehouse directory,
+// which is created if needed.
+func localProps(dir string) (iceberg.Properties, error) {
+	if dir == "" {
+		return nil, errors.New("a local catalog needs a warehouse directory")
+	}
+	warehouse, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, err
 	}
 	if err := os.MkdirAll(warehouse, 0o755); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open(sqliteshim.ShimName, filepath.Join(warehouse, "catalog.db"))
-	if err != nil {
-		return nil, err
-	}
-	cat, err := sqlcat.NewCatalog("default", db, sqlcat.SQLite, iceberg.Properties{
-		"warehouse": "file://" + warehouse,
-	})
-	if err != nil {
-		db.Close()
-		return nil, err
-	}
-	cfg.Warehouse = warehouse
-	return &Catalog{cfg: cfg, cat: cat, db: db, tables: make(map[string]*table.Table)}, nil
+	return iceberg.Properties{
+		"type":            "sql",
+		sqlcat.DriverKey:  sqliteshim.ShimName,
+		sqlcat.DialectKey: string(sqlcat.SQLite),
+		"uri":             filepath.Join(warehouse, "catalog.db"),
+		"warehouse":       "file://" + warehouse,
+	}, nil
 }
 
-// Close closes the catalog database (sql); it is a no-op for glue.
+// Close closes the catalog's connections.
 func (c *Catalog) Close() error {
-	if c.db == nil {
-		return nil
+	if closer, ok := c.cat.(io.Closer); ok {
+		return closer.Close()
 	}
-	return c.db.Close()
+	return nil
 }
 
 // Table loads def's table, creating its namespace and table if needed.
@@ -115,14 +158,10 @@ func (c *Catalog) Table(ctx context.Context, def datamodels.TableDef) (*table.Ta
 	if tbl, ok := c.tables[key]; ok {
 		return tbl, nil
 	}
+	// A new namespace gets no location: the catalog places its tables at
+	// <warehouse>/<namespace>.db/<table>, or where the server decides (rest).
 	ns := table.Identifier{def.Namespace()}
-	// A Glue database needs an explicit location for its tables to land in
-	// the S3 warehouse; the sql catalog derives it from its warehouse.
-	var nsProps iceberg.Properties
-	if c.cfg.Type == TypeGlue {
-		nsProps = iceberg.Properties{"location": strings.TrimSuffix(c.cfg.Warehouse, "/") + "/" + def.Namespace() + ".db"}
-	}
-	err := c.cat.CreateNamespace(ctx, ns, nsProps)
+	err := c.cat.CreateNamespace(ctx, ns, nil)
 	if err != nil && !errors.Is(err, icecat.ErrNamespaceAlreadyExists) {
 		return nil, fmt.Errorf("creating namespace %s: %w", def.Namespace(), err)
 	}

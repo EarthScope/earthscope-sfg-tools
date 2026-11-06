@@ -13,13 +13,8 @@ import (
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/internal/sv3"
 )
 
-const (
-	// FileType names the file type in stream EDIDs.
-	FileType = "DFOP00"
-	// LogType is the one log type DFOP00 files carry (SV3 JSON events), and
-	// the Log_Source value of their rows.
-	LogType = "DFOP00"
-)
+// FileType names the file type in stream EDIDs.
+const FileType = "DFOP00"
 
 // TWTT parses the events of the DFOP00 file at path into
 // travel_times rows (see datamodels.ParsedSchema):
@@ -31,31 +26,22 @@ func TWTT(path string) (arrow.Table, error) {
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildTWTT(sv3.TravelTimes(events), LogType)
+	return datamodels.BuildTWTT(sv3.TravelTimes(events), datamodels.LogINTGRPLY)
 }
 
-// AttitudeAHRS parses the events of the DFOP00 file at path
-// into attitude_ahrs rows (see datamodels.ParsedSchema): one row per distinct
-// AHRS block (consecutive events usually repeat the same block). The caller
-// releases the table.
-func AttitudeAHRS(path string) (arrow.Table, error) {
+// INSPVA parses the NOV_INS blocks of the DFOP00 file at path into inspva
+// rows (see datamodels.ParsedSchema): one row per distinct block, the NovAtel
+// INS solution at the event. The caller releases the table.
+//
+// The events' AHRS and GNSS blocks are not parsed: the GNSS block is this
+// INS position, rounded, with the receiver's single-point std devs, and the
+// AHRS00 files log the AHRS at full rate.
+func INSPVA(path string) (arrow.Table, error) {
 	events, err := parseEvents(path)
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildAttitudeAHRS(sv3.Attitudes(events), LogType)
-}
-
-// AntennaPositions parses the events of the DFOP00 file at
-// path into gnss_antenna_positions rows (see datamodels.ParsedSchema): one row
-// per distinct GNSS block (keyed by its fix time), converted to ECEF. The
-// caller releases the table.
-func AntennaPositions(path string) (arrow.Table, error) {
-	events, err := parseEvents(path)
-	if err != nil {
-		return nil, err
-	}
-	return datamodels.BuildGNSSAntennaPositions(sv3.AntennaPositions(events), LogType)
+	return datamodels.BuildINSPVA(sv3.INSPVA(events), datamodels.LogINSPVAA)
 }
 
 // parseEvents reads the events of the DFOP00 file at path, logging how many

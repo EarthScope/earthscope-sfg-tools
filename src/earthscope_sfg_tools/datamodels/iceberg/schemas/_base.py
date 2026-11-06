@@ -15,8 +15,8 @@ Campaign. A table can override its partitioning, its sort order, and which
 columns hold the scope values (see ``GNSS_OBSERVATIONS``, which follows the
 gnsstools ``observations`` layout).
 
-Each level is its own catalog namespace (``gnssa_l1``, ``gnssa_l2``,
-``gnssa_l3``), so a table's name only needs to be unique within its level.
+Each level is its own catalog namespace (``gnssa_l0``, ``gnssa_l1``,
+``gnssa_l2``), so a table's name only needs to be unique within its level.
 """
 
 from dataclasses import dataclass, field
@@ -59,7 +59,7 @@ NAMESPACE_PREFIX = "gnssa"
 
 
 def level_namespace(level: int) -> str:
-    """Catalog namespace holding the tables of ``level``, e.g. ``gnssa_l1``."""
+    """Catalog namespace holding the tables of ``level``, e.g. ``gnssa_l0``."""
     return f"{NAMESPACE_PREFIX}_l{level}"
 
 
@@ -186,7 +186,7 @@ class TableDef:
 
     @property
     def qualified_name(self) -> str:
-        """Dotted catalog name, e.g. ``gnssa_l2.garpos``."""
+        """Dotted catalog name, e.g. ``gnssa_l1.garpos``."""
         return f"{self.namespace}.{self.name}"
 
     def scope_filter(
@@ -230,7 +230,7 @@ class TableDef:
     ) -> pa.Table:
         """Build an Arrow table with this table's schema from parsed rows.
 
-        Scope columns (and ``Log_Source`` for Level 1 tables) are stamped onto
+        Scope columns (and ``Log_Source`` for Level 0 tables) are stamped onto
         every row; the rows supply everything else.
         """
         stamp: dict[str, Any] = scope.as_columns(self.scope_names)
@@ -251,7 +251,7 @@ class TableDef:
         """Conform a columnar table of parsed rows to this table's schema.
 
         The columnar counterpart of :meth:`to_arrow`, for parsers that emit
-        Arrow directly (e.g. the Go ``sfg nov2level1`` command). Scope columns
+        Arrow directly (e.g. the Go ``sfg nov2level0`` command). Scope columns
         and ``Log_Source`` are stamped, missing nullable columns are filled
         with nulls, and columns are cast and reordered. Raises on a column the
         schema does not define, a missing required column, or nulls in one.
@@ -331,16 +331,16 @@ SCOPE_COLUMNS: tuple[Column, ...] = (
 
 LOG_SOURCE = Column("Log_Source", STRING, "Source log file or log type")
 
-LEVEL1_SCOPE: tuple[Column, ...] = (*SCOPE_COLUMNS, LOG_SOURCE)
+LEVEL0_SCOPE: tuple[Column, ...] = (*SCOPE_COLUMNS, LOG_SOURCE)
 
-# Last column of every Level 1 table with LEVEL1_SCOPE: the rows' stream EDID,
-# network:station:campaign:file_type:log_source. Optional and last because it
+# Last column of every Level 0 table with LEVEL0_SCOPE: the rows' stream EDID,
+# network.station.campaign.file_type.log_source. Optional and last because it
 # was added after the tables were defined (field IDs follow declaration order,
 # and added columns must be optional). The Go parsers set it; Python ingest
 # leaves it null.
 STREAM_EDID = Column(
     "stream_edid",
     STRING,
-    "Stream EDID, network:station:campaign:file_type:log_source",
+    "Stream EDID, network.station.campaign.file_type.log_source",
     required=False,
 )

@@ -1,9 +1,9 @@
 """
-Level 2 and Level 3 tables: derived by the access API from Level 1.
+Level 1 and Level 2 tables: derived by the access API from Level 0.
 
 Derived rows can combine several source logs, so these tables carry the
-scope columns but no ``Log_Source``. Level 2 GNSS-A tables use Level 1
-(SV3 pseudorange) antenna positions; Level 3 uses the Level 2 PPP
+scope columns but no ``Log_Source``. Level 1 GNSS-A tables use Level 0
+(SV3 pseudorange) antenna positions; Level 2 uses the Level 1 PPP
 positions. The GNSS-A schemas are identical between levels — the tables
 share a name and differ only by level namespace.
 """
@@ -19,13 +19,13 @@ from ._base import (
     Column,
     TableDef,
 )
-from .level1 import ANTENNA_POSITION_COLUMNS
+from .level0 import ANTENNA_POSITION_COLUMNS
 
 GNSS_ANTENNA_POSITIONS_PPP = TableDef(
     name="gnss_antenna_positions_ppp",
-    level=2,
+    level=1,
     doc=(
-        "Antenna positions from PPP kinematic solutions of the Level 1 GNSS "
+        "Antenna positions from PPP kinematic solutions of the Level 0 GNSS "
         "observations; lat/lon/height converted to ECEF at ingest."
     ),
     columns=(
@@ -163,38 +163,38 @@ _COMMUNITY_COLUMNS: tuple[Column, ...] = (
     *_community_attitude_columns("1", "receive"),
 )
 
-GARPOS_L2 = TableDef(
+GARPOS_L1 = TableDef(
     name="garpos",
-    level=2,
-    doc="GNSS-A in GARPOS format, antenna positions from Level 1 SV3 GNSS (local ENU).",
+    level=1,
+    doc="GNSS-A in GARPOS format, antenna positions from Level 0 SV3 GNSS (local ENU).",
     columns=_GARPOS_COLUMNS,
 )
 
-GARPOS_L3 = TableDef(
+GARPOS_L2 = TableDef(
     name="garpos",
-    level=3,
-    doc="GNSS-A in GARPOS format, antenna positions from Level 2 PPP (local ENU).",
+    level=2,
+    doc="GNSS-A in GARPOS format, antenna positions from Level 1 PPP (local ENU).",
     columns=_GARPOS_COLUMNS,
+)
+
+COMMUNITY_STANDARD_L1 = TableDef(
+    name="community_standard",
+    level=1,
+    doc="GNSS-A community standard format, antenna positions from Level 0 SV3 GNSS (ECEF).",
+    columns=_COMMUNITY_COLUMNS,
 )
 
 COMMUNITY_STANDARD_L2 = TableDef(
     name="community_standard",
     level=2,
-    doc="GNSS-A community standard format, antenna positions from Level 1 SV3 GNSS (ECEF).",
+    doc="GNSS-A community standard format, antenna positions from Level 1 PPP (ECEF).",
     columns=_COMMUNITY_COLUMNS,
 )
 
-COMMUNITY_STANDARD_L3 = TableDef(
-    name="community_standard",
-    level=3,
-    doc="GNSS-A community standard format, antenna positions from Level 2 PPP (ECEF).",
-    columns=_COMMUNITY_COLUMNS,
-)
-
-LEVEL2_TABLES: tuple[TableDef, ...] = (
+LEVEL1_TABLES: tuple[TableDef, ...] = (
     GNSS_ANTENNA_POSITIONS_PPP,
-    GARPOS_L2,
-    COMMUNITY_STANDARD_L2,
+    GARPOS_L1,
+    COMMUNITY_STANDARD_L1,
 )
 
-LEVEL3_TABLES: tuple[TableDef, ...] = (GARPOS_L3, COMMUNITY_STANDARD_L3)
+LEVEL2_TABLES: tuple[TableDef, ...] = (GARPOS_L2, COMMUNITY_STANDARD_L2)

@@ -54,7 +54,7 @@ func rows(t *testing.T, def datamodels.TableDef, n int) arrow.Table {
 	return array.NewTableFromRecords(sc, []arrow.RecordBatch{rec})
 }
 
-// wrongSchema is a table no Level 1 def accepts.
+// wrongSchema is a table no Level 0 def accepts.
 func wrongSchema() arrow.Table {
 	sc := arrow.NewSchema([]arrow.Field{{Name: "x", Type: arrow.PrimitiveTypes.Int64}}, nil)
 	b := array.NewRecordBuilder(memory.DefaultAllocator, sc)
@@ -68,7 +68,7 @@ func wrongSchema() arrow.Table {
 // sinks returns one of each Sink, writing under t.TempDir().
 func sinks(t *testing.T) map[string]Sink {
 	t.Helper()
-	ice, err := OpenIceberg(context.Background(), catalog.Config{Type: catalog.TypeSQL, Warehouse: t.TempDir()})
+	ice, err := OpenIceberg(context.Background(), catalog.Config{Name: catalog.Local, Warehouse: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

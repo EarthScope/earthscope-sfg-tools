@@ -81,26 +81,26 @@ var (
 	timestamptz = iceberg.PrimitiveTypes.TimestampTz
 )
 
-// StreamEDIDColumn is the first column of every table built with level1 or
+// StreamEDIDColumn is the first column of every table built with level0 or
 // derived: the rows' stream EDID (see StreamEDID). It is the only identity
 // column: network, station, campaign, file type and log source are its
 // fields, not columns of their own.
 var StreamEDIDColumn = Column{Name: "stream_edid", Type: str, Required: true,
-	Doc: "Stream EDID, network:station:campaign:file_type:log_source"}
+	Doc: "Stream EDID, network.station.campaign.file_type.log_source"}
 
-// level1 prepends StreamEDIDColumn to cols.
-func level1(cols ...Column) []Column {
+// level0 prepends StreamEDIDColumn to cols.
+func level0(cols ...Column) []Column {
 	return append([]Column{StreamEDIDColumn}, cols...)
 }
 
 // streamPartitions is the default partitioning: one partition per stream.
-// A stream EDID starts network:station:, so its partitions nest within
+// A stream EDID starts network.station., so its partitions nest within
 // each network and station.
 var streamPartitions = []PartitionKey{
 	{Source: StreamEDIDColumn.Name, Transform: iceberg.IdentityTransform{}},
 }
 
-// Namespace is the catalog namespace of the table's level, e.g. gnssa_l1.
+// Namespace is the catalog namespace of the table's level, e.g. gnssa_l0.
 func (t TableDef) Namespace() string { return fmt.Sprintf("gnssa_l%d", t.Level) }
 
 // Identifier is the catalog identifier (namespace, name).
@@ -222,13 +222,13 @@ func (t TableDef) ArrowSchema() (*arrow.Schema, error) {
 	return table.SchemaToArrowSchema(sc, nil, true, false)
 }
 
-// AllTables lists every table definition, Level 1 to 3.
+// AllTables lists every table definition, Level 0 to 2.
 func AllTables() []TableDef {
-	return slices.Concat(Level1Tables, Level2Tables, Level3Tables)
+	return slices.Concat(Level0Tables, Level1Tables, Level2Tables)
 }
 
 // TableByName returns the table named name, either qualified
-// (gnssa_l2.garpos) or bare (inspva). A bare name shared by more than one
+// (gnssa_l1.garpos) or bare (inspva). A bare name shared by more than one
 // level is an error.
 func TableByName(name string) (TableDef, error) {
 	var found []TableDef

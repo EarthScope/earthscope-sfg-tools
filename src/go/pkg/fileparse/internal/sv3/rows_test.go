@@ -1,18 +1,20 @@
-package dfop00
+package sv3
 
 import (
-	"math"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"gitlab.com/earthscope/gnsstools/core/coordinates"
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
-func near(a, b, tol float64) bool { return math.Abs(a-b) <= tol }
+func col[T arrow.Array](tbl arrow.Table, name string) T {
+	return tbl.Column(tbl.Schema().FieldIndices(name)[0]).Data().Chunk(0).(T)
+}
 
 // Events 1 and 2 repeat one GNSS block; event 3 reports the -1 sigma
 // sentinel; event 4's GNSS logged an error code; event 5's block has no
@@ -29,7 +31,11 @@ func TestAntennaPositions(t *testing.T) {
 	if err := os.WriteFile(path, []byte(gnssSample), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	tbl, err := AntennaPositions(path)
+	events, _, err := ReadJSONL(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tbl, err := datamodels.BuildGNSSAntennaPositions(AntennaPositions(events), datamodels.LogGNSSINS)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,9 +47,9 @@ func TestAntennaPositions(t *testing.T) {
 		t.Fatalf("%d rows, want 2 (one per distinct usable fix)", tbl.NumRows())
 	}
 
-	x := col[*array.Float64](t, tbl, "ant_x")
-	y := col[*array.Float64](t, tbl, "ant_y")
-	z := col[*array.Float64](t, tbl, "ant_z")
+	x := col[*array.Float64](tbl, "ant_x")
+	y := col[*array.Float64](tbl, "ant_y")
+	z := col[*array.Float64](tbl, "ant_z")
 	if x.Value(0) != coordinates.EarthEquatorialRadius || y.Value(0) != 0 || z.Value(0) != 0 {
 		t.Errorf("row 0 ECEF = %v %v %v, want (a, 0, 0)", x.Value(0), y.Value(0), z.Value(0))
 	}
@@ -52,16 +58,16 @@ func TestAntennaPositions(t *testing.T) {
 		t.Errorf("row 1 ECEF = %v %v %v", x.Value(1), y.Value(1), z.Value(1))
 	}
 
-	sigX := col[*array.Float64](t, tbl, "ant_sigx")
-	sigY := col[*array.Float64](t, tbl, "ant_sigy")
-	sigZ := col[*array.Float64](t, tbl, "ant_sigz")
+	sigX := col[*array.Float64](tbl, "ant_sigx")
+	sigY := col[*array.Float64](tbl, "ant_sigy")
+	sigZ := col[*array.Float64](tbl, "ant_sigz")
 	if sigX.Value(0) != 3 || sigY.Value(0) != 1 || sigZ.Value(0) != 2 {
 		t.Errorf("row 0 sigmas = %v %v %v, want up/east/north = 3 1 2", sigX.Value(0), sigY.Value(0), sigZ.Value(0))
 	}
 	if !sigX.IsNull(1) || !sigY.IsNull(1) || !sigZ.IsNull(1) {
 		t.Error("row 1: the -1 sentinel must null all three sigmas")
 	}
-	q := col[*array.Int32](t, tbl, "q")
+	q := col[*array.Int32](tbl, "q")
 	if q.Value(0) != 4 || q.Value(1) != 0 {
 		t.Errorf("q = %v", q)
 	}

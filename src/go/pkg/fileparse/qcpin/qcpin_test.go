@@ -91,8 +91,13 @@ func TestSample(t *testing.T) {
 		col[*array.Float64](obs, "code").Value(0) != 21007753.481 {
 		t.Errorf("gnss_observations: %d rows", obs.NumRows())
 	}
-	if got := col[*array.String](obs, datamodels.LogSourceColumn).Value(0); got != LogRANGEA {
-		t.Errorf("Log_Source = %q", got)
+	for _, c := range []struct {
+		tbl  arrow.Table
+		want string
+	}{{tt, datamodels.LogINTGRPLY}, {att, datamodels.LogAHRS}, {pos, datamodels.LogGNSSINS}, {obs, LogRANGEA}} {
+		if got := col[*array.String](c.tbl, datamodels.LogSourceColumn).Value(0); got != c.want {
+			t.Errorf("Log_Source = %q, want %q", got, c.want)
+		}
 	}
 }
 

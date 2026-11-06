@@ -1,5 +1,5 @@
 """
-Level 1 parsers for sound speed profiles (CTD casts and Sea-Bird files).
+Level 0 parsers for sound speed profiles (CTD casts and Sea-Bird files).
 
 Each parser returns a ``pyarrow.Table`` matching the ``sound_speed`` Iceberg
 table definition.
@@ -43,7 +43,7 @@ def ctd_to_sound_speed(
 
     Depths are logged negative-down and flipped to positive-down. Unlike
     :func:`.soundspeed_operations.ctd_to_svp_v1`
-    / ``_v2``, the profile is not extrapolated or jittered: Level 1 stores
+    / ``_v2``, the profile is not extrapolated or jittered: Level 0 stores
     the cast as measured.
     """
     df = pd.read_csv(source, sep=r"[\s,]+", names=["depth", "speed"], engine="python")

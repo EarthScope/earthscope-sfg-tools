@@ -84,13 +84,13 @@ func count(t *testing.T, cat *Catalog, def datamodels.TableDef, edid string) (al
 
 func TestAppendIsIdempotent(t *testing.T) {
 	ctx := context.Background()
-	cat, err := Open(ctx, Config{Type: TypeSQL, Warehouse: t.TempDir()})
+	cat, err := Open(ctx, Config{Name: Local, Warehouse: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cat.Close()
 	def := datamodels.AttitudeAHRS
-	const a, b = "net:STA:2026_A_1126:AHRS00:AHRS00", "net:STA:2026_A_1126:DFOP00:DFOP00"
+	const a, b = "net.STA.2026_A_1126.AHRS00.AHRS00", "net.STA.2026_A_1126.DFOP00.DFOP00"
 	write := func(rows arrow.Table, opts ...AppendOption) {
 		t.Helper()
 		defer rows.Release()
@@ -136,13 +136,13 @@ func TestAppendIsIdempotent(t *testing.T) {
 // one by one would, with one snapshot per append.
 func TestBatch(t *testing.T) {
 	ctx := context.Background()
-	cat, err := Open(ctx, Config{Type: TypeSQL, Warehouse: t.TempDir()})
+	cat, err := Open(ctx, Config{Name: Local, Warehouse: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cat.Close()
 	def := datamodels.AttitudeAHRS
-	const a = "net:STA:2026_A_1126:AHRS00:AHRS00"
+	const a = "net.STA.2026_A_1126.AHRS00.AHRS00"
 	b, err := cat.NewBatch(ctx, def)
 	if err != nil {
 		t.Fatal(err)

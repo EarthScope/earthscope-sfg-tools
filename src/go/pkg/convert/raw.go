@@ -18,12 +18,13 @@ import (
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse"
 )
 
-// SourceRaw reads raw files through the Level 1 parsers.
+// SourceRaw reads raw files through the Level 0 parsers.
 const SourceRaw = "raw"
 
 // Patterns are the filename globs of each file type in a campaign raw
 // directory; QC PIN files are unpacked under the campaign's qc/. A raw
-// source given a directory reads only the files matching its types.
+// source given a directory reads only the files matching its types, and
+// tells a named file's type by its base name (see fileType).
 var Patterns = map[string]string{
 	"AHRS00":  "*AHRS00.bin",
 	"NOV770":  "*NOV770.raw",
@@ -36,40 +37,47 @@ var Patterns = map[string]string{
 	"QCPIN":   "../qc/*/*.pin",
 }
 
-// rawSource parses the files of each type at its URIs into Level 1 tables, one
+// rawSource parses the files of each type at its URIs into Level 0 tables, one
 // table at a time: a file is parsed once per table its type feeds.
 type rawSource struct {
 	uris      []string
 	types     []string
-	defs      []datamodels.TableDef // the tables to read, in Level1Tables order
+	defs      []datamodels.TableDef // the tables to read, in Level0Tables order
 	scope     datamodels.Scope
 	logSource string
 	maxFiles  int
 
-	inputs []Input
-	failed map[string][]string // path -> "table: error" of each failed parse
+	byName  bool     // tell named files' types by name (Spec.TypesFromNames)
+	inputs  []Input
+	skipped []string            // named files no type's pattern matches
+	failed  map[string][]string // path -> "table: error" of each failed parse
 }
 
 // newRawSource checks spec's raw source values.
 func newRawSource(spec Spec) (*rawSource, error) {
 	s := &rawSource{uris: spec.SourceURIs, scope: spec.Scope, logSource: spec.LogSource, maxFiles: spec.MaxFiles,
-		failed: map[string][]string{}}
+		byName: spec.TypesFromNames, failed: map[string][]string{}}
 	if spec.Scope.Campaign == "" {
 		return nil, usagef("--source %s needs the full --scope NET/STA/CAMP: it stamps every row", SourceRaw)
-	}
-	if len(spec.SourceTypes) == 0 {
-		return nil, usagef("--source %s needs --source-type", SourceRaw)
-	}
-	for _, uri := range spec.SourceURIs {
-		if info, err := os.Stat(uri); !(err == nil && info.IsDir()) && len(spec.SourceTypes) != 1 {
-			return nil, usagef("--source-uri %s is a file or glob: give exactly one --source-type", uri)
-		}
 	}
 	if spec.MaxFiles < 0 {
 		return nil, usagef("--max-files %d: want 0 (all) or more", spec.MaxFiles)
 	}
+	types := spec.SourceTypes
+	switch {
+	case spec.TypesFromNames && len(types) == 0:
+		types = fileTypes()
+	case len(types) == 0:
+		return nil, usagef("--source %s needs --source-type", SourceRaw)
+	case !spec.TypesFromNames:
+		for _, uri := range spec.SourceURIs {
+			if info, err := os.Stat(uri); !(err == nil && info.IsDir()) && len(types) != 1 {
+				return nil, usagef("--source-uri %s is a file or glob: give exactly one --source-type", uri)
+			}
+		}
+	}
 	produced := map[string]bool{}
-	for _, ft := range spec.SourceTypes {
+	for _, ft := range types {
 		ps := fileparse.ForFileType(ft)
 		if len(ps) == 0 {
 			return nil, usagef("--source-type %q: no parsers (want one of %s)", ft, strings.Join(fileTypes(), ", "))
@@ -84,7 +92,7 @@ func newRawSource(spec Spec) (*rawSource, error) {
 		}
 	}
 	if len(spec.Tables) == 0 {
-		for _, def := range datamodels.Level1Tables {
+		for _, def := range datamodels.Level0Tables {
 			if produced[def.Name] {
 				s.defs = append(s.defs, def)
 			}
@@ -96,7 +104,7 @@ func newRawSource(spec Spec) (*rawSource, error) {
 		if err != nil {
 			return nil, usagef("--table: %w", err)
 		}
-		if def.Level != 1 || !produced[def.Name] {
+		if def.Level != 0 || !produced[def.Name] {
 			return nil, usagef("--table %s: not produced by --source-type %s", name, strings.Join(s.types, ","))
 		}
 		if !slices.ContainsFunc(s.defs, func(d datamodels.TableDef) bool { return d.Name == def.Name }) {
@@ -116,36 +124,62 @@ func fileTypes() []string {
 	return out
 }
 
+// fileType is the type in types whose pattern matches path's base name,
+// or "" if none does.
+func fileType(path string, types []string) string {
+	name := filepath.Base(path)
+	for _, ft := range types {
+		if ok, _ := filepath.Match(filepath.Base(Patterns[ft]), name); ok {
+			return ft
+		}
+	}
+	return ""
+}
+
 // files lists the files of each type at s.uris: in a directory, the files
-// matching each type's pattern; a file or glob (one type only) is itself.
-// A file named more than once is listed once.
+// matching each type's pattern. A file, or each match of a glob, is of the
+// one type given; with s.byName, of the type its name matches, or kept in
+// s.skipped if none. A file named more than once is listed once.
 func (s *rawSource) files() (map[string][]string, error) {
+	byType := map[string][]string{}
+	s.skipped = nil
+	for _, uri := range s.uris {
+		info, err := os.Stat(uri)
+		var named []string
+		switch {
+		case err == nil && info.IsDir():
+			for _, ft := range s.types {
+				matches, _ := filepath.Glob(filepath.Join(uri, Patterns[ft]))
+				byType[ft] = append(byType[ft], matches...)
+			}
+			continue
+		case strings.ContainsAny(uri, "*?["):
+			if named, err = filepath.Glob(uri); err != nil {
+				return nil, usagef("--source-uri %s: %w", uri, err)
+			}
+		case err != nil:
+			return nil, err
+		default:
+			named = []string{uri}
+		}
+		for _, path := range named {
+			ft := s.types[0]
+			if s.byName {
+				ft = fileType(path, s.types)
+			}
+			if ft == "" {
+				s.skipped = append(s.skipped, path)
+				continue
+			}
+			byType[ft] = append(byType[ft], path)
+		}
+	}
 	out := map[string][]string{}
 	total := 0
 	for _, ft := range s.types {
-		var paths []string
-		for _, uri := range s.uris {
-			info, err := os.Stat(uri)
-			isGlob := strings.ContainsAny(uri, "*?[")
-			switch {
-			case err == nil && info.IsDir():
-				matches, _ := filepath.Glob(filepath.Join(uri, Patterns[ft]))
-				paths = append(paths, matches...)
-			case isGlob:
-				matches, err := filepath.Glob(uri)
-				if err != nil {
-					return nil, usagef("--source-uri %s: %w", uri, err)
-				}
-				paths = append(paths, matches...)
-			case err != nil:
-				return nil, err
-			default:
-				paths = append(paths, uri)
-			}
-		}
 		// Skip the "._" AppleDouble files macOS writes beside files on
 		// non-Mac volumes, and directories.
-		paths = slices.DeleteFunc(paths, func(p string) bool {
+		paths := slices.DeleteFunc(byType[ft], func(p string) bool {
 			fi, err := os.Stat(p)
 			return strings.HasPrefix(filepath.Base(p), "._") || (err == nil && fi.IsDir())
 		})
@@ -157,6 +191,10 @@ func (s *rawSource) files() (map[string][]string, error) {
 		out[ft] = paths
 		total += len(paths)
 	}
+	s.skipped = slices.DeleteFunc(s.skipped, func(p string) bool {
+		fi, err := os.Stat(p)
+		return strings.HasPrefix(filepath.Base(p), "._") || (err == nil && fi.IsDir())
+	})
 	if total == 0 {
 		return nil, fmt.Errorf("no %s files at %s", strings.Join(s.types, ", "), strings.Join(s.uris, " "))
 	}
@@ -172,6 +210,9 @@ func (s *rawSource) Read(ctx context.Context, write func(Rows)) error {
 		for _, path := range files[ft] {
 			s.inputs = append(s.inputs, Input{Path: path, Type: ft, Status: "ok"})
 		}
+	}
+	for _, path := range s.skipped {
+		s.inputs = append(s.inputs, Input{Path: path, Status: "skipped", Error: "no file type's name pattern matches"})
 	}
 	for _, def := range s.defs {
 		schema, err := def.ArrowSchema()
@@ -209,7 +250,7 @@ func (s *rawSource) groups(ctx context.Context, parsers []fileparse.Parser, file
 		for _, p := range parsers {
 			keep := ""
 			if s.logSource != "" {
-				keep = p.EDID(s.scope, s.logSource)
+				keep = p.StreamEDID(s.scope, s.logSource)
 			}
 			for _, path := range files[p.FileType] {
 				if err := ctx.Err(); err != nil {

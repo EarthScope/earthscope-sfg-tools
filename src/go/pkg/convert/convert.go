@@ -33,21 +33,25 @@ const (
 // Spec is one conversion as given on the command line.
 type Spec struct {
 	Source        string   // SourceIceberg or SourceRaw
-	SourceURIs    []string // the warehouse, a directory (sql) or s3:// URI (glue); or raw files: files, globs or directories
-	SourceCatalog string   // catalog.TypeSQL or catalog.TypeGlue
+	SourceURIs    []string // the warehouse: a directory (catalog.Local) or overriding the catalog's; or raw files: files, globs or directories
+	SourceCatalog string   // catalog.Local or a catalog of the iceberg-go configuration
 	Sink          string   // SinkFiles or SinkIceberg
-	SinkURI       string   // a local directory; or the sink warehouse, a directory (sql) or s3:// URI (glue)
-	SinkCatalog   string   // catalog.TypeSQL or catalog.TypeGlue
+	SinkURI       string   // a local directory; or the sink warehouse: a directory (catalog.Local) or overriding the catalog's
+	SinkCatalog   string   // catalog.Local or a catalog of the iceberg-go configuration
 	TableFormat   string   // FormatParquet, FormatCSV or FormatArrow
-	Region        string   // AWS region for Glue; empty uses the AWS config
 
 	Scope       datamodels.Scope
 	Tables      []string // bare or namespace-qualified table names
-	SourceTypes []string // raw file types; for Iceberg, one file type, or product for Level 2/3 tables
-	LogSource   string   // log source, or product input for Level 2/3 tables
+	SourceTypes []string // raw file types; for Iceberg, one file type, or product for Level 1/2 tables
+	LogSource   string   // log source, or product input for Level 1/2 tables
 	Start, End  time.Time
 	Columns     []string
 	MaxFiles    int // raw: at most this many files of each type; 0 is all
+
+	// TypesFromNames (raw) tells each file's type by its name instead of
+	// taking the files as SourceTypes: SourceTypes then only limits the
+	// types read, all by default, and named files of no type are skipped.
+	TypesFromNames bool
 
 	FilesPerCommit int // Iceberg sink: groups (files) per catalog commit; 0 is all of a table's
 }
@@ -71,7 +75,7 @@ type endpoint struct{ required, optional, rejects []string }
 // are flags any conversion may take.
 var (
 	alwaysRequired = []string{"source", "source-uri", "sink", "sink-uri", "scope"}
-	alwaysAccepted = []string{"region", "result"}
+	alwaysAccepted = []string{"result"}
 )
 
 var sources = map[string]endpoint{
@@ -143,7 +147,11 @@ func ParseScope(s string) (datamodels.Scope, error) {
 		return datamodels.Scope{}, usagef("--scope %q: want NET, NET/STA or NET/STA/CAMP", s)
 	}
 	parts = append(parts, "", "")
-	return datamodels.Scope{Network: parts[0], Station: parts[1], Campaign: parts[2]}, nil
+	sc := datamodels.Scope{Network: parts[0], Station: parts[1], Campaign: parts[2]}
+	if err := datamodels.CheckScope(sc); err != nil {
+		return datamodels.Scope{}, usagef("--scope: %w", err)
+	}
+	return sc, nil
 }
 
 // Conversion is a checked Spec, ready to run.
@@ -154,19 +162,31 @@ type Conversion struct {
 	sink   Sink
 }
 
-// New checks spec's values and builds its source and sink. Every error is
-// a *UsageError.
+// New checks spec's values and builds its source and sink. An Iceberg
+// source or sink without a URI takes its catalog's configured warehouse
+// (see catalog.Warehouse). Every error is a *UsageError.
 func New(spec Spec) (*Conversion, error) {
-	c := &Conversion{spec: spec}
 	if _, ok := sources[spec.Source]; !ok {
 		return nil, usagef("--source %q: want one of %s", spec.Source, kinds(sources))
 	}
 	if _, ok := sinks[spec.Sink]; !ok {
 		return nil, usagef("--sink %q: want one of %s", spec.Sink, kinds(sinks))
 	}
-	if len(spec.SourceURIs) == 0 || slices.Contains(spec.SourceURIs, "") || spec.SinkURI == "" {
-		return nil, usagef("--source-uri and --sink-uri are required")
+	if spec.Source == SourceIceberg && len(spec.SourceURIs) == 0 {
+		if wh := catalog.Warehouse(spec.SourceCatalog); wh != "" {
+			spec.SourceURIs = []string{wh}
+		}
 	}
+	if spec.Sink == SinkIceberg && spec.SinkURI == "" {
+		spec.SinkURI = catalog.Warehouse(spec.SinkCatalog)
+	}
+	if len(spec.SourceURIs) == 0 || slices.Contains(spec.SourceURIs, "") {
+		return nil, usagef("--source-uri is required: %s", uriHint(spec.Source, spec.SourceCatalog, "source"))
+	}
+	if spec.SinkURI == "" {
+		return nil, usagef("--sink-uri is required: %s", uriHint(spec.Sink, spec.SinkCatalog, "sink"))
+	}
+	c := &Conversion{spec: spec}
 	if spec.Scope.Network == "" {
 		return nil, usagef("--scope is required")
 	}
@@ -202,8 +222,8 @@ func New(spec Spec) (*Conversion, error) {
 		}
 		c.sink = &filesSink{dir: spec.SinkURI, format: spec.TableFormat}
 	case SinkIceberg:
-		if spec.SinkCatalog != catalog.TypeSQL && spec.SinkCatalog != catalog.TypeGlue {
-			return nil, usagef("--sink-catalog %q: want %s or %s", spec.SinkCatalog, catalog.TypeSQL, catalog.TypeGlue)
+		if err := catalog.Check(spec.SinkCatalog); err != nil {
+			return nil, usagef("--sink-catalog: %w", err)
 		}
 		var props map[string]string
 		if src, ok := c.source.(*icebergSource); ok {
@@ -219,7 +239,7 @@ func New(spec Spec) (*Conversion, error) {
 		if spec.FilesPerCommit < 0 {
 			return nil, usagef("--files-per-commit %d: want 0 (all) or more", spec.FilesPerCommit)
 		}
-		c.sink = &icebergSink{cfg: catalog.Config{Type: spec.SinkCatalog, Warehouse: spec.SinkURI, Region: spec.Region},
+		c.sink = &icebergSink{cfg: catalog.Config{Name: spec.SinkCatalog, Warehouse: spec.SinkURI},
 			props: props, perCommit: spec.FilesPerCommit}
 	}
 	return c, nil
@@ -227,11 +247,25 @@ func New(spec Spec) (*Conversion, error) {
 
 // Snapshot summary properties of rows copied from another catalog.
 const (
-	PropCopySource    = "sfg.copy-source"    // <catalog type>:<warehouse>
+	PropCopySource    = "sfg.copy-source"    // <catalog>:<warehouse>
 	PropCopySelection = "sfg.copy-selection" // the --scope, --source-type, --log-source, --start and --end used
 )
 
 // sameWarehouse reports whether two warehouse URIs name the same place.
+// uriHint says why an endpoint of kind needs its URI.
+func uriHint(kind, cat, side string) string {
+	switch {
+	case kind == SourceRaw:
+		return "the raw files, globs or directories"
+	case kind == SinkFiles:
+		return "the output directory"
+	case cat == catalog.Local:
+		return "the local warehouse directory"
+	default:
+		return fmt.Sprintf("--%s-catalog %q has no warehouse in the iceberg-go configuration", side, cat)
+	}
+}
+
 func sameWarehouse(a, b string) bool {
 	clean := func(u string) string {
 		if strings.Contains(u, "://") {

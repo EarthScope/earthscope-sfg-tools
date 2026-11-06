@@ -41,7 +41,7 @@ func TestStampAttitude(t *testing.T) {
 	parsed, err := datamodels.BuildAttitudeAHRS([]datamodels.AttitudeAHRSRow{
 		{Time: t0, TimeInstrument: 0},
 		{Time: t0.Add(time.Microsecond), TimeInstrument: 1},
-	}, ahrs00.LogType)
+	}, datamodels.LogAHRS)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestStampAttitude(t *testing.T) {
 			t.Errorf("stamped table has a %s column", name)
 		}
 	}
-	const want = "net:STA:2026_A_0001:AHRS00:AHRS00"
+	const want = "net.STA.2026_A_0001.AHRS00.AHRS"
 	if got := stringCol(t, tbl, "stream_edid"); len(got) != 2 || got[0] != want || got[1] != want {
 		t.Errorf("stream_edid = %q, want %q", got, want)
 	}
@@ -97,11 +97,11 @@ func TestStampGNSSObsAntennas(t *testing.T) {
 		t.Error("stamp should drop Log_Source")
 	}
 	got := stringCol(t, tbl, "stream_edid")
-	want := []string{"net:STA:2026_A_0001:NOV770:RANGECMP5B", "net:STA:2026_A_0001:NOV770:RANGECMP5B_1"}
+	want := []string{"net.STA.2026_A_0001.NOV770.RANGECMP5B", "net.STA.2026_A_0001.NOV770.RANGECMP5B_1"}
 	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
 		t.Errorf("stream_edid = %q, want %q", got, want)
 	}
-	if e := p.EDID(testScope, datamodels.LogSource(novatel770.LogRANGECMP5B, 1)); e != want[1] {
+	if e := p.StreamEDID(testScope, datamodels.LogSource(novatel770.LogRANGECMP5B, 1)); e != want[1] {
 		t.Errorf("EDID = %q, want %q", e, want[1])
 	}
 }
@@ -121,12 +121,19 @@ func TestStampMissingColumn(t *testing.T) {
 	}
 }
 
-// TestParsersHaveEDID guards the registry: every parser has a ParseFile and
-// an EDID factory.
-func TestParsersHaveEDID(t *testing.T) {
+// TestParsers guards the registry: every parser has a ParseFile, and no
+// (file type, table) is listed twice, which would parse and append its rows
+// twice.
+func TestParsers(t *testing.T) {
+	seen := map[[2]string]bool{}
 	for _, p := range Parsers {
-		if p.Parsefunc == nil || p.EDID == nil {
-			t.Errorf("%s %s: Parsefunc or EDID is nil", p.FileType, p.Table.Name)
+		if p.ParseFile == nil {
+			t.Errorf("%s %s: ParseFile is nil", p.FileType, p.Table.Name)
 		}
+		key := [2]string{p.FileType, p.Table.Name}
+		if seen[key] {
+			t.Errorf("%s %s: listed twice", p.FileType, p.Table.Name)
+		}
+		seen[key] = true
 	}
 }

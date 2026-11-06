@@ -49,7 +49,7 @@ func TestBuildGNSSObsMatchesGnsstools(t *testing.T) {
 	}
 	scope := datamodels.Scope{Network: "n", Station: "s", Campaign: "c"}
 	p := parserFor(t, novatel770.FileType, datamodels.GNSSObs.Name)
-	edid := p.EDID(scope, novatel770.LogRANGECMP5B)
+	edid := p.StreamEDID(scope, novatel770.LogRANGECMP5B)
 
 	// Ours: BuildGNSSObs -> Parser stamping -> Catalog.Append.
 	parsed, err := datamodels.BuildGNSSObs(p.FileType, datamodels.GNSSObsSource{LogSource: novatel770.LogRANGECMP5B, Epochs: epochs})
@@ -62,7 +62,7 @@ func TestBuildGNSSObsMatchesGnsstools(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ours.Release()
-	cat, err := catalog.Open(ctx, catalog.Config{Type: catalog.TypeSQL, Warehouse: t.TempDir()})
+	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

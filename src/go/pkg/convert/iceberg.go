@@ -27,8 +27,8 @@ type icebergSource struct {
 
 // newIcebergSource checks spec's Iceberg source values.
 func newIcebergSource(spec Spec) (*icebergSource, error) {
-	if spec.SourceCatalog != catalog.TypeSQL && spec.SourceCatalog != catalog.TypeGlue {
-		return nil, usagef("--source-catalog %q: want %s or %s", spec.SourceCatalog, catalog.TypeSQL, catalog.TypeGlue)
+	if err := catalog.Check(spec.SourceCatalog); err != nil {
+		return nil, usagef("--source-catalog: %w", err)
 	}
 	if len(spec.SourceURIs) != 1 {
 		return nil, usagef("--source %s takes one --source-uri", SourceIceberg)
@@ -40,7 +40,7 @@ func newIcebergSource(spec Spec) (*icebergSource, error) {
 		return nil, usagef("--source-type: --source %s takes one file type or product", SourceIceberg)
 	}
 	s := &icebergSource{
-		cfg: catalog.Config{Type: spec.SourceCatalog, Warehouse: spec.SourceURIs[0], Region: spec.Region},
+		cfg: catalog.Config{Name: spec.SourceCatalog, Warehouse: spec.SourceURIs[0]},
 		sel: catalog.Selection{Scope: spec.Scope, LogSource: spec.LogSource, Start: spec.Start, End: spec.End, Columns: spec.Columns},
 	}
 	if len(spec.SourceTypes) == 1 {
@@ -135,9 +135,9 @@ func (s *icebergSource) streamGroups(ctx context.Context, cat *catalog.Catalog, 
 	}
 	groups := func(yield func(Group, error) bool) {
 		for _, st := range spans.streams() {
-			parts := strings.Split(st.EDID, ":")
-			if len(parts) != 5 {
-				yield(Group{}, fmt.Errorf("stream_edid %q: want network:station:campaign:type:source", st.EDID))
+			parts, ok := datamodels.SplitEDID(st.EDID)
+			if !ok {
+				yield(Group{}, fmt.Errorf("stream_edid %q: want network.station.campaign.type.source", st.EDID))
 				return
 			}
 			sel := s.sel

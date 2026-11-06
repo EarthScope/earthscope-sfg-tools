@@ -1,6 +1,6 @@
-# Level 0 file types and log sources
+# Raw file types and log sources
 
-Every raw (Level 0) file type, the log sources it contains, and the Level 1 table each feeds. A *log source* is one stream of records within a file. It is what a parser selects, and it becomes the last part of a row's `stream_edid` (`network:station:campaign:file_type:log_source`).
+Every raw file type, the log sources it contains, and the Level 0 table each feeds. A *log source* is one stream of records within a file. It is what a parser selects, and it becomes the last part of a row's `stream_edid` (`network.station.campaign.file_type.log_source`).
 
 Sources:
 - The parsers in `fileparse/`.
@@ -10,22 +10,22 @@ Log sources that the code declares but the SLT1 campaign doesn't contain are mar
 
 ## Matrix
 
-Rows are file types and columns are log sources. A cell holds the Level 1 table the log source feeds, `·` if the file type contains that log source but nothing parses it, and is empty if the file type doesn't have that log source.
+Rows are file types and columns are log sources. The same kind of stream has the same log source whichever file type it comes from (`datamodels.LogINTGRPLY`, `LogAHRS`, `LogGNSSINS`, `LogGNSSPSEUDO`): **INTG-RPLY** interrogations paired with their replies, **AHRS** attitude, **GNSSINS** antenna positions from an INS solution, **GNSSPSEUDO** single-antenna pseudorange fixes with no INS. A cell holds the Level 0 table the log source feeds, `·` if the file type contains that log source but nothing parses it, and is empty if the file type doesn't have that log source.
 
 Table codes: **PVA** inspva · **STD** insstdev · **OBS** gnss_observations · **POS** gnss_antenna_positions · **ATT** attitude_ahrs · **TT** travel_times · **SV** sound_speed · **SAT** gnss_satellites_in_view · **DOP** gnss_dop · **COG** gnss_course_speed · **INT** transceiver_interrogations · **RNG** transceiver_ranges · **SET** transceiver_settings.
 
-| File type | INSPVAA | INSSTDEVA | RANGEA | DUALANTENNAHEADINGA | RANGECMPB | RANGECMPB_1 | RANGECMP5B | RANGECMP5B_1 | BESTPOSB | RAWEPHEMB | GLOEPHEMERIS | DFOP00 | NOV_INS | NOV_HEADING | NOV_RANGE | QCPIN | AHRS00 | GGA | GSA | GSV | VTG | CTD | SEABIRD | TGT | TRK | TMS | SENS | STATUS | NET | INTERROGATE | RANGE_RESULT | TCVR_CONFIG | TCVR_INFO |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| NOV000 | PVA | STD | OBS | · | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
-| NOV770 | | | | | OBS | OBS | OBS | OBS | · | · | · | | | | | | | | | | | | | | | | | | | | | | |
-| DFOP00 | | | | | | | | | | | | TT ATT POS | · | · | · | | | | | | | | | | | | | | | | | | |
-| QCPIN | | | OBS | | | | | | | | | | | | | TT ATT POS | | | | | | | | | | | | | | | | | |
-| AHRS00 | | | | | | | | | | | | | | | | | ATT | | | | | | | | | | | | | | | | |
-| GNSS00 | | | | | | | | | | | | | | | | | | POS | DOP | SAT | COG | | | | | | | | | | | | |
-| CTD | | | | | | | | | | | | | | | | | | | | | | SV | | | | | | | | | | | |
-| SEABIRD | | | | | | | | | | | | | | | | | | | | | | | SV | | | | | | | | | | |
-| INOUT0 | | | | | | | | | | | | | | | | | | | | | | | | · | · | · | · | · | · | | | | |
-| TCVR00 | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | INT | RNG | SET | SET |
+| File type | INSPVAA | INSSTDEVA | RANGEA | DUALANTENNAHEADINGA | RANGECMPB | RANGECMPB_1 | RANGECMP5B | RANGECMP5B_1 | BESTPOSB | RAWEPHEMB | GLOEPHEMERIS | INTG-RPLY | AHRS | GNSSINS | GNSSPSEUDO | NOV_HEADING | NOV_RANGE | GSA | GSV | VTG | CTD | SEABIRD | TGT | TRK | TMS | SENS | STATUS | NET | INTERROGATE | RANGE_RESULT | TCVR_CONFIG | TCVR_INFO |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| NOV000 | PVA | STD | OBS | · | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
+| NOV770 | | | | | OBS | OBS | OBS | OBS | · | · | · | | | | | | | | | | | | | | | | | | | | | |
+| DFOP00 | PVA | | | | | | | | | | | TT | · | · | | · | · | | | | | | | | | | | | | | | |
+| QCPIN | | | OBS | | | | | | | | | TT | ATT | POS | | | | | | | | | | | | | | | | | | |
+| AHRS00 | | | | | | | | | | | | | ATT | | | | | | | | | | | | | | | | | | | |
+| GNSS00 | | | | | | | | | | | | | | | POS | | | DOP | SAT | COG | | | | | | | | | | | | |
+| CTD | | | | | | | | | | | | | | | | | | | | | SV | | | | | | | | | | | |
+| SEABIRD | | | | | | | | | | | | | | | | | | | | | | SV | | | | | | | | | | |
+| INOUT0 | | | | | | | | | | | | | | | | | | | | | | | · | · | · | · | · | · | | | | |
+| TCVR00 | | | | | | | | | | | | | | | | | | | | | | | | | | | | | INT | RNG | SET | SET |
 
 ## By file type
 
@@ -47,19 +47,21 @@ Long logs span several GPSA packets. The payloads that start mid-message (`,0.`,
 | RANGECMPB, RANGECMPB_1 | compressed range (ID 140), primary / second antenna | gnss_observations | declared by the parser; none in SLT1 2026 |
 | RANGECMP5B, RANGECMP5B_1 | compressed range (ID 2537), primary / second antenna | gnss_observations | ~198k per 3 files |
 | BESTPOSB | best position (ID 42) | — | **unparsed**; ~198k per 3 files, as many as RANGECMP5B. Candidate for gnss_antenna_positions |
-| RAWEPHEMB | GPS raw ephemeris (ID 41) | — | **unparsed**; navigation data, no Level 1 table |
+| RAWEPHEMB | GPS raw ephemeris (ID 41) | — | **unparsed**; navigation data, no Level 0 table |
 | GLOEPHEMERIS | GLONASS ephemeris (ID 723) | — | **unparsed**; navigation data |
 
 The `_1` suffix is the antenna from each message's measurement source; see `datamodels.LogSource`. The survey script also found about a dozen single matches of the NovAtel sync bytes inside payloads; those are false positives, not log sources.
 
-The raw folder also holds RINEX 3.04 conversions of one NOV770 file (`.26O/.26N/.26G/.26L/.26F/.26I/.26Q`, plus a `Summary_*.txt`) in a subfolder. Those are converter output, not Level 0 data.
+The raw folder also holds RINEX 3.04 conversions of one NOV770 file (`.26O/.26N/.26G/.26L/.26F/.26I/.26Q`, plus a `Summary_*.txt`) in a subfolder. Those are converter output, not raw data.
 
 ### DFOP00 — Sonardyne SV3 events, JSON lines (`*DFOP00.raw`)
 
 | Log source | Records | Table | Notes |
 |---|---|---|---|
-| DFOP00 | interrogation/range events with their AHRS and GNSS blocks | travel_times, attitude_ahrs, gnss_antenna_positions | name frozen (equals the file type). The GNSS block positions equal INSPVA exactly |
-| NOV_INS | NovAtel INS block on each event | — | **unparsed**; duplicates NOV000 INSPVAA at event times |
+| INTG-RPLY | interrogations paired with their replies | travel_times | |
+| INSPVAA | NovAtel INS block (`NOV_INS`) on each event | inspva | the NovAtel INS solution at event times, so it repeats NOV000 INSPVAA there; numeric statuses mapped to NovAtel's names, velocities taken as north/east/up (vx/vy/vz) |
+| AHRS | AHRS blocks | — | **not parsed**; AHRS00 logs the AHRS at full rate |
+| GNSSINS | GNSS blocks | — | **not parsed**: the NOV_INS position, rounded, with the receiver's single-point std devs. The positions equal INSPVA exactly |
 | NOV_HEADING | NovAtel heading block | — | **unparsed**; duplicates NOV000 DUALANTENNAHEADINGA at event times |
 | NOV_RANGE | NovAtel range block | — | **unparsed** in DFOP00 (QCPIN parses the same block as `RANGEA`) |
 
@@ -69,7 +71,9 @@ In SLT1 2026: 242 events (121 interrogations, 121 ranges). In one file the GNSS 
 
 | Log source | Records | Table | Notes |
 |---|---|---|---|
-| QCPIN | SV3 events | travel_times, attitude_ahrs, gnss_antenna_positions | name frozen (equals the file type); opt-in |
+| INTG-RPLY | interrogations paired with their replies | travel_times | opt-in |
+| AHRS | AHRS blocks | attitude_ahrs | opt-in |
+| GNSSINS | GNSS blocks | gnss_antenna_positions | opt-in |
 | RANGEA | NOV_RANGE blocks | gnss_observations | |
 
 Not present in SLT1 2026.
@@ -78,7 +82,7 @@ Not present in SLT1 2026.
 
 | Log source | Records | Table |
 |---|---|---|
-| AHRS00 | attitude, acceleration, magnetic heading | attitude_ahrs |
+| AHRS | attitude, acceleration, magnetic heading | attitude_ahrs |
 
 About 1.0M packets per 4 files, all binary Xsens frames (GPSA message ID 990).
 
@@ -86,7 +90,7 @@ About 1.0M packets per 4 files, all binary Xsens frames (GPSA message ID 990).
 
 | Log source | Records | Table | Notes |
 |---|---|---|---|
-| GGA | position fix | gnss_antenna_positions | opt-in; very sparse (3 in a 2 h file) |
+| GNSSPSEUDO | GGA position fix | gnss_antenna_positions | opt-in; very sparse (3 in a 2 h file) |
 | GSA | fix type, DOPs and satellites used | gnss_dop | the GGA parser also uses its PDOP; GSA with no DOP (no fix) are skipped |
 | GSV | satellites in view | gnss_satellites_in_view | one row per satellite per GSV group, at the group's first packet time |
 | VTG | course and speed over ground | gnss_course_speed | in the logged units; VTG with neither course nor speed are skipped |

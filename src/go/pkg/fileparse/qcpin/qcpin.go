@@ -25,12 +25,10 @@ import (
 // FileType names the file type in stream EDIDs.
 const FileType = "QCPIN"
 
-// The log types QCPIN files carry. Each is also the Log_Source value of its
-// rows.
-const (
-	LogEvents = "QCPIN"  // SV3 events: travel_times, attitude_ahrs, gnss_antenna_positions
-	LogRANGEA = "RANGEA" // NOV_RANGE blocks: GNSSObs
-)
+// LogRANGEA is the log type of the NOV_RANGE blocks, and the Log_Source of
+// their GNSSObs rows. The events' rows use the shared log sources
+// datamodels.LogINTGRPLY, LogAHRS and LogGNSSINS.
+const LogRANGEA = "RANGEA"
 
 // TWTT parses the QCPIN file at path into travel_times rows (see
 // datamodels.ParsedSchema): each reply paired with the ping, a zero range
@@ -40,7 +38,7 @@ func TWTT(path string) (arrow.Table, error) {
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildTWTT(sv3.TravelTimes(events), LogEvents)
+	return datamodels.BuildTWTT(sv3.TravelTimes(events), datamodels.LogINTGRPLY)
 }
 
 // AttitudeAHRS parses the QCPIN file at path into attitude_ahrs rows (see
@@ -51,7 +49,7 @@ func AttitudeAHRS(path string) (arrow.Table, error) {
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildAttitudeAHRS(sv3.Attitudes(events), LogEvents)
+	return datamodels.BuildAttitudeAHRS(sv3.Attitudes(events), datamodels.LogAHRS)
 }
 
 // AntennaPositions parses the QCPIN file at path into gnss_antenna_positions
@@ -62,7 +60,7 @@ func AntennaPositions(path string) (arrow.Table, error) {
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildGNSSAntennaPositions(sv3.AntennaPositions(events), LogEvents)
+	return datamodels.BuildGNSSAntennaPositions(sv3.AntennaPositions(events), datamodels.LogGNSSINS)
 }
 
 // GNSSObs parses the RANGEA logs in the QCPIN file's NOV_RANGE blocks into

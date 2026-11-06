@@ -29,7 +29,7 @@ var (
 	scope = datamodels.Scope{Network: "net", Station: "STA", Campaign: "2026_A_1126"}
 )
 
-const ahrsEDID, dfopEDID = "net:STA:2026_A_1126:AHRS00:AHRS00", "net:STA:2026_A_1126:DFOP00:DFOP00"
+const ahrsEDID, dfopEDID = "net.STA.2026_A_1126.AHRS00.AHRS00", "net.STA.2026_A_1126.DFOP00.DFOP00"
 
 // attitudeRows is n attitude_ahrs rows of stream edid, one a second from
 // start, with h null.
@@ -74,7 +74,7 @@ func warehouse(t *testing.T) string {
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
-	cat, err := catalog.Open(ctx, catalog.Config{Type: catalog.TypeSQL, Warehouse: dir})
+	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func warehouse(t *testing.T) string {
 
 func spec(src, sink string) Spec {
 	return Spec{
-		Source: SourceIceberg, SourceURIs: []string{src}, SourceCatalog: catalog.TypeSQL,
+		Source: SourceIceberg, SourceURIs: []string{src}, SourceCatalog: catalog.Local,
 		Sink: SinkFiles, SinkURI: sink, TableFormat: FormatCSV,
 		Scope: scope, Tables: []string{"attitude_ahrs"},
 	}
@@ -118,7 +118,7 @@ func TestCheckFlags(t *testing.T) {
 	if err := CheckFlags(SourceIceberg, SinkFiles, full); err != nil {
 		t.Fatalf("all required flags: %v", err)
 	}
-	optional := append(full, "source-type", "log-source", "start", "end", "columns", "region", "result")
+	optional := append(full, "source-type", "log-source", "start", "end", "columns", "result")
 	if err := CheckFlags(SourceIceberg, SinkFiles, optional); err != nil {
 		t.Fatalf("all optional flags: %v", err)
 	}
@@ -174,11 +174,11 @@ func TestNewErrors(t *testing.T) {
 		name string
 		edit func(*Spec)
 	}{
-		{"unknown catalog", func(s *Spec) { s.SourceCatalog = "rest" }},
+		{"unknown catalog", func(s *Spec) { s.SourceCatalog = "no-such-catalog" }},
 		{"no table", func(s *Spec) { s.Tables = nil }},
 		{"unknown table", func(s *Spec) { s.Tables = []string{"nope"} }},
 		{"ambiguous table", func(s *Spec) { s.Tables = []string{"garpos"} }},
-		{"same file name twice", func(s *Spec) { s.Tables = []string{"gnssa_l2.garpos", "gnssa_l3.garpos"} }},
+		{"same file name twice", func(s *Spec) { s.Tables = []string{"gnssa_l1.garpos", "gnssa_l2.garpos"} }},
 		{"two source types", func(s *Spec) { s.SourceTypes = []string{"AHRS00", "DFOP00"} }},
 		{"type without full scope", func(s *Spec) {
 			s.Scope = datamodels.Scope{Network: "net"}
@@ -298,7 +298,7 @@ func TestRunPartial(t *testing.T) {
 	s := spec(warehouse(t), t.TempDir())
 	s.Tables = []string{"attitude_ahrs", "inspva"} // inspva was never written
 	res := run(t, s)
-	if res.OK || len(res.Outputs) != 1 || len(res.Errors) != 1 || res.Errors[0].Subject != "gnssa_l1.inspva" {
+	if res.OK || len(res.Outputs) != 1 || len(res.Errors) != 1 || res.Errors[0].Subject != "gnssa_l0.inspva" {
 		t.Fatalf("ok %v, outputs %+v, errors %+v", res.OK, res.Outputs, res.Errors)
 	}
 	if code := ExitCode(res, nil); code != ExitPartial {

@@ -2,7 +2,11 @@ package catalog
 
 import (
 	"context"
+	"errors"
 	"testing"
+
+	"github.com/apache/iceberg-go"
+	icecat "github.com/apache/iceberg-go/catalog"
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
@@ -10,12 +14,12 @@ import (
 func TestCatalogTable(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	cat, err := Open(ctx, Config{Type: TypeSQL, Warehouse: dir})
+	cat, err := Open(ctx, Config{Name: Local, Warehouse: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cat.Close()
-	for _, def := range datamodels.Level1Tables {
+	for _, def := range datamodels.Level0Tables {
 		tbl, err := cat.Table(ctx, def)
 		if err != nil {
 			t.Fatalf("%s: %v", def.Name, err)
@@ -26,7 +30,7 @@ func TestCatalogTable(t *testing.T) {
 		}
 	}
 	// Reopening loads the existing tables instead of failing on create.
-	cat2, err := Open(ctx, Config{Type: TypeSQL, Warehouse: dir})
+	cat2, err := Open(ctx, Config{Name: Local, Warehouse: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,9 +45,35 @@ func TestCatalogTable(t *testing.T) {
 func TestOpenGlue(t *testing.T) {
 	t.Setenv("AWS_ACCESS_KEY_ID", "test")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
-	cat, err := Open(context.Background(), Config{Type: TypeGlue, Warehouse: "s3://bucket/prefix", Region: "us-east-2"})
+	t.Setenv("AWS_REGION", "us-east-2")
+	cat, err := Open(context.Background(), Config{Warehouse: "s3://bucket/prefix", Props: iceberg.Properties{"type": "glue"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	cat.Close()
+}
+
+// The REST catalog is registered too; it is the cloud-neutral one.
+func TestOpenUnreachableREST(t *testing.T) {
+	_, err := Open(context.Background(), Config{Props: iceberg.Properties{"type": "rest", "uri": "http://127.0.0.1:1"}})
+	if err == nil || errors.Is(err, icecat.ErrCatalogNotFound) {
+		t.Fatalf("Open = %v, want a connection error from a registered rest catalog", err)
+	}
+}
+
+func TestCheck(t *testing.T) {
+	for _, name := range []string{Local, ""} {
+		if err := Check(name); err != nil {
+			t.Errorf("Check(%q) = %v", name, err)
+		}
+	}
+	if err := Check("no-such-catalog"); err == nil {
+		t.Error("Check(no-such-catalog): no error")
+	}
+	if _, err := Open(context.Background(), Config{Name: "no-such-catalog"}); err == nil {
+		t.Error("Open(no-such-catalog): no error")
+	}
+	if _, err := Open(context.Background(), Config{Name: Local}); err == nil {
+		t.Error("Open(local) without a warehouse: no error")
+	}
 }

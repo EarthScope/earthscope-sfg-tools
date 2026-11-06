@@ -27,7 +27,7 @@ func (p Parser) stamp(parsed arrow.Table, scope datamodels.Scope) (arrow.Table, 
 	edid := func(ls string) string {
 		e, ok := edids[ls]
 		if !ok {
-			e = p.EDID(scope, ls)
+			e = p.StreamEDID(scope, ls)
 			edids[ls] = e
 		}
 		return e

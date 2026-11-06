@@ -13,7 +13,7 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "sfg",
 	Short: "EarthScope seafloor geodesy tools",
-	Long:  "A collection of tools for processing NovAtel GNSS data into RINEX and Level 1 tables.",
+	Long:  "A collection of tools for processing NovAtel GNSS data into RINEX and Level 0 tables.",
 	// main prints errors, once.
 	SilenceErrors: true,
 }
@@ -29,9 +29,10 @@ func init() {
 	rootCmd.AddCommand(nova2rnxCmd)
 	rootCmd.AddCommand(novb2rnxCmd)
 	rootCmd.AddCommand(nov0002rnxCmd)
-	rootCmd.AddCommand(nov2level1Cmd)
-	rootCmd.AddCommand(level1Cmd)
+	rootCmd.AddCommand(nov2level0Cmd)
+	rootCmd.AddCommand(level0Cmd)
 	rootCmd.AddCommand(convertCmd)
+	rootCmd.AddCommand(icebergCmd)
 	rootCmd.AddCommand(rnxqcCmd)
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return &convert.UsageError{Err: err}

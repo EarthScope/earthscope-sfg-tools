@@ -16,10 +16,11 @@ import (
 )
 
 // dfop00Sample is two DFOP00 ping/reply cycles, as in the dfop00 tests.
-const dfop00Sample = `{"event":"interrogation","event_id":1,"observations":{"AHRS":{"h":10.5,"p":1,"r":-2,"time":{"common":1780460559.981377,"instrument":8536.68,"start_count":45,"status":"GPS_SYNC"}},"GNSS":"ERR3"},"sequence":1,"time":{"common":1780460560.0,"instrument":8536.69,"start_count":45,"status":"GPS_SYNC"},"type":"BR"}
-{"event":"range","event_id":1,"observations":{"AHRS":{"h":10.5,"p":1,"r":-2,"time":{"common":1780460559.981377,"instrument":8536.68,"start_count":45,"status":"GPS_SYNC"}},"GNSS":"ERR3"},"range":{"cn":"IR5209","diag":{"dbv":[-12.0],"snr":[18.5],"xc":[87.0]},"range":2.534127,"tat":200},"sequence":1,"time":{"common":1780460562.404127,"instrument":8539.1,"start_count":45,"status":"GPS_SYNC"},"uid":"0042D9"}
-{"event":"interrogation","event_id":2,"observations":{"AHRS":"ERR1","GNSS":"ERR3"},"sequence":2,"time":{"common":1780460575.0,"instrument":8551.7,"start_count":45,"status":"GPS_SYNC"},"type":"BR"}
-{"event":"range","event_id":2,"observations":{"AHRS":{"h_mag":68.6,"time":{"common":1780460575.5,"instrument":8552.2,"start_count":45,"status":"GPS_SYNC"}},"GNSS":"ERR3"},"range":{"cn":"IR5210","diag":{"dbv":0,"snr":0,"xc":21},"range":0.0,"tat":200},"sequence":2,"time":{"common":1780460575.0,"instrument":8551.7,"start_count":45,"status":"GPS_SYNC"},"uid":"0042DA"}
+const dfop00Sample = `{"event":"interrogation","event_id":1,"observations":{"AHRS":{"h":10.5,"p":1,"r":-2,"time":{"common":1780460559.981377,"instrument":8536.68,"start_count":45,"status":"GPS_SYNC"}},"GNSS":"ERR3","NOV_INS":{"gpst":1464495778.0,"h":24.151555565,"hae":-30.2147,"latitude":41.68552296236,"longitude":-125.53111825632,"p":-3.373163567,"r":5.863288138,"receiver_status":"02000000","solution_type":3,"time":{"common":1780460560.0027198,"instrument":8536.69,"start_count":45,"status":"GPS_SYNC"},"time_status":180,"vx":0.1632,"vy":0.2666,"vz":0.4615}},"sequence":1,"time":{"common":1780460560.0,"instrument":8536.69,"start_count":45,"status":"GPS_SYNC"},"type":"BR"}
+{"event":"range","event_id":1,"observations":{"AHRS":{"h":10.5,"p":1,"r":-2,"time":{"common":1780460559.981377,"instrument":8536.68,"start_count":45,"status":"GPS_SYNC"}},"GNSS":"ERR3","NOV_INS":{"gpst":1464495778.0,"h":24.151555565,"hae":-30.2147,"latitude":41.68552296236,"longitude":-125.53111825632,"p":-3.373163567,"r":5.863288138,"receiver_status":"02000000","solution_type":3,"time":{"common":1780460560.0027198,"instrument":8536.69,"start_count":45,"status":"GPS_SYNC"},"time_status":180,"vx":0.1632,"vy":0.2666,"vz":0.4615}},"range":{"cn":"IR5209","diag":{"dbv":[-12.0],"snr":[18.5],"xc":[87.0]},"range":2.534127,"tat":200},"sequence":1,"time":{"common":1780460562.404127,"instrument":8539.1,"start_count":45,"status":"GPS_SYNC"},"uid":"0042D9"}
+{"event":"interrogation","event_id":2,"observations":{"AHRS":"ERR1","GNSS":"ERR3","NOV_INS":{"gpst":1464495790.0,"h":1,"hae":1,"latitude":1,"longitude":1,"p":1,"r":1,"solution_type":0,"time":{"common":1780460572.0,"instrument":8548.7,"start_count":45,"status":"GPS_SYNC"},"time_status":20,"vx":0,"vy":0,"vz":0}},"sequence":2,"time":{"common":1780460575.0,"instrument":8551.7,"start_count":45,"status":"GPS_SYNC"},"type":"BR"}
+{"event":"range","event_id":2,"observations":{"AHRS":{"h_mag":68.6,"time":{"common":1780460575.5,"instrument":8552.2,"start_count":45,"status":"GPS_SYNC"}},"GNSS":"ERR3","NOV_INS":{"gpst":1464495793.0,"h":25.5,"hae":-30.1,"latitude":41.6855,"longitude":-125.5311,"p":-3.0,"r":5.0,"receiver_status":"02000000","solution_type":99,"time":{"common":1780460575.0,"instrument":8551.7,"start_count":45,"status":"GPS_SYNC"},"time_status":160,"vx":0.1,"vy":0.2,"vz":0.3}},"range":{"cn":"IR5210","diag":{"dbv":0,"snr":0,"xc":21},"range":0.0,"tat":200},"sequence":2,"time":{"common":1780460575.0,"instrument":8551.7,"start_count":45,"status":"GPS_SYNC"},"uid":"0042DA"}
+not json
 `
 
 // rawDir is a campaign raw directory with two DFOP00 files and files a
@@ -77,7 +78,7 @@ func outputRows(res *Result) map[string]int64 {
 
 func TestRawToFiles(t *testing.T) {
 	dir, want := rawDir(t), sampleRows(t)
-	if want["gnssa_l1.travel_times"] == 0 {
+	if want["gnssa_l0.travel_times"] == 0 {
 		t.Fatal("sample has no travel times")
 	}
 	for _, format := range []string{FormatArrow, FormatCSV, FormatParquet} {
@@ -128,8 +129,8 @@ func TestRawToFiles(t *testing.T) {
 				}
 				n = pf.NumRows()
 			}
-			if n != 2*want["gnssa_l1.travel_times"] {
-				t.Errorf("%s holds %d rows, want %d", path, n, 2*want["gnssa_l1.travel_times"])
+			if n != 2*want["gnssa_l0.travel_times"] {
+				t.Errorf("%s holds %d rows, want %d", path, n, 2*want["gnssa_l0.travel_times"])
 			}
 		})
 	}
@@ -179,7 +180,7 @@ func TestRawFilters(t *testing.T) {
 	s := rawSpec(dir, t.TempDir())
 	s.Tables = []string{"travel_times"}
 	got := outputRows(run(t, s))
-	if len(got) != 1 || got["gnssa_l1.travel_times"] != 2*want["gnssa_l1.travel_times"] {
+	if len(got) != 1 || got["gnssa_l0.travel_times"] != 2*want["gnssa_l0.travel_times"] {
 		t.Errorf("--table travel_times: %v", got)
 	}
 
@@ -187,16 +188,19 @@ func TestRawFilters(t *testing.T) {
 	all := run(t, rawSpec(dir, t.TempDir()))
 	wantLS := map[string]int64{}
 	for _, st := range all.Streams {
-		if strings.HasSuffix(st.EDID, ":DFOP00") {
+		if strings.HasSuffix(st.EDID, datamodels.EDIDSep+datamodels.LogINSPVAA) {
 			wantLS[st.Table] += st.Rows
 		}
 	}
+	if len(wantLS) == 0 {
+		t.Fatalf("no %s streams in %v", datamodels.LogINSPVAA, all.Streams)
+	}
 	s = rawSpec(dir, t.TempDir())
-	s.LogSource = "DFOP00"
+	s.LogSource = datamodels.LogINSPVAA
 	got = outputRows(run(t, s))
 	for table, n := range got {
 		if n != wantLS[table] {
-			t.Errorf("--log-source DFOP00: %s has %d rows, want %d", table, n, wantLS[table])
+			t.Errorf("--log-source %s: %s has %d rows, want %d", datamodels.LogINSPVAA, table, n, wantLS[table])
 		}
 	}
 	s = rawSpec(dir, t.TempDir())
@@ -223,7 +227,7 @@ func TestRawBadFile(t *testing.T) {
 		t.Fatalf("ok %v, exit %d; want a partial run", res.OK, ExitCode(res, nil))
 	}
 	want := sampleRows(t)
-	if got := outputRows(res); got["gnssa_l1.travel_times"] != want["gnssa_l1.travel_times"] {
+	if got := outputRows(res); got["gnssa_l0.travel_times"] != want["gnssa_l0.travel_times"] {
 		t.Errorf("good file's rows: %v", got)
 	}
 	var failed []Input
@@ -240,6 +244,48 @@ func TestRawBadFile(t *testing.T) {
 	}
 }
 
+// TestRawTypesFromNames: with TypesFromNames (sfg iceberg ingest) and no
+// types, each named file's type is told by its name, and files of no type
+// are listed as skipped.
+func TestRawTypesFromNames(t *testing.T) {
+	dir := rawDir(t)
+	s := rawSpec(filepath.Join(dir, "*"), t.TempDir())
+	s.SourceTypes, s.TypesFromNames = nil, true
+	res := run(t, s)
+	byPath := map[string]Input{}
+	for _, in := range res.Inputs {
+		byPath[filepath.Base(in.Path)] = in
+	}
+	for name, want := range map[string]Input{
+		"a_DFOP00.raw": {Type: "DFOP00", Status: "ok"},
+		"b_DFOP00.raw": {Type: "DFOP00", Status: "ok"},
+		"c_AHRS00.bin": {Type: "AHRS00", Status: "ok"}, // parsed, though no rows
+		"notes.txt":    {Status: "skipped"},
+	} {
+		got := byPath[name]
+		if got.Type != want.Type || got.Status != want.Status {
+			t.Errorf("%s: type %q status %q, want %q %q", name, got.Type, got.Status, want.Type, want.Status)
+		}
+	}
+	if _, ok := byPath["._a_DFOP00.raw"]; ok {
+		t.Error("AppleDouble file listed")
+	}
+	if rows := outputRows(res); rows["gnssa_l0.travel_times"] != 2*sampleRows(t)["gnssa_l0.travel_times"] {
+		t.Errorf("rows %v", rows)
+	}
+
+	// Without TypesFromNames, a named file is the one type given, whatever its name.
+	s = rawSpec(filepath.Join(dir, "notes.txt"), t.TempDir())
+	c, err := New(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := c.source.(*rawSource).files()
+	if err != nil || len(files["DFOP00"]) != 1 {
+		t.Errorf("one type: files %v, %v", files, err)
+	}
+}
+
 func TestRawErrors(t *testing.T) {
 	dir := rawDir(t)
 	for _, tc := range []struct {
@@ -249,16 +295,16 @@ func TestRawErrors(t *testing.T) {
 		{"partial scope", func(s *Spec) { s.Scope = datamodels.Scope{Network: "net", Station: "STA"} }},
 		{"no type", func(s *Spec) { s.SourceTypes = nil }},
 		{"unknown type", func(s *Spec) { s.SourceTypes = []string{"NOPE"} }},
-		{"type twice", func(s *Spec) { s.SourceTypes = []string{"DFOP00", "dfop00"} }},
-		{"table not produced", func(s *Spec) { s.Tables = []string{"inspva"} }},
-		{"derived table", func(s *Spec) { s.Tables = []string{"gnssa_l2.garpos"} }},
 		{"glob with two types", func(s *Spec) {
 			s.SourceURIs, s.SourceTypes = []string{filepath.Join(dir, "*.raw")}, []string{"DFOP00", "AHRS00"}
 		}},
-		{"negative max files", func(s *Spec) { s.MaxFiles = -1 }},
 		{"file with two types", func(s *Spec) {
 			s.SourceURIs, s.SourceTypes = []string{dir, filepath.Join(dir, "a_DFOP00.raw")}, []string{"DFOP00", "AHRS00"}
 		}},
+		{"type twice", func(s *Spec) { s.SourceTypes = []string{"DFOP00", "dfop00"} }},
+		{"table not produced", func(s *Spec) { s.Tables = []string{"attitude_ahrs"} }},
+		{"derived table", func(s *Spec) { s.Tables = []string{"gnssa_l1.garpos"} }},
+		{"negative max files", func(s *Spec) { s.MaxFiles = -1 }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := rawSpec(dir, t.TempDir())

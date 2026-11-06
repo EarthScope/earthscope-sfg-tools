@@ -1,4 +1,4 @@
-// Package datamodels is the data model of the Level 1 tables, shared by the
+// Package datamodels is the data model of the Level 0 tables, shared by the
 // file parsers, the catalog and the sinks:
 //
 //   - Table definitions (TableDef): each table's name, columns, constraints
@@ -13,7 +13,7 @@
 //   - Scope and stream EDIDs (Scope, StreamEDID, LogSource).
 //
 // Every table's only identity column is stream_edid,
-// network:station:campaign:file_type:log_source, and it is partitioned on
+// network.station.campaign.file_type.log_source, and it is partitioned on
 // it. ParsedSchema is every column of a table except stream_edid
 // (StampedColumns), which fileparse.Parser.Parse adds afterwards from the
 // scope and each row's Log_Source. Only the parser knows Log_Source (it can
