@@ -32,8 +32,10 @@ var icebergIngestCmd = &cobra.Command{
 	Long: "Parse raw files of any type through the Level 0 parsers, stamped with --scope, and append them to the " +
 		"catalog, creating missing tables. Each file's type is told by its name (e.g. *NOV000.bin, *DFOP00.raw); " +
 		"a file whose name matches no type is listed as skipped. A directory is read as a campaign raw " +
-		"directory (QC PIN files under ../qc/). --source-type limits the types read. Each file is one snapshot " +
-		"that replaces its streams' rows over its time span, so re-running doesn't add duplicates.\n\n" +
+		"directory (QC PIN files under ../qc/). --source-type limits the types read. Files are parsed --workers " +
+		"at a time, and up to --files-per-snapshot of them written as one snapshot, in which each file replaces " +
+		"its own streams' rows over its own time span, so re-running doesn't add duplicates. A file that " +
+		"overlaps one already in the snapshot starts the next, so the later file wins as if written alone.\n\n" +
 		"Exit codes: 0 ok, 1 fatal, 2 usage, 3 partial (some files failed).",
 	Args:         cobra.MinimumNArgs(1),
 	RunE:         runIcebergIngest,
@@ -64,6 +66,8 @@ func runIcebergIngest(cmd *cobra.Command, args []string) error {
 	s.LogSource, _ = f.GetString("log-source")
 	s.MaxFiles, _ = f.GetInt("max-files")
 	s.FilesPerCommit, _ = f.GetInt("files-per-commit")
+	s.FilesPerSnapshot, _ = f.GetInt("files-per-snapshot")
+	s.Workers, _ = f.GetInt("workers")
 	err := required(f, "scope")
 	if err == nil {
 		err = readScope(f, &s)
@@ -136,6 +140,8 @@ func init() {
 	fi := icebergIngestCmd.Flags()
 	fi.Int("max-files", 0, "parse at most this many files of each type (0 = all)")
 	fi.Int("files-per-commit", 0, "commit a table's snapshots this many at a time (0 = all at once)")
+	fi.Int("files-per-snapshot", 32, "merge up to this many files into one snapshot, each replacing only its own span")
+	fi.Int("workers", 0, "files parsed at once (0 = one per CPU)")
 
 	fe := icebergExportCmd.Flags()
 	fe.String("out", "", "output directory")

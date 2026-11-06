@@ -193,15 +193,87 @@ func scanTable(ctx context.Context, cat *catalog.Catalog, def datamodels.TableDe
 // icebergSink appends each group to its table in a catalog as one snapshot,
 // replacing each of the group's streams over its time span
 // (catalog.Append), so re-running a conversion doesn't duplicate rows.
-// Snapshots are committed perCommit at a time (0: all of a table's at
-// once). Missing namespaces and tables are created; older schemas are
-// evolved.
+// Up to perSnapshot groups are merged into one snapshot, each still
+// replacing only its own streams' windows (catalog.Batch.AppendParts); a
+// group overlapping one already merged, or rows past snapshotRows, start a
+// new snapshot. Snapshots are committed perCommit at a time (0: all of a
+// table's at once). Missing namespaces and tables are created; older
+// schemas are evolved.
 type icebergSink struct {
-	cfg       catalog.Config
-	props     map[string]string // added to every snapshot's summary
-	perCommit int
-	cat       *catalog.Catalog
-	openErr   error
+	cfg         catalog.Config
+	props       map[string]string // added to every snapshot's summary
+	perCommit   int
+	perSnapshot int
+	cat         *catalog.Catalog
+	openErr     error
+}
+
+// snapshotRows caps the rows merged into one snapshot.
+const snapshotRows = 1 << 22
+
+// pendingSnapshot is groups waiting to be appended as one snapshot.
+type pendingSnapshot struct {
+	parts   []arrow.Table
+	files   []catalog.SourceFile
+	sources []string
+	windows map[string][]catalog.Window
+	rows    int64
+}
+
+// overlaps reports whether any of windows overlaps a pending window of
+// the same stream.
+func (p *pendingSnapshot) overlaps(windows map[string]catalog.Window) bool {
+	for id, w := range windows {
+		for _, v := range p.windows[id] {
+			if w.Overlaps(v) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (p *pendingSnapshot) add(g Group, windows map[string]catalog.Window) {
+	if p.windows == nil {
+		p.windows = map[string][]catalog.Window{}
+	}
+	p.parts = append(p.parts, g.Rows)
+	p.rows += g.Rows.NumRows()
+	for id, w := range windows {
+		p.windows[id] = append(p.windows[id], w)
+	}
+	if g.Source != "" {
+		p.sources = append(p.sources, g.Source)
+		if g.SHA256 != "" {
+			p.files = append(p.files, catalog.SourceFile{Path: g.Source, SHA256: g.SHA256})
+		}
+	}
+}
+
+func (p *pendingSnapshot) release() {
+	for _, t := range p.parts {
+		t.Release()
+	}
+	*p = pendingSnapshot{}
+}
+
+// groupWindows checks g's rows against def and returns each stream's time
+// span in them, hashing g's source file if its source didn't.
+func groupWindows(def datamodels.TableDef, g *Group) (map[string]catalog.Window, error) {
+	if g.Rows.NumRows() == 0 {
+		return nil, nil
+	}
+	if err := def.Validate(g.Rows); err != nil {
+		return nil, err
+	}
+	if g.Source != "" && g.SHA256 == "" {
+		sum, err := catalog.HashFile(g.Source)
+		if err != nil {
+			return nil, err
+		}
+		g.SHA256 = sum
+	}
+	return catalog.StreamWindows(def, g.Rows)
 }
 
 func (s *icebergSink) Write(ctx context.Context, rows Rows) ([]Output, error) {
@@ -241,39 +313,71 @@ func (s *icebergSink) Write(ctx context.Context, rows Rows) ([]Output, error) {
 		}
 		return nil
 	}
+	// flush appends the pending groups as one snapshot, and commits when
+	// perCommit snapshots are staged. Its error is fatal to the table.
+	var p pendingSnapshot
+	flush := func() error {
+		if len(p.parts) == 0 {
+			return nil
+		}
+		opts := []catalog.AppendOption{catalog.WithProperties(s.props), catalog.WithSources(p.files...)}
+		_, err := batch.AppendParts(ctx, p.parts, opts...)
+		staged := p.sources
+		p.release()
+		if err != nil {
+			if len(staged) > 0 {
+				err = fmt.Errorf("%s: %w", strings.Join(staged, ", "), err)
+			}
+			errs = append(errs, err)
+			if batch.Failed() {
+				return commit()
+			}
+			return nil
+		}
+		sources = append(sources, staged...)
+		if s.perCommit > 0 && batch.Staged() >= s.perCommit {
+			return commit()
+		}
+		return nil
+	}
+	fatal := false
 	for g, err := range rows.Groups {
 		if err != nil {
 			errs = append(errs, err)
 			break
 		}
-		opts := []catalog.AppendOption{catalog.WithProperties(s.props)}
-		if g.Source != "" {
-			opts = append(opts, catalog.WithSource(g.Source))
-		}
-		_, err := batch.Append(ctx, g.Rows, opts...)
-		g.Rows.Release()
-		if err != nil {
-			if g.Source != "" {
-				err = fmt.Errorf("%s: %w", g.Source, err)
-			}
-			errs = append(errs, err)
-			if batch.Failed() {
-				if err := commit(); err != nil {
-					errs = append(errs, err)
-					break
+		windows, err := groupWindows(rows.Def, &g)
+		if err != nil || g.Rows.NumRows() == 0 {
+			if err != nil {
+				if g.Source != "" {
+					err = fmt.Errorf("%s: %w", g.Source, err)
 				}
+				errs = append(errs, err)
 			}
+			g.Rows.Release()
 			continue
 		}
-		if g.Source != "" {
-			sources = append(sources, g.Source)
-		}
-		if s.perCommit > 0 && batch.Staged() >= s.perCommit {
-			if err := commit(); err != nil {
+		if p.overlaps(windows) || (len(p.parts) > 0 && p.rows+g.Rows.NumRows() > snapshotRows) {
+			if err := flush(); err != nil {
 				errs = append(errs, err)
+				g.Rows.Release()
+				fatal = true
 				break
 			}
 		}
+		p.add(g, windows)
+		if len(p.parts) >= s.perSnapshot {
+			if err := flush(); err != nil {
+				errs = append(errs, err)
+				fatal = true
+				break
+			}
+		}
+	}
+	if fatal {
+		p.release()
+	} else if err := flush(); err != nil {
+		errs = append(errs, err)
 	}
 	if err := commit(); err != nil {
 		errs = append(errs, err)

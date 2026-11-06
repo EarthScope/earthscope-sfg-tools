@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -191,5 +192,56 @@ func TestBatch(t *testing.T) {
 	}
 	if all, _ := count(t, cat, def, a); all != 19 {
 		t.Errorf("%d rows after a second commit, want 19", all)
+	}
+}
+
+// AppendParts writes parts as one snapshot, each replacing only its own
+// window: rows of the same stream between the parts' windows stay.
+func TestAppendParts(t *testing.T) {
+	ctx := context.Background()
+	cat, err := Open(ctx, Config{Name: Local, Warehouse: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cat.Close()
+	def := datamodels.AttitudeAHRS
+	const a, b = "net.STA.2026_A_1126.AHRS00.AHRS00", "net.STA.2026_A_1126.DFOP00.DFOP00"
+	all := attitudeRows(t, a, t0, 30) // :31 to 20:55:00
+	if _, err := cat.Append(ctx, def, all); err != nil {
+		t.Fatal(err)
+	}
+	all.Release()
+
+	batch, err := cat.NewBatch(ctx, def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := []arrow.Table{
+		attitudeRows(t, a, t0, 5),                     // re-parse of :31 to :35
+		attitudeRows(t, a, t0.Add(20*time.Second), 3), // re-parse of :51 to :53
+		attitudeRows(t, b, t0.Add(10*time.Second), 4), // another stream
+	}
+	defer func() {
+		for _, p := range parts {
+			p.Release()
+		}
+	}()
+	files := []SourceFile{{Path: "a1", SHA256: "x"}, {Path: "a2", SHA256: "y"}, {Path: "b", SHA256: "z"}}
+	n, err := batch.AppendParts(ctx, parts, WithSources(files...))
+	if err != nil || n != 12 || batch.Staged() != 1 {
+		t.Fatalf("staged %d rows in %d snapshots, %v; want 12 in 1", n, batch.Staged(), err)
+	}
+	if _, err := batch.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Stream a keeps its 30 rows (its rows between the parts were not
+	// replaced); stream b adds 4.
+	if total, gotA := count(t, cat, def, a); total != 34 || gotA != 30 {
+		t.Errorf("%d rows (%d of stream a), want 34 (30)", total, gotA)
+	}
+	tbl, _ := cat.Table(ctx, def)
+	var got []SourceFile
+	if err := json.Unmarshal([]byte(tbl.CurrentSnapshot().Summary.Properties[PropSourceFiles]), &got); err != nil || len(got) != 3 {
+		t.Errorf("snapshot source files %v, %v; want the three", got, err)
 	}
 }

@@ -53,7 +53,9 @@ type Spec struct {
 	// types read, all by default, and named files of no type are skipped.
 	TypesFromNames bool
 
-	FilesPerCommit int // Iceberg sink: groups (files) per catalog commit; 0 is all of a table's
+	FilesPerCommit   int // Iceberg sink: snapshots per catalog commit; 0 is all of a table's
+	FilesPerSnapshot int // Iceberg sink: groups (files) merged into one snapshot; 0 or 1 is one each
+	Workers          int // raw: files parsed at once; 0 is runtime.NumCPU()
 }
 
 // A UsageError is a conversion stated wrongly: a missing, inapplicable or
@@ -85,13 +87,13 @@ var sources = map[string]endpoint{
 	},
 	SourceRaw: {
 		required: []string{"source-type"},
-		optional: []string{"table", "log-source", "max-files"},
+		optional: []string{"table", "log-source", "max-files", "workers"},
 	},
 }
 
 var sinks = map[string]endpoint{
 	SinkFiles:   {required: []string{"table-format"}},
-	SinkIceberg: {required: []string{"sink-catalog"}, optional: []string{"files-per-commit"}, rejects: []string{"columns"}},
+	SinkIceberg: {required: []string{"sink-catalog"}, optional: []string{"files-per-commit", "files-per-snapshot"}, rejects: []string{"columns"}},
 }
 
 func kinds(m map[string]endpoint) string {
@@ -239,8 +241,11 @@ func New(spec Spec) (*Conversion, error) {
 		if spec.FilesPerCommit < 0 {
 			return nil, usagef("--files-per-commit %d: want 0 (all) or more", spec.FilesPerCommit)
 		}
+		if spec.FilesPerSnapshot < 0 {
+			return nil, usagef("--files-per-snapshot %d: want 0 or more", spec.FilesPerSnapshot)
+		}
 		c.sink = &icebergSink{cfg: catalog.Config{Name: spec.SinkCatalog, Warehouse: spec.SinkURI},
-			props: props, perCommit: spec.FilesPerCommit}
+			props: props, perCommit: spec.FilesPerCommit, perSnapshot: max(spec.FilesPerSnapshot, 1)}
 	}
 	return c, nil
 }
@@ -312,6 +317,7 @@ type Rows struct {
 type Group struct {
 	Rows   arrow.Table
 	Source string // the file the rows came from, if any
+	SHA256 string // Source's hex SHA-256, if the source hashed it
 }
 
 // A Source reads tables of rows.

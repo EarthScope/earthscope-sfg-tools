@@ -3,6 +3,7 @@ package catalog
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"maps"
@@ -16,11 +17,34 @@ import (
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
-// Snapshot summary properties Append records with WithSource.
+// Snapshot summary properties Append records with WithSource and
+// WithSources: the file and its SHA-256 for a snapshot of one file, or a
+// JSON array of SourceFile for a snapshot of several.
 const (
 	PropSourceFile   = "sfg.source-file"
 	PropSourceSHA256 = "sfg.source-sha256"
+	PropSourceFiles  = "sfg.source-files"
 )
+
+// A SourceFile is a raw file a snapshot's rows were parsed from.
+type SourceFile struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+}
+
+// HashFile is the hex SHA-256 of the file at path.
+func HashFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("hashing %s: %w", path, err)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
 
 // AppendOption configures Append.
 type AppendOption func(*appendOptions) error
@@ -34,20 +58,35 @@ type appendOptions struct {
 // each snapshot can be traced to its source.
 func WithSource(path string) AppendOption {
 	return func(o *appendOptions) error {
-		f, err := os.Open(path)
+		sum, err := HashFile(path)
 		if err != nil {
 			return err
 		}
-		defer f.Close()
-		h := sha256.New()
-		if _, err := io.Copy(h, f); err != nil {
-			return fmt.Errorf("hashing %s: %w", path, err)
+		return WithSources(SourceFile{Path: path, SHA256: sum})(o)
+	}
+}
+
+// WithSources records the raw files a snapshot's rows were parsed from,
+// already hashed: one as WithSource does, several as a JSON array in
+// PropSourceFiles.
+func WithSources(files ...SourceFile) AppendOption {
+	return func(o *appendOptions) error {
+		if len(files) == 0 {
+			return nil
 		}
 		if o.props == nil {
 			o.props = iceberg.Properties{}
 		}
-		o.props[PropSourceFile] = path
-		o.props[PropSourceSHA256] = hex.EncodeToString(h.Sum(nil))
+		if len(files) == 1 {
+			o.props[PropSourceFile] = files[0].Path
+			o.props[PropSourceSHA256] = files[0].SHA256
+			return nil
+		}
+		b, err := json.Marshal(files)
+		if err != nil {
+			return err
+		}
+		o.props[PropSourceFiles] = string(b)
 		return nil
 	}
 }
@@ -66,10 +105,25 @@ func WithProperties(props map[string]string) AppendOption {
 	}
 }
 
+// A Window is the time span, inclusive, of one stream's rows in a table.
+type Window struct{ Min, Max arrow.Timestamp }
+
+// Overlaps reports whether w and v share a time.
+func (w Window) Overlaps(v Window) bool { return w.Min <= v.Max && v.Min <= w.Max }
+
 // ReplaceFilter is the rows Append replaces when writing rows to def: for
 // each stream_edid in rows, that stream's rows with def.TimeColumn between
 // the stream's earliest and latest time in rows, inclusive.
 func ReplaceFilter(def datamodels.TableDef, rows arrow.Table) (iceberg.BooleanExpression, error) {
+	windows, err := StreamWindows(def, rows)
+	if err != nil {
+		return nil, err
+	}
+	return windowFilter(def, []map[string]Window{windows})
+}
+
+// StreamWindows is the time span of each stream_edid's rows in rows.
+func StreamWindows(def datamodels.TableDef, rows arrow.Table) (map[string]Window, error) {
 	if def.TimeColumn == "" {
 		return nil, fmt.Errorf("table has no TimeColumn")
 	}
@@ -87,8 +141,7 @@ func ReplaceFilter(def datamodels.TableDef, rows arrow.Table) (iceberg.BooleanEx
 		return nil, fmt.Errorf("%s is %s, want a string", datamodels.StreamEDIDColumn.Name, edidType)
 	}
 
-	type window struct{ min, max arrow.Timestamp }
-	windows := map[string]window{}
+	windows := map[string]Window{}
 	rdr := array.NewTableReader(rows, -1) // batches with aligned columns
 	defer rdr.Release()
 	for rdr.Next() {
@@ -103,20 +156,28 @@ func ReplaceFilter(def datamodels.TableDef, rows arrow.Table) (iceberg.BooleanEx
 			id, t := e.Value(i), tm.Value(i)
 			w, ok := windows[id]
 			if !ok {
-				w = window{t, t}
+				w = Window{t, t}
 			}
-			w.min, w.max = min(w.min, t), max(w.max, t)
+			w.Min, w.Max = min(w.Min, t), max(w.Max, t)
 			windows[id] = w
 		}
 	}
+	return windows, nil
+}
+
+// windowFilter matches, for each part, each of its streams' rows within
+// the stream's window in that part.
+func windowFilter(def datamodels.TableDef, parts []map[string]Window) (iceberg.BooleanExpression, error) {
 	var preds []iceberg.BooleanExpression
-	for _, id := range slices.Sorted(maps.Keys(windows)) {
-		w := windows[id]
-		preds = append(preds, iceberg.NewAnd(
-			iceberg.EqualTo(iceberg.Reference(datamodels.StreamEDIDColumn.Name), id),
-			iceberg.GreaterThanEqual(iceberg.Reference(def.TimeColumn), iceberg.Timestamp(w.min)),
-			iceberg.LessThanEqual(iceberg.Reference(def.TimeColumn), iceberg.Timestamp(w.max)),
-		))
+	for _, windows := range parts {
+		for _, id := range slices.Sorted(maps.Keys(windows)) {
+			w := windows[id]
+			preds = append(preds, iceberg.NewAnd(
+				iceberg.EqualTo(iceberg.Reference(datamodels.StreamEDIDColumn.Name), id),
+				iceberg.GreaterThanEqual(iceberg.Reference(def.TimeColumn), iceberg.Timestamp(w.Min)),
+				iceberg.LessThanEqual(iceberg.Reference(def.TimeColumn), iceberg.Timestamp(w.Max)),
+			))
+		}
 	}
 	switch len(preds) {
 	case 0:

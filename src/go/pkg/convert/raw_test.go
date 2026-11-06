@@ -2,11 +2,16 @@ package convert
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/parquet/file"
@@ -337,5 +342,54 @@ func TestRawErrors(t *testing.T) {
 	res, err := c.Run(t.Context())
 	if err == nil || ExitCode(res, err) != ExitFatal {
 		t.Errorf("empty directory: %v, exit %d", err, ExitCode(res, err))
+	}
+}
+
+// TestParsePoolOrderAndStop: groups come in file order whatever the
+// workers finish first, and stopping early leaves no parse running.
+func TestParsePoolOrderAndStop(t *testing.T) {
+	dir := t.TempDir()
+	var names []string
+	for i := range 12 {
+		name := fmt.Sprintf("%02d_DFOP00.raw", i)
+		names = append(names, filepath.Join(dir, name))
+		if err := os.WriteFile(names[i], []byte(dfop00Sample), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := rawSpec(dir, t.TempDir())
+	s.Tables, s.Workers = []string{"travel_times"}, 4
+	c, err := New(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := c.source.(*rawSource)
+	files, err := src.files()
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsers := fileparse.ForFileType("DFOP00")[:1] // travel_times
+	before := runtime.NumGoroutine()
+	var got []string
+	for g, err := range src.groups(context.Background(), parsers, files) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, g.Source)
+		if len(g.SHA256) != 64 {
+			t.Errorf("%s: sha256 %q", g.Source, g.SHA256)
+		}
+		g.Rows.Release()
+	}
+	if !slices.Equal(got, names) {
+		t.Errorf("groups in order %v, want %v", got, names)
+	}
+	for g := range src.groups(context.Background(), parsers, files) {
+		g.Rows.Release()
+		break
+	}
+	time.Sleep(50 * time.Millisecond)
+	if after := runtime.NumGoroutine(); after > before {
+		t.Errorf("%d goroutines after stopping early, %d before", after, before)
 	}
 }

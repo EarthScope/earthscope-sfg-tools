@@ -2,6 +2,7 @@ package convert
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -364,5 +365,57 @@ func TestCopyEvolvesSink(t *testing.T) {
 	}
 	if got, want := csvRows(t, dst), csvRows(t, src); !slices.Equal(got, want) {
 		t.Errorf("copy into an older table holds\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// shifted is dfop00Sample 10000 s later per step.
+func shifted(steps int) string {
+	s := dfop00Sample
+	for range steps {
+		s = strings.NewReplacer("178046", "178047", "178047", "178048", "146449", "146450", "146450", "146451").Replace(s)
+	}
+	return s
+}
+
+// TestFilesPerSnapshot: files merge into snapshots of up to
+// --files-per-snapshot, and a file overlapping one already merged starts
+// the next, so it replaces that file as if written alone.
+func TestFilesPerSnapshot(t *testing.T) {
+	raw := t.TempDir()
+	for name, content := range map[string]string{
+		"a_DFOP00.raw": dfop00Sample, "b_DFOP00.raw": shifted(1), "c_DFOP00.raw": shifted(2),
+		"d_DFOP00.raw": dfop00Sample, // a again
+	} {
+		if err := os.WriteFile(filepath.Join(raw, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wh := t.TempDir()
+	s := rawToIcebergSpec(raw, wh)
+	s.Tables, s.FilesPerSnapshot, s.Workers = []string{"travel_times"}, 3, 2
+	if res := run(t, s); !res.OK {
+		t.Fatalf("errors %+v", res.Errors)
+	}
+	if got, want := tableRows(t, wh, datamodels.TWTT)["gnssa_l0.travel_times"], 3*sampleRows(t)["gnssa_l0.travel_times"]; got != want {
+		t.Errorf("%d rows, want %d (a, b, c; d replacing a)", got, want)
+	}
+	ctx := context.Background()
+	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cat.Close()
+	tbl, err := cat.Table(ctx, datamodels.TWTT)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := tbl.CurrentSnapshot()
+	if filepath.Base(last.Summary.Properties[catalog.PropSourceFile]) != "d_DFOP00.raw" || last.ParentSnapshotID == nil {
+		t.Fatalf("last snapshot %v, want d alone after a merged one", last.Summary.Properties)
+	}
+	var merged []catalog.SourceFile
+	first := tbl.Metadata().SnapshotByID(*last.ParentSnapshotID)
+	if err := json.Unmarshal([]byte(first.Summary.Properties[catalog.PropSourceFiles]), &merged); err != nil || len(merged) != 3 {
+		t.Errorf("first snapshot files %v, %v; want a, b, c", merged, err)
 	}
 }

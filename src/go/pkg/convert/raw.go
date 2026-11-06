@@ -6,14 +6,17 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/compute"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse"
 )
@@ -46,6 +49,7 @@ type rawSource struct {
 	scope     datamodels.Scope
 	logSource string
 	maxFiles  int
+	workers   int
 
 	byName  bool     // tell named files' types by name (Spec.TypesFromNames)
 	inputs  []Input
@@ -56,12 +60,18 @@ type rawSource struct {
 // newRawSource checks spec's raw source values.
 func newRawSource(spec Spec) (*rawSource, error) {
 	s := &rawSource{uris: spec.SourceURIs, scope: spec.Scope, logSource: spec.LogSource, maxFiles: spec.MaxFiles,
-		byName: spec.TypesFromNames, failed: map[string][]string{}}
+		byName: spec.TypesFromNames, workers: spec.Workers, failed: map[string][]string{}}
+	if s.workers <= 0 {
+		s.workers = runtime.NumCPU()
+	}
 	if spec.Scope.Campaign == "" {
 		return nil, usagef("--source %s needs the full --scope NET/STA/CAMP: it stamps every row", SourceRaw)
 	}
 	if spec.MaxFiles < 0 {
 		return nil, usagef("--max-files %d: want 0 (all) or more", spec.MaxFiles)
+	}
+	if spec.Workers < 0 {
+		return nil, usagef("--workers %d: want 0 (one per CPU) or more", spec.Workers)
 	}
 	types := spec.SourceTypes
 	switch {
@@ -242,32 +252,118 @@ func (s *rawSource) Read(ctx context.Context, write func(Rows)) error {
 	return nil
 }
 
+// parseJob is one file to parse with one parser.
+type parseJob struct {
+	p          fileparse.Parser
+	path, keep string // keep: the stream_edid to keep, or "" for all
+}
+
+// parsed is a parseJob's rows, or its error.
+type parsed struct {
+	rows   arrow.Table
+	sha256 string
+	err    error
+}
+
+// run parses the job's file, keeps only j.keep's rows if set, and hashes it.
+func (j parseJob) run(scope datamodels.Scope) parsed {
+	tbl, err := j.p.Parse(j.path, scope)
+	if err == nil && j.keep != "" {
+		tbl, err = filterTable(tbl, j.keep)
+	}
+	if err != nil {
+		return parsed{err: err}
+	}
+	sum, err := catalog.HashFile(j.path)
+	if err != nil {
+		tbl.Release()
+		return parsed{err: err}
+	}
+	return parsed{rows: tbl, sha256: sum}
+}
+
 // groups parses each file with its type's parser and yields its rows as
-// one group, filtered to s.logSource when given. A file that fails to
-// parse is recorded and skipped.
+// one group, filtered to s.logSource when given, in file order. Up to
+// s.workers files are parsed at once, and at most twice that many parsed
+// files wait to be taken. A file that fails to parse is recorded and
+// skipped.
 func (s *rawSource) groups(ctx context.Context, parsers []fileparse.Parser, files map[string][]string) iter.Seq2[Group, error] {
+	var jobs []parseJob
+	for _, p := range parsers {
+		keep := ""
+		if s.logSource != "" {
+			keep = p.StreamEDID(s.scope, s.logSource)
+		}
+		for _, path := range files[p.FileType] {
+			jobs = append(jobs, parseJob{p: p, path: path, keep: keep})
+		}
+	}
 	return func(yield func(Group, error) bool) {
-		for _, p := range parsers {
-			keep := ""
-			if s.logSource != "" {
-				keep = p.StreamEDID(s.scope, s.logSource)
+		ctx, cancel := context.WithCancel(ctx)
+		results := make([]chan parsed, len(jobs))
+		for i := range results {
+			results[i] = make(chan parsed, 1)
+		}
+		ahead := make(chan struct{}, 2*s.workers) // parsing or parsed, not yet taken
+		busy := make(chan struct{}, s.workers)    // parsing
+		var wg sync.WaitGroup
+		dispatched := make(chan struct{})
+		go func() {
+			defer close(dispatched)
+			for i, j := range jobs {
+				select {
+				case ahead <- struct{}{}:
+				case <-ctx.Done():
+					return
+				}
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					busy <- struct{}{}
+					var r parsed
+					if r.err = ctx.Err(); r.err == nil {
+						r = j.run(s.scope)
+					}
+					<-busy
+					results[i] <- r
+				}()
 			}
-			for _, path := range files[p.FileType] {
-				if err := ctx.Err(); err != nil {
-					yield(Group{}, err)
+		}()
+		// On return, stop dispatching, wait for the parses under way and
+		// release what nobody took.
+		defer func() {
+			cancel()
+			<-dispatched
+			wg.Wait()
+			for _, ch := range results {
+				select {
+				case r := <-ch:
+					if r.rows != nil {
+						r.rows.Release()
+					}
+				default:
+				}
+			}
+		}()
+		for i, j := range jobs {
+			var r parsed
+			select {
+			case r = <-results[i]:
+			case <-ctx.Done():
+				yield(Group{}, ctx.Err())
+				return
+			}
+			<-ahead
+			if r.err != nil {
+				if ctx.Err() != nil {
+					yield(Group{}, ctx.Err())
 					return
 				}
-				tbl, err := p.Parse(path, s.scope)
-				if err == nil && keep != "" {
-					tbl, err = filterTable(tbl, keep)
-				}
-				if err != nil {
-					s.failed[path] = append(s.failed[path], p.Table.Name+": "+err.Error())
-					continue
-				}
-				if !yield(Group{Rows: tbl, Source: path}, nil) {
-					return
-				}
+				s.failed[j.path] = append(s.failed[j.path], j.p.Table.Name+": "+r.err.Error())
+				continue
+			}
+			if !yield(Group{Rows: r.rows, Source: j.path, SHA256: r.sha256}, nil) {
+				return
 			}
 		}
 	}

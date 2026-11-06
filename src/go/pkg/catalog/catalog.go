@@ -345,14 +345,53 @@ func (c *Catalog) NewBatch(ctx context.Context, def datamodels.TableDef) (*Batch
 // and returns the rows staged. An error before anything is staged leaves
 // the batch as it was; Failed reports whether an error left it unusable.
 func (b *Batch) Append(ctx context.Context, rows arrow.Table, opts ...AppendOption) (int64, error) {
-	if rows.NumRows() == 0 {
+	return b.AppendParts(ctx, []arrow.Table{rows}, opts...)
+}
+
+// AppendParts stages parts (e.g. several files' rows) as one snapshot: each
+// part replaces its own streams' windows (see StreamWindows), as if appended
+// alone, but they are written together. Parts must not overlap: two parts
+// with rows of one stream at a shared time would both be kept, where
+// appending them in turn keeps the second.
+func (b *Batch) AppendParts(ctx context.Context, parts []arrow.Table, opts ...AppendOption) (int64, error) {
+	var windows []map[string]Window
+	var recs []arrow.RecordBatch
+	defer func() {
+		for _, r := range recs {
+			r.Release()
+		}
+	}()
+	var schema *arrow.Schema
+	for _, rows := range parts {
+		if rows.NumRows() == 0 {
+			continue
+		}
+		if err := b.def.Validate(rows); err != nil {
+			return 0, err
+		}
+		w, err := StreamWindows(b.def, rows)
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", b.def.Name, err)
+		}
+		windows = append(windows, w)
+		if schema == nil {
+			schema = rows.Schema()
+		} else if !schema.Equal(rows.Schema()) {
+			return 0, fmt.Errorf("%s: parts have different schemas", b.def.Name)
+		}
+		rdr := array.NewTableReader(rows, -1)
+		for rdr.Next() {
+			rec := rdr.RecordBatch()
+			rec.Retain()
+			recs = append(recs, rec)
+		}
+		rdr.Release()
+	}
+	if len(windows) == 0 {
 		return 0, nil
 	}
 	if b.tx == nil {
 		return 0, fmt.Errorf("%s: batch failed earlier", b.def.Name)
-	}
-	if err := b.def.Validate(rows); err != nil {
-		return 0, err
 	}
 	var o appendOptions
 	for _, opt := range opts {
@@ -360,10 +399,12 @@ func (b *Batch) Append(ctx context.Context, rows arrow.Table, opts ...AppendOpti
 			return 0, err
 		}
 	}
-	filter, err := ReplaceFilter(b.def, rows)
+	filter, err := windowFilter(b.def, windows)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", b.def.Name, err)
 	}
+	rows := array.NewTableFromRecords(schema, recs)
+	defer rows.Release()
 	ordered, err := inTableOrder(b.tbl, rows)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", b.def.Name, err)

@@ -33,7 +33,8 @@ var convertCmd = &cobra.Command{
 		"(QC PIN files under ../qc/). --source-uri can be repeated, and arguments after the flags are " +
 		"more source URIs, so a shell glob such as --source-uri raw/*DFOP00.raw names every match. " +
 		"(sfg iceberg ingest tells each file's type by its name instead.) " +
-		"--max-files caps the files of each type. --table picks tables " +
+		"--max-files caps the files of each type, and --workers N parses N at once (default: one per CPU). " +
+		"--table picks tables " +
 		"(default: every table the types feed) and --log-source one log source's rows. A file that " +
 		"fails to parse is reported and skipped.\n\n" +
 		"--sink files writes <table>.<table-format> files into the --sink-uri directory.\n\n" +
@@ -42,6 +43,8 @@ var convertCmd = &cobra.Command{
 		"its streams' rows over its time span, so re-running doesn't add duplicates. From --source " +
 		"iceberg, the selected rows are copied one stream and one hour at a time, each hour " +
 		"replacing that stream's rows over its span: a sync of what was selected, not a mirror. " +
+		"--files-per-snapshot N merges up to N files into one snapshot, each still replacing only its " +
+		"own span (a file overlapping one already merged starts the next snapshot). " +
 		"A table's snapshots are committed to the catalog together, or --files-per-commit N at a " +
 		"time (a copy's hours count as files); a failed commit loses only its own snapshots. " +
 		"--columns doesn't apply, and the same warehouse on both sides is an error.\n\n" +
@@ -121,6 +124,8 @@ func convertSpec(f *pflag.FlagSet, args []string) (convert.Spec, error) {
 	s.Columns, _ = f.GetStringSlice("columns")
 	s.MaxFiles, _ = f.GetInt("max-files")
 	s.FilesPerCommit, _ = f.GetInt("files-per-commit")
+	s.FilesPerSnapshot, _ = f.GetInt("files-per-snapshot")
+	s.Workers, _ = f.GetInt("workers")
 	scope, _ := f.GetString("scope")
 	var err error
 	if s.Scope, err = convert.ParseScope(scope); err != nil {
@@ -176,6 +181,8 @@ func init() {
 	f.StringSlice("source-type", nil, "raw file types, comma-separated; for iceberg, one file type, or product for Level 1/2 tables (needs the full scope)")
 	f.Int("max-files", 0, "raw: parse at most this many files of each type (0 = all)")
 	f.Int("files-per-commit", 0, "iceberg sink: commit a table's snapshots this many at a time (0 = all at once)")
+	f.Int("files-per-snapshot", 1, "iceberg sink: merge up to this many files into one snapshot, each replacing only its own span")
+	f.Int("workers", 0, "raw: files parsed at once (0 = one per CPU)")
 	f.String("log-source", "", "log source, or product input for Level 1/2 tables")
 	f.String("start", "", "earliest time, inclusive: YYYY-MM-DD or RFC 3339")
 	f.String("end", "", "latest time, exclusive: YYYY-MM-DD or RFC 3339")

@@ -229,3 +229,4 @@ CLAUDE.md
 # MyST build output
 _build/
 !src/go/build/
+src/go/build/sfg_darwin_arm64
