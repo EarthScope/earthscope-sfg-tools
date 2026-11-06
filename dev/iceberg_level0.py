@@ -1,5 +1,5 @@
 """
-Dev harness: parse Level 1 logs with ``sfg level1 parse`` (src/go) and append
+Dev harness: parse Level 0 logs with ``sfg level0 parse`` (src/go) and append
 them to a local Iceberg warehouse.
 
 Go writes one Arrow IPC file per table holding full rows (the Go file
@@ -41,14 +41,14 @@ def build_sfg(out: Path) -> Path:
     return binary
 
 
-def run_level1_parse(binary: Path, file_type: str, source: Path, out: Path) -> dict[str, pa.Table]:
-    """Run ``sfg level1 parse`` on one file; return its Arrow tables keyed by table name.
+def run_level0_parse(binary: Path, file_type: str, source: Path, out: Path) -> dict[str, pa.Table]:
+    """Run ``sfg level0 parse`` on one file; return its Arrow tables keyed by table name.
 
     The scope comes from ``data_path``: .../<network>/<station>/<campaign>/raw.
     """
     network, station, campaign = data_path.parts[-4:-1]
     subprocess.run(
-        [str(binary), "level1", "parse", "--type", file_type, "--network", network,
+        [str(binary), "level0", "parse", "--type", file_type, "--network", network,
          "--station", station, "--campaign", campaign, "--out", str(out), str(source)],
         check=True,
     )
@@ -116,7 +116,7 @@ class IcebergCatalog:
         return table.num_rows
 
     def ingest_attitude(self, ahrs_arrow: pa.Table) -> int:
-        """Append attitude rows, e.g. ``sfglevel1 ahrs00`` output."""
+        """Append attitude rows, e.g. ``sfglevel0 ahrs00`` output."""
         return self.ingest(ATTITUDE_AHRS, ahrs_arrow)
 
 
@@ -125,6 +125,6 @@ if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmp:
         binary = build_sfg(Path(tmp))
         for source in ahrs:
-            tables = run_level1_parse(binary, "AHRS00", source, Path(tmp) / source.stem)
+            tables = run_level0_parse(binary, "AHRS00", source, Path(tmp) / source.stem)
             n = cat.ingest_attitude(tables["attitude_ahrs"])
             print(f"{source.name}: {n} rows -> {ATTITUDE_AHRS.qualified_name}")

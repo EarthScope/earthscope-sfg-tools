@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pyiceberg.catalog.sql import SqlCatalog
 
-from earthscope_sfg_tools.catalog import Level1Reader, open_catalog, stream_edid
+from earthscope_sfg_tools.catalog import Level0Reader, open_catalog, stream_edid
 from earthscope_sfg_tools.datamodels.iceberg.schemas import INSPVA, TRAVEL_TIMES, Scope
 
 SCOPE = Scope("cascadia-gorda", "NBR1", "2025_A_1126")
@@ -47,7 +47,7 @@ def warehouse(tmp_path):
 
 
 def test_read_scope_window_and_order(warehouse):
-    r = Level1Reader(open_catalog(warehouse))
+    r = Level0Reader(open_catalog(warehouse))
     df = r.read("inspva", SCOPE, T0 + timedelta(seconds=2), T0 + timedelta(seconds=5), file_type="NOV000")
     assert list(df["heading"]) == [2.0, 3.0, 4.0]  # end exclusive, sorted by time
     assert (df["Station"] == "NBR1").all()
@@ -55,7 +55,7 @@ def test_read_scope_window_and_order(warehouse):
 
 
 def test_read_streams_and_columns(warehouse):
-    r = Level1Reader(open_catalog(warehouse))
+    r = Level0Reader(open_catalog(warehouse))
     assert len(r.read("inspva", SCOPE)) == 13  # both file types
     assert len(r.read("inspva", SCOPE, file_type="OTHER")) == 3
     df = r.read("inspva", SCOPE, file_type="NOV000", log_source="INSPVAA", columns=["time", "ins_status"])
@@ -66,7 +66,7 @@ def test_read_streams_and_columns(warehouse):
 def test_errors(tmp_path, warehouse):
     with pytest.raises(FileNotFoundError):
         open_catalog(tmp_path / "missing")
-    r = Level1Reader(open_catalog(warehouse))
+    r = Level0Reader(open_catalog(warehouse))
     with pytest.raises(KeyError):
         r.read("garpos", SCOPE)
     with pytest.raises(ValueError):

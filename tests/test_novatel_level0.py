@@ -1,4 +1,4 @@
-"""Tests for the NovAtel Level 1 parsers (``sfg nov2level1``) and conform_arrow."""
+"""Tests for the NovAtel Level 0 parsers (``sfg nov2level0``) and conform_arrow."""
 
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,7 +16,7 @@ from earthscope_sfg_tools.datamodels.iceberg.schemas import (  # noqa: E402
     SOUND_SPEED,
     Scope,
 )
-from earthscope_sfg_tools.datamodels.iceberg.schemas.level1 import (  # noqa: E402
+from earthscope_sfg_tools.datamodels.iceberg.schemas.level0 import (  # noqa: E402
     GNSSICEBERG_CONSTELLATIONS,
 )
 from earthscope_sfg_tools.utils.go_utils import (  # noqa: E402
@@ -106,7 +106,7 @@ def _empty_observations() -> pa.Table:
 
 
 # ---------------------------------------------------------------------------
-# sfg nov2level1 — require the Go binary
+# sfg nov2level0 — require the Go binary
 # ---------------------------------------------------------------------------
 
 
@@ -120,16 +120,16 @@ def sfg_binary():
 
 @pytest.fixture(scope="module")
 def nov000_tables(sfg_binary):
-    from earthscope_sfg_tools.novatel_tools.novatel_level1_operations import (
-        nov000_to_level1,
+    from earthscope_sfg_tools.novatel_tools.novatel_level0_operations import (
+        nov000_to_level0,
     )
 
-    return nov000_to_level1(NOV000, SCOPE)
+    return nov000_to_level0(NOV000, SCOPE)
 
 
 def test_nov000_cold_start_logs_are_dropped(nov000_tables):
     # The fixture is a receiver cold start: every log has time status UNKNOWN,
-    # so Level 1 ingest keeps none of them but still returns all three tables.
+    # so Level 0 ingest keeps none of them but still returns all three tables.
     assert nov000_tables.keys() == {"gnss_observations", "inspva", "insstdev"}
     for table_def in (GNSS_OBSERVATIONS, INSPVA, INSSTDEV):
         table = nov000_tables[table_def.name]
@@ -139,7 +139,7 @@ def test_nov000_cold_start_logs_are_dropped(nov000_tables):
 
 @pytest.fixture(scope="module", params=[0, 1], ids=lambda a: f"ant{a}")
 def nov770_table(sfg_binary, request):
-    from earthscope_sfg_tools.novatel_tools.novatel_level1_operations import (
+    from earthscope_sfg_tools.novatel_tools.novatel_level0_operations import (
         nov770_to_gnss_observations,
     )
 

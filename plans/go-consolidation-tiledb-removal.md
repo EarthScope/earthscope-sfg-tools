@@ -6,11 +6,11 @@ Go parsing of raw seafloor geodesy files lives in two modules that have drifted 
 
 - **`src/go`**: the `sfg` binary built into the Python wheel (`hatch_build.py`) and called from Python through `find_binary` / `GoBinaryRunner`.
   - `pkg/sfg_utils` parses NOV000 (RANGEA, INSPVAA, INSSTDEVA) and NovAtel ASCII and binary, with its own GPSA reassembly.
-  - The commands write RINEX, TileDB arrays, and Level 1 Arrow IPC (`nov2level1`).
+  - The commands write RINEX, TileDB arrays, and Level 0 Arrow IPC (`nov2level0`).
   - It depends on gnsstools v0.88, and on TileDB-Go, which makes it a cgo build that needs TileDB headers at wheel build time.
-- **`dev/level1`**: the Iceberg Level 1 ingest.
+- **`dev/level1`**: the Iceberg Level 0 ingest.
   - It has one parser per (file type, table) for NOV000, NOV770, DFOP00, QCPIN, AHRS00, GNSS00, TCVR00, CTD and Sea-Bird.
-  - It has the Level 1 table definitions, an Iceberg catalog (SQL or Glue) with replace-on-append, and two drivers (`main.go` and `cmd/sfglevel1`).
+  - It has the Level 0 table definitions, an Iceberg catalog (SQL or Glue) with replace-on-append, and two drivers (`main.go` and `cmd/sfglevel0`).
   - It depends on gnsstools v0.117.
 
 NOV000 and NovAtel binary parsing therefore exist twice. The `dev/level1` copy has the INS and time statuses, per-antenna log sources, RANGECMP5 and drop counts; the `sfg_utils` copy doesn't. Python can only reach `src/go`, and only `dev/level1` writes Iceberg.
@@ -20,7 +20,7 @@ NOV000 and NovAtel binary parsing therefore exist twice. The `dev/level1` copy h
 ## Goal
 
 - **One Go module, `src/go`,** owns raw-file parsing. It ships as one `sfg` binary with no cgo.
-- **`fileparse` is the only parser** of each raw file type. The RINEX commands and Python's Level 1 calls both go through it.
+- **`fileparse` is the only parser** of each raw file type. The RINEX commands and Python's Level 0 calls both go through it.
 - **No TileDB** remains in Go, Python, tests or build configuration.
 
 ## Phases
@@ -45,15 +45,15 @@ Each phase builds and passes its checks before the next starts.
   - Every moved test passes in `src/go`.
   - The existing `sfg` commands still pass their tests on the new gnsstools: `pkg/sfg_utils` tests, plus a RINEX conversion of one NOV000 and one NOV770 file compared with the output before the bump.
 
-### 3. One CLI for Level 1
+### 3. One CLI for Level 0
 
-- Add an `sfg level1` command group:
-  - **`parse`:** file type, scope and a path in; one Arrow IPC file per table out, plus parse counts as JSON. This is the Python hook from the Level 0 parser PRD.
+- Add an `sfg level0` command group:
+  - **`parse`:** file type, scope and a path in; one Arrow IPC file per table out, plus parse counts as JSON. This is the Python hook from the raw-file parser PRD.
   - **`ingest`:** the existing driver's behavior, with flags for data directory, warehouse, catalog type (`sql`/`glue`), region, file types and maximum number of files. It keeps the file patterns and the opt-in list for QCPIN and GNSS00 positions.
-- Remove `dev/level1/main.go`, `cmd/sfglevel1`, `sfg nov2level1` and `pkg/sfg_utils/level1_arrow.go`.
+- Remove `dev/level1/main.go`, `cmd/sfglevel0`, `sfg nov2level0` and `pkg/sfg_utils/level0_arrow.go`.
 - **Verify:**
-  - `sfg level1 ingest` on NBR1 2025 into a scratch SQL warehouse gives the same per-table row counts as the current driver.
-  - `sfg level1 parse` output passes each table's `Validate`.
+  - `sfg level0 ingest` on NBR1 2025 into a scratch SQL warehouse gives the same per-table row counts as the current driver.
+  - `sfg level0 parse` output passes each table's `Validate`.
 
 ### 4. One NovAtel parser
 
@@ -64,7 +64,7 @@ Each phase builds and passes its checks before the next starts.
 
 ### 5. Python
 
-- Point `novatel_tools/novatel_level1_operations.py` at `sfg level1 parse`, and update `tests/test_novatel_level1.py`.
+- Point `novatel_tools/novatel_level0_operations.py` at `sfg level0 parse`, and update `tests/test_novatel_level0.py`.
 - **Remove TileDB from Python:**
   - Delete `tiledb_integration/` and `tests/test_tiledb_arrays.py`.
   - Remove the TileDB references in `__init__.py`, `datamodels/observationdata/parsing/ppp.py`, `datamodels/observationdata/garpos/observables.py`, `datamodels/metadata/earthscope/catalogs.py` and `utils/system_utils.py`.
@@ -91,19 +91,19 @@ Each phase builds and passes its checks before the next starts.
   - An SLT1 2026 NOV770 (RANGECMP5) file produces no `.rnx` with either binary. That's existing behavior, not part of this change.
 
 **Phase 3 (2026-10-29): done, with one item moved to phase 5.**
-- **New commands:** `sfg level1 parse` and `sfg level1 ingest` replace the `devcmd` drivers, which are deleted.
+- **New commands:** `sfg level0 parse` and `sfg level0 ingest` replace the `devcmd` drivers, which are deleted.
   - `parse` writes `<table>.arrow` per table plus `result.json`, which holds rows per table and per log source, and the failed tables. It exits non-zero only if every table fails, or on bad arguments.
-  - `ingest` keeps the old driver's flags, file patterns and opt-in file types (QCPIN and GNSS00), and adds TCVR00. GNSS00's GSV/GSA/VTG tables therefore run only with `--types GNSS00`. That includes its GGA positions, which the deleted `sfglevel1` script left out.
+  - `ingest` keeps the old driver's flags, file patterns and opt-in file types (QCPIN and GNSS00), and adds TCVR00. GNSS00's GSV/GSA/VTG tables therefore run only with `--types GNSS00`. That includes its GGA positions, which the deleted `sfglevel0` script left out.
 - **Same results:** on NBR1 2025, one file per type, every file and table the old driver wrote gives identical row counts. The old driver stopped at TCVR00, for which it had no file pattern.
-- **Moved to phase 5:** removing `sfg nov2level1` and `level1_arrow.go`. `novatel_level1_operations.py` and its tests call `nov2level1`, including its plain NovAtel ASCII (`nova`) mode, which no `fileparse` file type covers. Removing it before Python moves would break Python. So phase 5's Python change now has to come before phase 4, which deletes `ScanFileNOV000` and the other functions `nov2level1` uses.
+- **Moved to phase 5:** removing `sfg nov2level0` and `level0_arrow.go`. `novatel_level0_operations.py` and its tests call `nov2level0`, including its plain NovAtel ASCII (`nova`) mode, which no `fileparse` file type covers. Removing it before Python moves would break Python. So phase 5's Python change now has to come before phase 4, which deletes `ScanFileNOV000` and the other functions `nov2level0` uses.
 
-**Level 1 coverage check (2026-10-29), ahead of phase 4.** Python work is on hold; the goal is that every file type parses to its tables in the catalog.
-- **Parse sweep:** `sfg level1 parse` ran on 426 distinct files from 17 campaigns, 2022–2026: every AHRS00, DFOP00, GNSS00, TCVR00 and CTD file, and up to 4 spread-out NOV000, NOV770 and QCPIN files per campaign. None failed. Every empty table matches its raw file:
+**Level 0 coverage check (2026-10-29), ahead of phase 4.** Python work is on hold; the goal is that every file type parses to its tables in the catalog.
+- **Parse sweep:** `sfg level0 parse` ran on 426 distinct files from 17 campaigns, 2022–2026: every AHRS00, DFOP00, GNSS00, TCVR00 and CTD file, and up to 4 spread-out NOV000, NOV770 and QCPIN files per campaign. None failed. Every empty table matches its raw file:
   - NOV000 and NOV770 files at the start of a session log only `UNKNOWN` time (week 0).
   - Some DFOP00 files have only zero ranges (no reply), interrogations only, or an `ERR3` GNSS block throughout.
   - Some TCVR00 files hold only setting exchanges.
   - 2024 NOV000 files log no INSSTDEVA.
-- **Catalog check:** `sfg level1 ingest` ran on all 17 campaigns (2 files per type, all types) into one SQL warehouse. All 13 tables were read back with pyiceberg/pyarrow. Stored rows equal ingested rows, except one identical record that consecutive DFOP00 files share at their boundary, which replace-on-append deduplicates. All times fall between 2021 and 2026.
+- **Catalog check:** `sfg level0 ingest` ran on all 17 campaigns (2 files per type, all types) into one SQL warehouse. All 13 tables were read back with pyiceberg/pyarrow. Stored rows equal ingested rows, except one identical record that consecutive DFOP00 files share at their boundary, which replace-on-append deduplicates. All times fall between 2021 and 2026.
 - **Fixed:**
   - **Week-0 NovAtel logs.** A receiver adjusting its clock logs `COARSEADJUSTING` with week 0. Those INSPVAA/INSSTDEVA rows landed in 1980, so each file's replace window started in 1980 and deleted every earlier file's rows in its stream; NDP1 2023 lost 23,693 rows per table. NOV000 and NOV770 now also skip logs with week 0.
   - **Local partition paths.** iceberg-go's `LocalFS` percent-decodes `file://` paths. `gnss_observations` data, partitioned on `stream_edid`, was therefore written under `…:…` while manifests record `…%3A…`, and pyiceberg could not open it. `catalog` now registers a `file://` IO that uses paths as written, as iceberg-go's S3 IO already does, so Glue was never affected. Local warehouses written before this, such as `Data/ICEBERG_L1`, need re-ingesting.
@@ -124,7 +124,7 @@ It pins this package to commit `8e64f62` with the `tiledb` and `iceberg` extras.
 
 ## Out of scope
 
-- **RINEX from stored data.** `tdb2rnx` (TileDB → RINEX) goes away. Its replacement was added on 2026-10-29: `Catalog.WriteRINEX` and `sfg level1 rinex` write one GPS day of one `gnss_observations` stream.
+- **RINEX from stored data.** `tdb2rnx` (TileDB → RINEX) goes away. Its replacement was added on 2026-10-29: `Catalog.WriteRINEX` and `sfg level0 rinex` write one GPS day of one `gnss_observations` stream.
   - **Check:** NBR1 2025-09-15 (NOV000 RANGEA, 20 Hz) was compared with `nov0002rnx` on the same 16 files. All 40,017,492 fields in the 399,924 common epochs are identical.
   - **Extra epochs:** the catalog file also has the day's first 93 epochs (00:00:00–00:00:18.4 GPST). They come from the previous day's last raw file, and `nov0002rnx` writes them to neither of its files.
   - **Cost:** 7 s and 6.0 GB peak, against 26 s and 5.9 GB for `nov0002rnx`. Both hold the day's epochs, because a RINEX 3/4 header needs them all before the first epoch is written.
@@ -133,7 +133,7 @@ It pins this package to commit `8e64f62` with the `tiledb` and `iceberg` extras.
     - The catalog file gives 19 more 1 s epochs (00:00:00–00:00:18) and fixes 2 more narrow-lane ambiguities: 256 of 352 (72.7%) against 254 (72.2%). Wide-lane fixing is 97.0% in both.
     - On the 79,869 shared epochs the median 3D difference is 0.1 mm. Hours 00–01 differ by up to 27 cm and 8 cm, where the two solutions fixed different ambiguities. From 03:00 on, no epoch differs by more than 0.5 mm.
 - **Moving generic NovAtel decoding into gnsstools** (INSPVAA/INSSTDEVA, BESTPOS). Worth doing later; Sonardyne, GPSA, SV3 and NMEA stay here.
-- **The Level 0 parser PRD's remaining API:** per-table counts in the result, and partial-failure handling. Phase 3's `parse` command reports the counts parsers already return; reworking the API follows the PRD separately. The PRD's log-source selection was dropped on 2026-10-29: parse functions map file type → table and return every log source.
+- **The raw-file parser PRD's remaining API:** per-table counts in the result, and partial-failure handling. Phase 3's `parse` command reports the counts parsers already return; reworking the API follows the PRD separately. The PRD's log-source selection was dropped on 2026-10-29: parse functions map file type → table and return every log source.
 
 ## Open questions
 

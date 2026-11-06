@@ -18,6 +18,7 @@ import pytest
 from earthscope_sfg_tools.catalog.posfilter import (
     SolverOptions,
     export_posfilter,
+    inspva_positions,
     insstdev_sigmas,
     internal_delays,
     novatel_crc32,
@@ -26,6 +27,7 @@ from earthscope_sfg_tools.catalog.posfilter import (
 from earthscope_sfg_tools.catalog.site import PosfilterSite, PosfilterTransponder
 from earthscope_sfg_tools.catalog.timescales import utc_to_j2000
 from earthscope_sfg_tools.datamodels.iceberg.schemas import Scope
+from pymap3d import ecef2geodetic
 
 SCOPE = Scope("cascadia-gorda", "NBR1", "2025_A_1126")
 T0 = datetime(2025, 9, 15, 3, 0, tzinfo=timezone.utc)
@@ -59,11 +61,16 @@ def frames() -> dict[str, pd.DataFrame]:
             "roll": 1.5, "pitch": -0.25, "heading": 270.125,
             "ins_status": ["INS_SOLUTION_GOOD"] * (n - 1) + ["INS_ALIGNMENT_COMPLETE"],
             "time_status": ["FINESTEERING"] * n,
+            "stream_edid": "cascadia-gorda.NBR1.2025_A_1126.NOV000.INSPVAA",
         }
     )  # fmt: skip
+    # DFOP00's NOV_INS blocks: the INS solution at the pings, the first twice
+    # (the ping and its reply).
+    at_pings = inspva.iloc[[0, 0, 2, 4]].assign(stream_edid="cascadia-gorda.NBR1.2025_A_1126.DFOP00.INSPVAA")
+    inspva = pd.concat([inspva, at_pings], ignore_index=True)
     insstdev = pd.DataFrame(
         {
-            "time": inspva["time"],
+            "time": [ts(i * 0.05) for i in range(n)],
             "lat_sig": 1.9, "lon_sig": 1.7, "alt_sig": 2.2,
             "north_sig": 0.05, "east_sig": 0.048, "up_sig": 0.05,
             "cov_rr": 0.03, "cov_pp": 0.035, "cov_hh": 0.4,
@@ -76,7 +83,7 @@ def frames() -> dict[str, pd.DataFrame]:
             "time": [ts(0.0), ts(0.1), ts(0.2)],
             "ant_x": -2724772.3610, "ant_y": -3875256.6762, "ant_z": 4256304.9697,
             "ant_sigx": [12.3, None, 12.1], "ant_sigy": [15.9, None, 15.8], "ant_sigz": [17.7, None, 17.6],
-            "stream_edid": "cascadia-gorda:NBR1:2025_A_1126:DFOP00:DFOP00",
+            "stream_edid": "cascadia-gorda.NBR1.2025_A_1126.QCPIN.GNSSINS",
         }
     )  # fmt: skip
     # Two pings: the first answered by all three, the second by NBR1-1 only.
@@ -94,14 +101,14 @@ def frames() -> dict[str, pd.DataFrame]:
             "time": [pd.Timestamp("2023-01-01", tz="UTC")] * 3,
             "depth": [0.0, 1.0, 2.0],
             "speed": [1505.09, 1505.79, 1505.82],
-            "stream_edid": "cascadia-gorda:NBR1:2025_A_1126:CTD:CTD",
+            "stream_edid": "cascadia-gorda.NBR1.2025_A_1126.CTD.CTD",
         }
     )
     return {"inspva": inspva, "insstdev": insstdev, "gnss_antenna_positions": gps, "travel_times": tt, "sound_speed": sv}
 
 
 class FakeReader:
-    """Level1Reader stand-in serving the frames above."""
+    """Level0Reader stand-in serving the frames above."""
 
     def __init__(self, data):
         self.data = data
@@ -123,13 +130,15 @@ def test_export_files(tmp_path):
     reader = FakeReader(frames())
     s = export_posfilter(reader, SITE, SCOPE, tmp_path)
 
+    # The DFOP00 inspva rows are the positions, not part of INSPVAA.dat.
     assert (s.inspva_rows, s.inspva_good) == (6, 5)
     assert (s.insstdev_rows, s.insstdev_good) == (6, 5)
-    assert (s.gps_rows, s.gps_dropped_no_sigma) == (2, 1)
+    assert (s.gps_rows, s.gps_dropped_no_sigma) == (3, 0)
+    assert (s.gps_table, s.gps_sigmas) == ("inspva", "insstdev")
     assert (s.pings, s.replies) == (2, 4)
     assert s.internal_delays == {"NBR1-1": 0.08, "NBR1-2": 0.36, "NBR1-3": 0.64}
     assert s.sound_speed_rows == 3
-    assert ("gnss_antenna_positions", {"file_type": "DFOP00"}) in reader.calls
+    assert "gnss_antenna_positions" not in [table for table, _ in reader.calls]
 
     line = (tmp_path / "INSPVAA.dat").read_text().splitlines()[0]
     text, crc = line[1:].split("*")
@@ -143,8 +152,11 @@ def test_export_files(tmp_path):
     assert pxp[0][1:] == ["2404127", "2731003", "2882345"]
     assert pxp[1][1:] == ["2420000", "0", "0"]
 
-    gps = (tmp_path / "GPS_POS_FREED").read_text().splitlines()
-    assert len(gps) == 2 and gps[0].split()[1] == "GPSPOS"
+    gps = [ln.split() for ln in (tmp_path / "GPS_POS_FREED").read_text().splitlines()]
+    assert len(gps) == 3 and gps[0][1] == "GPSPOS"
+    assert float(gps[1][0]) == pytest.approx(utc_to_j2000(ts(0.1))[0], abs=1e-6)
+    sig = np.array([[float(v) for v in ln[5:]] for ln in gps])
+    np.testing.assert_allclose((sig**2).sum(axis=1), 1.9**2 + 1.7**2 + 2.2**2, atol=1e-3)
     assert (tmp_path / "sound_speed.txt").read_text().splitlines()[1] == "-1.0000 1505.790000"
 
     cfg = json.loads((tmp_path / "config.yaml").read_text())
@@ -168,6 +180,24 @@ def test_solver_section(tmp_path):
         export_posfilter(FakeReader(no_sv), SITE, SCOPE, tmp_path, solver=SolverOptions())
 
 
+def test_inspva_positions():
+    f = frames()
+    pos = inspva_positions(f["inspva"].iloc[[6, 7, 8]])
+    assert len(pos) == 2  # the repeated block once
+    lat, lon, alt = ecef2geodetic(*pos[["ant_x", "ant_y", "ant_z"]].to_numpy()[0])
+    assert (lat, lon, alt) == (pytest.approx(42.13), pytest.approx(-125.11), pytest.approx(-31.9, abs=1e-6))
+    assert pos[["ant_sigx", "ant_sigy", "ant_sigz"]].isna().all().all()
+
+
+def test_export_without_dfop00_inspva(tmp_path):
+    f = frames()
+    f["inspva"] = f["inspva"].iloc[:6]
+    with pytest.raises(ValueError, match="no DFOP00 inspva rows"):
+        export_posfilter(FakeReader(f), SITE, SCOPE, tmp_path)
+    with pytest.raises(ValueError, match="no sigmas"):
+        export_posfilter(FakeReader(frames()), SITE, SCOPE, tmp_path, position_sigmas="logged")
+
+
 def test_insstdev_sigmas():
     f = frames()
     gps = pd.concat([f["gnss_antenna_positions"], f["gnss_antenna_positions"].iloc[[0]].assign(time=ts(10))])
@@ -180,8 +210,17 @@ def test_insstdev_sigmas():
     assert np.isnan(sig[3]).all()  # no insstdev row within 1 s
 
 
+def test_export_gnss_antenna_positions(tmp_path):
+    reader = FakeReader(frames())
+    s = export_posfilter(reader, SITE, SCOPE, tmp_path, positions="QCPIN")
+    assert ("gnss_antenna_positions", {"file_type": "QCPIN"}) in reader.calls
+    # Every inspva row is the INS stream; the row without sigmas is dropped.
+    assert s.inspva_rows == 10
+    assert (s.gps_rows, s.gps_dropped_no_sigma, s.gps_table, s.gps_sigmas) == (2, 1, "gnss_antenna_positions", "logged")
+
+
 def test_export_insstdev_sigmas(tmp_path):
-    s = export_posfilter(FakeReader(frames()), SITE, SCOPE, tmp_path, position_sigmas="insstdev")
+    s = export_posfilter(FakeReader(frames()), SITE, SCOPE, tmp_path, positions="QCPIN", position_sigmas="insstdev")
     # The row without logged sigmas now has INS sigmas and is kept.
     assert (s.gps_rows, s.gps_dropped_no_sigma, s.gps_sigmas) == (3, 0, "insstdev")
     sigs = [[float(v) for v in ln.split()[5:]] for ln in (tmp_path / "GPS_POS_FREED").read_text().splitlines()]
@@ -252,12 +291,13 @@ def test_gnatss_round_trip(tmp_path):
     got = json.loads(out.stdout.strip().splitlines()[-1])
 
     f = frames()
+    f["inspva"] = f["inspva"].iloc[:6]  # NOV000
     good = f["inspva"]["ins_status"] == "INS_SOLUTION_GOOD"
     # GNATSS's own J2000 (astropy, from week/seconds) equals ours to the µs.
     np.testing.assert_allclose(got["pva_time"], utc_to_j2000(f["inspva"]["time"][good]), atol=1e-6)
     assert got["pva_heading"] == [270.125] * int(good.sum())
     assert got["std_n"] == 5
-    np.testing.assert_allclose(got["gps_time"], utc_to_j2000(f["gnss_antenna_positions"]["time"].iloc[[0, 2]]), atol=1e-6)
+    np.testing.assert_allclose(got["gps_time"], utc_to_j2000(pd.Series([ts(0.0), ts(0.1), ts(0.2)])), atol=1e-6)
     assert got["gps_cols"][:4] == ["time", "ant_x", "ant_y", "ant_z"]
     assert got["tt"]["NBR1-1"] == [pytest.approx(2.404127), pytest.approx(2.42)]
     assert got["sv_n"] == 3

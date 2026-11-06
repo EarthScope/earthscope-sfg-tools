@@ -9,12 +9,12 @@ import pytest
 pytest.importorskip("pyiceberg")
 
 from earthscope_sfg_tools.datamodels.iceberg.schemas import (  # noqa: E402
+    COMMUNITY_STANDARD_L1,
     COMMUNITY_STANDARD_L2,
-    COMMUNITY_STANDARD_L3,
+    GARPOS_L1,
     GARPOS_L2,
-    GARPOS_L3,
     GNSS_OBSERVATIONS,
-    LEVEL1_TABLES,
+    LEVEL0_TABLES,
     SCOPE_NAMES,
     SOUND_SPEED,
     TABLES,
@@ -44,8 +44,8 @@ def test_default_partitioning_is_scope_identity(table):
 
 
 @pytest.mark.parametrize("table", TABLES.values(), ids=lambda t: t.qualified_name)
-def test_log_source_only_on_level1(table):
-    assert ("Log_Source" in table.column_names) == (table in LEVEL1_TABLES)
+def test_log_source_only_on_level0(table):
+    assert ("Log_Source" in table.column_names) == (table in LEVEL0_TABLES)
 
 
 def test_constraints_carried_on_columns():
@@ -159,11 +159,11 @@ def test_tables_create_in_sql_catalog(table, tmp_path):
 
 
 def test_levels_map_to_namespaces():
-    assert TRAVEL_TIMES.qualified_name == "gnssa_l1.travel_times"
+    assert TRAVEL_TIMES.qualified_name == "gnssa_l0.travel_times"
+    assert GARPOS_L1.identifier == ("gnssa_l1", "garpos")
     assert GARPOS_L2.identifier == ("gnssa_l2", "garpos")
-    assert GARPOS_L3.identifier == ("gnssa_l3", "garpos")
-    assert COMMUNITY_STANDARD_L2.name == COMMUNITY_STANDARD_L3.name
-    assert {t.namespace for t in LEVEL1_TABLES} == {"gnssa_l1"}
+    assert COMMUNITY_STANDARD_L1.name == COMMUNITY_STANDARD_L2.name
+    assert {t.namespace for t in LEVEL0_TABLES} == {"gnssa_l0"}
 
 
 def test_scope_filter_uses_table_scope_columns():

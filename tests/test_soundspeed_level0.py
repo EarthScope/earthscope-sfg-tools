@@ -1,4 +1,4 @@
-"""Tests for the sound speed Level 1 parsers."""
+"""Tests for the sound speed Level 0 parsers."""
 
 from datetime import UTC, datetime
 
@@ -8,7 +8,7 @@ pytest.importorskip("pyiceberg")
 pytest.importorskip("pyarrow")
 
 from earthscope_sfg_tools.datamodels.iceberg.schemas import Scope  # noqa: E402
-from earthscope_sfg_tools.seafloor_site_tools.soundspeed_level1_operations import (  # noqa: E402
+from earthscope_sfg_tools.seafloor_site_tools.soundspeed_level0_operations import (  # noqa: E402
     ctd_to_sound_speed,
 )
 

@@ -21,9 +21,9 @@ Durable decisions that apply across all phases:
   - Sources and sinks are library code, testable without the binary.
 - **Selection:**
   - Selection uses the existing catalog `Selection`: scope, file type, log source, a `[start, end)` window, and columns.
-  - For Level 2/3 tables, the file type is the product and the log source is its input.
+  - For Level 1/2 tables, the file type is the product and the log source is its input.
 - **Stream identity:**
-  - A stream is identified by `stream_edid` (`network:station:campaign:file_type:log_source`, or `DerivedEDID` for Level 2/3).
+  - A stream is identified by `stream_edid` (`network.station.campaign.file_type.log_source`, or `DerivedEDID` for Level 1/2).
   - Iceberg writes use replace-on-append keyed by `stream_edid` and the table's time column.
 - **Result document:**
   - Written to `--result PATH|-`. It is versioned (`schema`) and only ever extended.
@@ -76,10 +76,10 @@ A raw source:
 - `--source-uri` is a file, a glob or a directory.
 - With a directory, each `--source-type` uses its filename pattern to find files (QC PIN files under `qc/`). `--max-files` caps how many files of each type are read.
 - Every file the run chose is listed in `inputs[]`.
-- The type's Level 1 parsers run, and their output is filtered by `--table` and `--log-source`.
+- The type's Level 0 parsers run, and their output is filtered by `--table` and `--log-source`.
 - A file that fails to parse is recorded and the run continues.
 
-Paired with the Phase 1 files sink, this replaces `level1 parse`.
+Paired with the Phase 1 files sink, this replaces `level0 parse`.
 
 ### Acceptance criteria
 
@@ -87,13 +87,13 @@ Paired with the Phase 1 files sink, this replaces `level1 parse`.
 - [x] `--table` and `--log-source` limit the output.
 - [x] A directory source lists exactly the files chosen; with `--max-files`, each type stops at the cap.
 - [x] A corrupt file is reported in `errors[]`, the other files are written, and the exit code is 3.
-- [x] `level1 parse` is gone.
+- [x] `level0 parse` is gone.
 
-Status 2026-11-02: `--source raw` takes `--source-type` (one or more), and optionally `--table`, `--log-source` and `--max-files`; `--start`, `--end`, `--columns` and `--source-catalog` are rejected. It needs the full `--scope`. A file or glob takes exactly one type. Each table is written once with the rows of every file and type that feeds it; a file is parsed once per table. A file that fails is recorded in `inputs[]` (status `failed`) and `errors[]` (stage `parse`) and skipped. No files at all is fatal (exit 1). The filename patterns moved to `convert.Patterns`, shared with `level1 ingest` until Phase 3 removes it.
+Status 2026-11-02: `--source raw` takes `--source-type` (one or more), and optionally `--table`, `--log-source` and `--max-files`; `--start`, `--end`, `--columns` and `--source-catalog` are rejected. It needs the full `--scope`. A file or glob takes exactly one type. Each table is written once with the rows of every file and type that feeds it; a file is parsed once per table. A file that fails is recorded in `inputs[]` (status `failed`) and `errors[]` (stage `parse`) and skipped. No files at all is fatal (exit 1). The filename patterns moved to `convert.Patterns`, shared with `level0 ingest` until Phase 3 removes it.
 
 Real-data check: GCC1 2025_A_1126's 8 DFOP00 files to Parquet in 13 s: `travel_times` 98,683 rows (equal to Glue), `attitude_ahrs` 136,745 and `gnss_antenna_positions` 118,213, one more than Glue in each. Those are the known one-row file-boundary overlaps that replace-on-append collapses on ingest; raw → files keeps every parsed row.
 
-`dev/iceberg_level1.py` still calls `level1 parse`; it's a Python dev harness (Python is on hold), so it was left as is.
+`dev/iceberg_level0.py` still calls `level0 parse`; it's a Python dev harness (Python is on hold), so it was left as is.
 
 ---
 
@@ -108,7 +108,7 @@ An Iceberg sink over SQL and Glue:
 - Writes use replace-on-append. Missing namespaces and tables are created, and older schemas are evolved.
 - The region comes from `--region` or the AWS environment.
 
-This replaces `level1 ingest`, with scope and file types now given explicitly.
+This replaces `level0 ingest`, with scope and file types now given explicitly.
 
 ### Acceptance criteria
 
@@ -116,13 +116,13 @@ This replaces `level1 ingest`, with scope and file types now given explicitly.
 - [x] A bad file gives a partial result with exit code 3; the good files' streams are committed.
 - [x] `outputs[]` names each table written, with its row count; `streams[]` has each stream's rows and time span.
 - [x] One GCC1 campaign ingested into a local SQL warehouse matches the earlier ingest's per-stream row counts.
-- [x] `level1 ingest` is gone.
+- [x] `level0 ingest` is gone.
 
-Status 2026-11-02: sources now hand sinks *groups* (`convert.Group`: an Arrow table plus the file it came from) instead of record batches. A raw source makes one group per parsed file; the Iceberg sink appends each group as one snapshot (`catalog.Append`), so replace-on-append works per file as `level1 ingest` did, and the snapshot summary records the source file and its SHA-256 (`catalog.WithSource`, which ingest never used). The sink creates every table it's handed, even one with no rows. `--sink-catalog sql|glue` is required; `--table-format` is rejected. Iceberg → Iceberg is a usage error until Phase 4. Unlike `level1 ingest`, there's no default set of file types: `--source-type` lists them. `outputs[].rows` counts rows appended, before the one-row file-boundary replacements.
+Status 2026-11-02: sources now hand sinks *groups* (`convert.Group`: an Arrow table plus the file it came from) instead of record batches. A raw source makes one group per parsed file; the Iceberg sink appends each group as one snapshot (`catalog.Append`), so replace-on-append works per file as `level0 ingest` did, and the snapshot summary records the source file and its SHA-256 (`catalog.WithSource`, which ingest never used). The sink creates every table it's handed, even one with no rows. `--sink-catalog sql|glue` is required; `--table-format` is rejected. Iceberg → Iceberg is a usage error until Phase 4. Unlike `level0 ingest`, there's no default set of file types: `--source-type` lists them. `outputs[].rows` counts rows appended, before the one-row file-boundary replacements.
 
-Real-data check: GCC1 2025_A_1126, 146 files of NOV000, NOV770, TCVR00, DFOP00, AHRS00, GNSS00 and CTD, into a fresh local SQL warehouse in 10 min, exit 0, no failed files. All 17 streams in the 13 Level 1 tables match the Glue test catalog row for row (compared through `sfg convert --columns stream_edid,<time column>` on both sides), e.g. NOV770 RANGECMPB 157,811,451 and NOV000 RANGEA 61,772,142. Peak RSS was 35 GB; earlier `level1 ingest` runs in this session peaked at 14–24 GB, so memory under Append is a standing issue for Phase 10's `-j`, not new here.
+Real-data check: GCC1 2025_A_1126, 146 files of NOV000, NOV770, TCVR00, DFOP00, AHRS00, GNSS00 and CTD, into a fresh local SQL warehouse in 10 min, exit 0, no failed files. All 17 streams in the 13 Level 0 tables match the Glue test catalog row for row (compared through `sfg convert --columns stream_edid,<time column>` on both sides), e.g. NOV770 RANGECMPB 157,811,451 and NOV000 RANGEA 61,772,142. Peak RSS was 35 GB; earlier `level0 ingest` runs in this session peaked at 14–24 GB, so memory under Append is a standing issue for Phase 10's `-j`, not new here.
 
-`pkg/sink` is now used by no command (`sink.Iceberg` was only `level1 ingest`'s); it can be removed separately.
+`pkg/sink` is now used by no command (`sink.Iceberg` was only `level0 ingest`'s); it can be removed separately.
 
 ---
 
@@ -175,7 +175,7 @@ A RINEX sink fed by the Iceberg source:
 - Days the data only partly covers are flagged `partial` in `outputs[]`.
 - The epoch grouping moves out of the current catalog RINEX writer into code that Phase 7 will share. Headers use only `--settings` JSON and defaults until Phase 6.
 
-This replaces `level1 rinex`.
+This replaces `level0 rinex`.
 
 ### Acceptance criteria
 
@@ -183,7 +183,7 @@ This replaces `level1 rinex`.
 - [ ] Tests cover multi-day and cross-midnight bucketing, modulo decimation, long names and the partial-day flag.
 - [ ] Compressed output decompresses to the uncompressed file.
 - [ ] Manual check: three days of GCC1 NOV770 RANGECMP5B from Glue at 1 Hz produce three daily files.
-- [ ] `level1 rinex` is gone.
+- [ ] `level0 rinex` is gone.
 
 ---
 
@@ -213,7 +213,7 @@ Flag names match `gnss-convert`.
 
 ### What to build
 
-The raw source feeding the RINEX sink through the Level 1 parsers. The antenna is chosen by log source (`RANGECMP5B` or `RANGECMP5B_1`). Once parity is shown, `nov0002rnx`, `novb2rnx` and `nov2level1` are removed, along with the `sfg_utils` decoders that only they use.
+The raw source feeding the RINEX sink through the Level 0 parsers. The antenna is chosen by log source (`RANGECMP5B` or `RANGECMP5B_1`). Once parity is shown, `nov0002rnx`, `novb2rnx` and `nov2level0` are removed, along with the `sfg_utils` decoders that only they use.
 
 ### Acceptance criteria
 
@@ -230,7 +230,7 @@ The raw source feeding the RINEX sink through the Level 1 parsers. The antenna i
 
 ### What to build
 
-A raw type for bare NovAtel ASCII logs: RANGEA, plus INSPVAA and INSSTDEVA where present, parsed into the existing Level 1 tables. It works with every sink. Once parity is shown, `nova2rnx` is removed.
+A raw type for bare NovAtel ASCII logs: RANGEA, plus INSPVAA and INSSTDEVA where present, parsed into the existing Level 0 tables. It works with every sink. Once parity is shown, `nova2rnx` is removed.
 
 ### Acceptance criteria
 

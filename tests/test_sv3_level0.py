@@ -1,4 +1,4 @@
-"""Tests for the Sonardyne SV3 Level 1 parsers."""
+"""Tests for the Sonardyne SV3 Level 0 parsers."""
 
 import json
 import logging
@@ -16,7 +16,7 @@ from earthscope_sfg_tools.datamodels.iceberg.schemas import (  # noqa: E402
     TRAVEL_TIMES,
     Scope,
 )
-from earthscope_sfg_tools.sonardyne_tools.sv3_level1_operations import (  # noqa: E402
+from earthscope_sfg_tools.sonardyne_tools.sv3_level0_operations import (  # noqa: E402
     _enu_sigmas_to_ecef,
     dfop00_to_attitude_ahrs,
     dfop00_to_gnss_antenna_positions,
@@ -33,18 +33,18 @@ SCOPE = Scope("cascadia-gorda", "GCC1", "2025_A_1126")
 
 
 @pytest.mark.parametrize(
-    "parse, table",
+    "parse, table, log_source",
     [
-        (dfop00_to_travel_times, TRAVEL_TIMES),
-        (dfop00_to_gnss_antenna_positions, GNSS_ANTENNA_POSITIONS),
-        (dfop00_to_attitude_ahrs, ATTITUDE_AHRS),
+        (dfop00_to_travel_times, TRAVEL_TIMES, "INTG-RPLY"),
+        (dfop00_to_gnss_antenna_positions, GNSS_ANTENNA_POSITIONS, "GNSSINS"),
+        (dfop00_to_attitude_ahrs, ATTITUDE_AHRS, "AHRS"),
     ],
 )
-def test_dfop00_parsers_match_iceberg_schema(parse, table):
+def test_dfop00_parsers_match_iceberg_schema(parse, table, log_source):
     result = parse(DFOP00, SCOPE)
     assert result.num_rows > 0
     assert result.schema.equals(table.schema.as_arrow())
-    assert set(result.column("Log_Source").to_pylist()) == {"DFOP00"}
+    assert set(result.column("Log_Source").to_pylist()) == {log_source}
     assert set(result.column("Station").to_pylist()) == {"GCC1"}
 
 
@@ -70,7 +70,7 @@ def test_travel_times_keep_raw_range():
 
 def test_travel_times_keep_no_reply_events():
     # Transponders that did not reply log range 0.0, stamped at the ping or at
-    # the reply timeout. Level 1 keeps them; Level 2 drops them as the
+    # the reply timeout. Level 0 keeps them; Level 1 drops them as the
     # shot-data pipeline does today.
     rows = dfop00_to_travel_times(DFOP00, SCOPE).to_pylist()
     no_reply = [r for r in rows if r["TravelTime"] == 0]
@@ -98,7 +98,7 @@ def test_qcpin_travel_times(tmp_path):
 
     table = qcpin_to_travel_times(path, SCOPE)
     assert table.num_rows == len(qcpin) - 1
-    assert set(table.column("Log_Source").to_pylist()) == {"QCPIN"}
+    assert set(table.column("Log_Source").to_pylist()) == {"INTG-RPLY"}
 
 
 def test_gnss_error_code_keeps_event(tmp_path):

@@ -4,7 +4,7 @@ Working Group: @Franklyn Dunbar @Mike Gottlieb @Rachel Akie
 
 This document is a proposal for extending current utilities to support GNSS-A data processing with GNATSS, and to move away from TileDB-oriented data lakes in favor of Apache Iceberg.
 
-**TLDR:** We want to create Iceberg tables for the assorted log types that are relevant to GNSS-A. Rows will contain the data, source file type, and scope (network, station, campaign). We will partition the warehouse by network, station, campaign. We can perform downstream pre-processing from these Level 1 data (i.e. PPP from the GNSS logs, GNSS-A in GARPOS/GNATSS format).
+**TLDR:** We want to create Iceberg tables for the assorted log types that are relevant to GNSS-A. Rows will contain the data, source file type, and scope (network, station, campaign). We will partition the warehouse by network, station, campaign. We can perform downstream pre-processing from these Level 0 data (i.e. PPP from the GNSS logs, GNSS-A in GARPOS/GNATSS format).
 
 It was noted in the last meeting that we are going to prefer INS\* logs from the AHRS NovAtel files for waveglider attitude, which makes 'Posfilter mode' the most straightforward approach for using GNATSS.
 
@@ -16,26 +16,26 @@ Before finalizing the schemas (see Schemas at the end of this doc), several cros
 
 1. **Standardized time column.** Every table carries a `time` column (or, where a row spans two distinct instants — travel times, GARPOS — the existing named columns, e.g. `T_transmit`/`T_receive`) as `timestamptz`, UTC, microsecond precision. No separate stored "scientific timescale" column — GNATSS's TT/J2000 scale, GPS time, GPS-week+TOW, and GARPOS's seconds-of-day are all derived by the API at read time. They're annoying. **Exception:** `gnss_observations.epoch` holds GPS time (no leap-second shift), because the table follows the gnsstools `observations` layout and gnsstools readers/RINEX writers assume GPST there. NovAtel INS logs (INSPVA, INSSTDEV) are converted from GPS time to UTC at ingest, and logs with header time status `UNKNOWN` (no time fix yet) are dropped.
 2. **Scope fields.** Every table carries exactly `Network`, `Station`, `Campaign` — matching the warehouse partitioning scheme.
-3. **Log\_Source.** Present on every Level 1 (raw, single-source) table; intentionally absent from the Level 2/3 derived tables (GARPOS format, Community standard format), since a merged/derived row can combine more than one source log.
-4. **Sampling rate.** Level 1 tables stay at their native sampling rate (true to "Level 1 = raw parsed output") — no resampling onto a shared grid at ingest.
-5. **Raw vs. corrected travel time.** Level 1 stores the raw two-way range and `tat` as logged. The `− tat − trigger_delay` correction is applied when building Level 2 (GARPOS `TT`, Community `TravelTime`). The trigger delay stays hardcoded in the processing logic; it is not stored in the catalog.
-6. **Coordinates.** Level 1 antenna positions and the Community standard tables are ECEF. The GARPOS tables store GARPOS's native local ENU (`ant_e/n/u`, relative to the site array center), georectified by the API at build time from the site metadata. Position uncertainties are stored as ECEF std devs in metres, rotated from the logged ENU std devs at ingest; `rho_xy/xz/yz` correlations are not stored for now (GNATSS defaults them to 0).
-7. **SV3 observation blocks.** The `GNSS` fix embedded in SV3 events is the source for the Level 1 antenna-position table. `NOV_INS` and `NOV_HEADING` are not stored for now — attitude comes from INSPVA.
+3. **Log\_Source.** Present on every Level 0 (raw, single-source) table; intentionally absent from the Level 1/2 derived tables (GARPOS format, Community standard format), since a merged/derived row can combine more than one source log.
+4. **Sampling rate.** Level 0 tables stay at their native sampling rate (true to "Level 0 = raw parsed output") — no resampling onto a shared grid at ingest.
+5. **Raw vs. corrected travel time.** Level 0 stores the raw two-way range and `tat` as logged. The `− tat − trigger_delay` correction is applied when building Level 1 (GARPOS `TT`, Community `TravelTime`). The trigger delay stays hardcoded in the processing logic; it is not stored in the catalog.
+6. **Coordinates.** Level 0 antenna positions and the Community standard tables are ECEF. The GARPOS tables store GARPOS's native local ENU (`ant_e/n/u`, relative to the site array center), georectified by the API at build time from the site metadata. Position uncertainties are stored as ECEF std devs in metres, rotated from the logged ENU std devs at ingest; `rho_xy/xz/yz` correlations are not stored for now (GNATSS defaults them to 0).
+7. **SV3 observation blocks.** The `GNSS` fix embedded in SV3 events is the source for the Level 0 antenna-position table. `NOV_INS` and `NOV_HEADING` are not stored for now — attitude comes from INSPVA.
 
 ### Type conventions
 
 Types in the schemas are Iceberg primitive types: `string`, `int` (32-bit), `long` (64-bit), `float` (32-bit), `double` (64-bit), `boolean`, `timestamptz` (µs, UTC). Fields parsed as Python `Decimal` today (SV3/Sonardyne models) are stored as `double` — Iceberg `decimal(p,s)` would need a fixed precision/scale per column and buys nothing at sensor precision. Constraints are carried over from the existing pandera/pydantic models and should be enforced at ingest.
 
-Every table in Schemas also carries the three scope columns and (Level 1 only) `Log_Source`; they are listed in full in the first schema and abbreviated as *scope* afterwards:
+Every table in Schemas also carries the three scope columns and (Level 0 only) `Log_Source`; they are listed in full in the first schema and abbreviated as *scope* afterwards:
 
 | Field | Type | Constraints | Description |
 | --- | --- | --- | --- |
 | `Network` | `string` | required | Network identifier |
 | `Station` | `string` | required | Station identifier |
 | `Campaign` | `string` | required | Campaign identifier |
-| `Log_Source` | `string` | required (Level 1 only) | Source log file or log type |
+| `Log_Source` | `string` | required (Level 0 only) | Source log file or log type |
 
-## Level 1 Tables
+## Level 0 Tables
 
 - Two way travel times (per transponder)
 - GNSS pseudo range antenna positions
@@ -45,7 +45,7 @@ Every table in Schemas also carries the three scope columns and (Level 1 only) `
 - Sonardyne Roll/Pitch/Heading (AHRS) logs
 - Sound speed — we can add scope to the rows, the partitioning should keep things separate as well.
 
-## Level 2 Tables
+## Level 1 Tables
 
 - GNSS antenna positions (PPP kinematic solution)
 - GNSS-A Community standard format data (pseudo range antenna positions)
@@ -53,14 +53,14 @@ Every table in Schemas also carries the three scope columns and (Level 1 only) `
 
 For now we should just use separate tables for GNSS-A data that has been 'updated' with PPP kinematic solutions.
 
-## Level 3 Tables
+## Level 2 Tables
 
-- GNSS-A Community standard format data (with antenna positions sourced from Level 2 GNSS antenna positions)
-- GNSS-A GARPOS format data (with antenna positions sourced from Level 2 GNSS antenna positions)
+- GNSS-A Community standard format data (with antenna positions sourced from Level 1 GNSS antenna positions)
+- GNSS-A GARPOS format data (with antenna positions sourced from Level 1 GNSS antenna positions)
 
 ## Access API
 
-The API sits between the Iceberg tables and the processing codes (GNATSS, GARPOS). It builds the Level 2 and Level 3 tables from Level 1 and produces the export formats (GNATSS posfilter ascii, GARPOS csv, time-scale conversions). How it does this will be specified separately; this document covers the catalog only.
+The API sits between the Iceberg tables and the processing codes (GNATSS, GARPOS). It builds the Level 1 and Level 2 tables from Level 0 and produces the export formats (GNATSS posfilter ascii, GARPOS csv, time-scale conversions). How it does this will be specified separately; this document covers the catalog only.
 
 ## Schemas
 
@@ -70,7 +70,7 @@ Source files: Sonardyne DFOP00 JSONL (`range` and `interrogation` events); Sonar
 
 Parsed today into: `SonardyneRangeReplyData` / `SV3ReplyData` → `AcousticDataFrame` (`transponderID`, `pingTime`, `returnTime`, `tt`, `dbv`, `xc`, `snr`, `tat`).
 
-Note: the current parser stores `tt = range − tat − TRIGGER_DELAY_SV3` (`sonardyne_tools/sv3_operations.py`), i.e. a *corrected* travel time, not the raw two-way range. To stay true to "Level 1 = raw", this table stores the raw range and the turn-around time; the correction is applied when building Level 2 (decision 5).
+Note: the current parser stores `tt = range − tat − TRIGGER_DELAY_SV3` (`sonardyne_tools/sv3_operations.py`), i.e. a *corrected* travel time, not the raw two-way range. To stay true to "Level 0 = raw", this table stores the raw range and the turn-around time; the correction is applied when building Level 1 (decision 5).
 
 | Field | Type | Constraints | Description |
 | --- | --- | --- | --- |
@@ -82,7 +82,7 @@ Note: the current parser stores `tt = range − tat − TRIGGER_DELAY_SV3` (`son
 | `dbV` | `float` | — | Decibel-voltage signal strength (int in `AcousticDataFrame`, float32 in TileDB and DSTF — stored as float) |
 | `acc` | `int` | 0 ≤ x ≤ 100 | Cross-correlation accuracy % (was `xc`; DSTF's name for this quantity) |
 | `aSNR` | `double` | −100 ≤ x ≤ 100, nullable | Signal-to-noise ratio \[dB\] (was `snr`) |
-| `tat` | `double` | 0 ≤ x ≤ 10, nullable | Beacon turn-around time \[s\] (converted from ms at parse time) — no DSTF equivalent, Level-1-only |
+| `tat` | `double` | 0 ≤ x ≤ 10, nullable | Beacon turn-around time \[s\] (converted from ms at parse time) — no DSTF equivalent, Level-0-only |
 
 ### INSPVA
 
@@ -139,7 +139,7 @@ Parsed today into: TileDB `GNSSObsSchema` (`tiledb_integration/schemas.py`) — 
 
 Note: we might need to add another field to distinguish file source as well. `Log_Source` will help keep multiple antenna observations separate.
 
-**Implemented differently:** the table follows the gnsstools `observations` layout (`station_id`, `session_id`, `epoch` in GPST, `epoch_pico`, `constellation` as `GPS`/`GLO`/…) with `Network`, `Campaign`, `Log_Source` appended — see `datamodels/iceberg/schemas/level1.py`. Parsing uses the gnsstools NovAtel codecs via `sfg nov2level1`; NOV770 antennas get `Log_Source` `NOV770_ANT<n>`. The table below is the original proposal.
+**Implemented differently:** the table follows the gnsstools `observations` layout (`station_id`, `session_id`, `epoch` in GPST, `epoch_pico`, `constellation` as `GPS`/`GLO`/…) with `Network`, `Campaign`, `Log_Source` appended — see `datamodels/iceberg/schemas/level0.py`. Parsing uses the gnsstools NovAtel codecs via `sfg nov2level0`; NOV770 antennas get `Log_Source` `NOV770_ANT<n>`. The table below is the original proposal.
 
 | Field | Type | Constraints | Description |
 | --- | --- | --- | --- |
@@ -218,13 +218,13 @@ Parsed today into: `SonardyneGNSSData` (`latitude`, `longitude`, `hae`, `q`, `sd
 | `pdop` | `double` | ≥ 0, nullable | Position dilution of precision |
 | `wrms` | `double` | ≥ 0, nullable | Weighted RMS of position residuals \[m\] |
 
-`number_of_satellites`, `pdop` and `wrms` match the Level 2 GNSS antenna positions table. The SV3 `GNSS` block doesn't report them, so they're null for SV3-sourced rows today.
+`number_of_satellites`, `pdop` and `wrms` match the Level 1 GNSS antenna positions table. The SV3 `GNSS` block doesn't report them, so they're null for SV3-sourced rows today.
 
-### GNSS antenna positions (Level 2)
+### GNSS antenna positions (Level 1)
 
-Source files: none directly. Derived from PPP kinematic solutions computed from the Level 1 GNSS observations.
+Source files: none directly. Derived from PPP kinematic solutions computed from the Level 0 GNSS observations.
 
-Parsed today into: `KinPositionDataFrame` (`parsing/ppp.py`) / TileDB `KinPositionArraySchema`. It has the same columns as the Level 1 GNSS antenna positions table, and there is no separate PPP table. No `Log_Source` (decision 3). PPP `latitude/longitude/height` are converted to ECEF at ingest (decision 6).
+Parsed today into: `KinPositionDataFrame` (`parsing/ppp.py`) / TileDB `KinPositionArraySchema`. It has the same columns as the Level 0 GNSS antenna positions table, and there is no separate PPP table. No `Log_Source` (decision 3). PPP `latitude/longitude/height` are converted to ECEF at ingest (decision 6).
 
 | Field | Type | Constraints | Description |
 | --- | --- | --- | --- |
@@ -243,7 +243,7 @@ Parsed today into: `KinPositionDataFrame` (`parsing/ppp.py`) / TileDB `KinPositi
 
 ### GNSS-A GARPOS format
 
-Source files: none directly. Derived from Level 1 travel times, GNSS antenna positions and INSPVA (Level 3: Level 2 GNSS antenna positions).
+Source files: none directly. Derived from Level 0 travel times, GNSS antenna positions and INSPVA (Level 2: Level 1 GNSS antenna positions).
 
 Built today as: `ObservationData` (`earthscope-sfg-workflows/modeling/garpos_tools/schemas.py`). Antenna positions are local ENU about `Site.arrayCenter`, georectified from ECEF by the API at build time (decision 6).
 
@@ -275,7 +275,7 @@ Built today as: `ObservationData` (`earthscope-sfg-workflows/modeling/garpos_too
 
 ### GNSS-A Community standard format
 
-Source files: derived from Level 1 travel times, GNSS antenna positions and INSPVA (Level 3: Level 2 GNSS antenna positions). Transducer positions also need the antenna-to-transducer offsets from the lever arms file (`LEVERARM`); nothing parses that file today, so the offsets come from site metadata (`Campaign.vessel.atdOffsets`).
+Source files: derived from Level 0 travel times, GNSS antenna positions and INSPVA (Level 2: Level 1 GNSS antenna positions). Transducer positions also need the antenna-to-transducer offsets from the lever arms file (`LEVERARM`); nothing parses that file today, so the offsets come from site metadata (`Campaign.vessel.atdOffsets`).
 
 Built today as: `SFGDSTFSeafloorAcousticData` (`community/community_standards.py`). Optional columns are nullable.
 
