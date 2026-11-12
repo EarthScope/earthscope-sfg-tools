@@ -11,11 +11,11 @@ import (
 
 func TestAttitudeAHRS(t *testing.T) {
 	def := AttitudeAHRS
-	if got := def.Identifier(); got[0] != "gnssa_l0" || got[1] != "attitude_ahrs" {
-		t.Errorf("Identifier = %v", got)
+	if got := QualifiedName(def); got != "gnssa_l0.attitude_ahrs" {
+		t.Errorf("QualifiedName = %v", got)
 	}
 
-	sc, err := def.Schema()
+	sc, err := def.IcebergSchema()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,27 +65,18 @@ func TestLevel0Tables(t *testing.T) {
 				t.Fatalf("duplicate table name %q", def.Name)
 			}
 			seen[def.Name] = true
-			if def.Namespace() != "gnssa_l0" {
-				t.Errorf("namespace %q", def.Namespace())
-			}
-			names := map[string]bool{}
-			for _, c := range def.Columns {
-				if names[c.Name] {
-					t.Errorf("duplicate column %q", c.Name)
-				}
-				names[c.Name] = true
+			if db, ok := DatabaseOf(def); !ok || db.Name != "gnssa_l0" {
+				t.Errorf("database %q, %v", db.Name, ok)
 			}
 			if def.External == nil {
-				if c := def.Columns[0]; c.Name != StreamEDIDColumn.Name || !c.Required {
-					t.Errorf("first column %q (required %v), want a required stream_edid", c.Name, c.Required)
-				}
+				ownSchema(t, def)
 			}
 			noScopeColumns(t, def)
 			as, err := def.ArrowSchema()
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, name := range []string{def.TimeColumn, StreamEDIDColumn.Name} {
+			for _, name := range []string{def.TimeColumn, StreamEDIDName} {
 				idx := as.FieldIndices(name)
 				if len(idx) != 1 {
 					t.Errorf("no %q column (TimeColumn / stream_edid)", name)
@@ -98,7 +89,7 @@ func TestLevel0Tables(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			sc, err := def.Schema()
+			sc, err := def.IcebergSchema()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -118,10 +109,10 @@ func TestLevel0Tables(t *testing.T) {
 // GNSSObs is defined by gnsstools, with its own partitioning; these are the
 // parts the parsers and queries rely on.
 func TestGNSSObsFromGnsstools(t *testing.T) {
-	if GNSSObs.Columns != nil || GNSSObs.SortBy != nil {
-		t.Fatal("GNSSObs must not define its own columns or sort order")
+	if GNSSObs.Schema != nil || GNSSObs.Checks != nil || GNSSObs.SortBy != nil {
+		t.Fatal("GNSSObs must not define its own schema, checks or sort order")
 	}
-	sc, err := GNSSObs.Schema()
+	sc, err := GNSSObs.IcebergSchema()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,20 +153,58 @@ func TestGNSSObsFromGnsstools(t *testing.T) {
 	}
 
 	// The definition is built once per process.
-	again, _ := GNSSObs.Schema()
+	again, _ := GNSSObs.IcebergSchema()
 	if again != sc {
 		t.Error("Schema rebuilt the gnsstools definition")
+	}
+}
+
+// ownSchema checks a table defined here (not External): field IDs 1..n in
+// declaration order, unique names, a required stream_edid first, and checks
+// that name schema columns of a type they can check.
+func ownSchema(t *testing.T, def TableDef) {
+	t.Helper()
+	if def.Schema == nil {
+		t.Fatal("no Schema")
+	}
+	fields := def.Schema.Fields()
+	names := map[string]bool{}
+	for i, f := range fields {
+		if f.ID != i+1 {
+			t.Errorf("%s: field ID %d, want %d (declaration order)", f.Name, f.ID, i+1)
+		}
+		if names[f.Name] {
+			t.Errorf("duplicate column %q", f.Name)
+		}
+		names[f.Name] = true
+	}
+	if c := fields[0]; c.Name != StreamEDIDName || !c.Required {
+		t.Errorf("first column %q (required %v), want a required stream_edid", c.Name, c.Required)
+	}
+	for name, c := range def.Checks {
+		f, ok := def.Schema.FindFieldByName(name)
+		if !ok {
+			t.Errorf("check on %q, which is not a column", name)
+			continue
+		}
+		bounded := c.Ge != nil || c.Le != nil || c.Gt != nil || c.Lt != nil
+		switch {
+		case bounded && f.Type != float64Type && f.Type != float32Type && f.Type != int32Type:
+			t.Errorf("%s: bounds on a %s column", name, f.Type)
+		case c.IsIn != nil && f.Type != str:
+			t.Errorf("%s: IsIn on a %s column", name, f.Type)
+		}
 	}
 }
 
 // noScopeColumns checks that def's only identity column is stream_edid.
 func noScopeColumns(t *testing.T, def TableDef) {
 	t.Helper()
-	sc, err := def.Schema()
+	sc, err := def.IcebergSchema()
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"Network", "Station", "Campaign", LogSourceColumn} {
+	for _, name := range []string{"Network", "Station", "Campaign", "Log_Source"} {
 		if _, ok := sc.FindFieldByName(name); ok {
 			t.Errorf("%s has a %s column", def.Name, name)
 		}
@@ -203,28 +232,19 @@ func TestDerivedTables(t *testing.T) {
 	}{{"gnssa_l1", Level1Tables}, {"gnssa_l2", Level2Tables}} {
 		for _, def := range set.defs {
 			t.Run(set.ns+"."+def.Name, func(t *testing.T) {
-				if def.Namespace() != set.ns {
-					t.Errorf("namespace %q", def.Namespace())
+				if db, ok := DatabaseOf(def); !ok || db.Name != set.ns {
+					t.Errorf("database %q, %v", db.Name, ok)
 				}
 				noScopeColumns(t, def)
-				if c := def.Columns[0]; c.Name != StreamEDIDColumn.Name || !c.Required {
-					t.Errorf("first column %q (required %v), want a required stream_edid", c.Name, c.Required)
-				}
-				if c, ok := def.Column(def.TimeColumn); !ok || c.Type != timestamptz || !c.Required {
+				ownSchema(t, def)
+				if c, ok := def.Schema.FindFieldByName(def.TimeColumn); !ok || c.Type != timestamptz || !c.Required {
 					t.Errorf("TimeColumn %q missing, nullable or not a timestamp", def.TimeColumn)
-				}
-				names := map[string]bool{}
-				for _, c := range def.Columns {
-					if names[c.Name] {
-						t.Errorf("duplicate column %q", c.Name)
-					}
-					names[c.Name] = true
 				}
 				spec, err := def.PartitionSpec()
 				if err != nil {
 					t.Fatal(err)
 				}
-				sc, err := def.Schema()
+				sc, err := def.IcebergSchema()
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -248,8 +268,8 @@ func TestTableByName(t *testing.T) {
 	for name, want := range map[string]string{"inspva": "gnssa_l0.inspva", "gnssa_l2.garpos": "gnssa_l2.garpos",
 		"gnss_antenna_positions_ppp": "gnssa_l1.gnss_antenna_positions_ppp"} {
 		def, err := TableByName(name)
-		if err != nil || def.Namespace()+"."+def.Name != want {
-			t.Errorf("TableByName(%q) = %s.%s, %v; want %s", name, def.Namespace(), def.Name, err, want)
+		if err != nil || QualifiedName(def) != want {
+			t.Errorf("TableByName(%q) = %s, %v; want %s", name, QualifiedName(def), err, want)
 		}
 	}
 	for _, name := range []string{"garpos", "nope", "gnssa_l0.garpos"} {

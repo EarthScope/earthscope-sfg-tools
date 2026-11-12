@@ -9,6 +9,8 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
 func TestProfileTime(t *testing.T) {
@@ -64,7 +66,7 @@ func TestSoundSpeed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tbl, err := SoundSpeed(path)
+	tbl, err := SoundSpeed(path, testScope)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,14 +81,14 @@ func TestSoundSpeed(t *testing.T) {
 	depth := column(t, tbl, "depth").(*array.Float64)
 	speed := column(t, tbl, "speed").(*array.Float64)
 	tm := column(t, tbl, "time").(*array.Timestamp)
-	src := column(t, tbl, "Log_Source").(*array.String)
+	src := column(t, tbl, datamodels.StreamEDIDName).(*array.String)
 	at := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC).UnixMicro()
 	for i, w := range want {
 		if depth.Value(i) != w.depth || speed.Value(i) != w.speed {
 			t.Errorf("row %d = %v m %v m/s, want %v m %v m/s", i, depth.Value(i), speed.Value(i), w.depth, w.speed)
 		}
-		if int64(tm.Value(i)) != at || src.Value(i) != LogType {
-			t.Errorf("row %d time/Log_Source = %v %q", i, tm.Value(i), src.Value(i))
+		if int64(tm.Value(i)) != at || src.Value(i) != testEDID(LogType) {
+			t.Errorf("row %d time/stream_edid = %v %q", i, tm.Value(i), src.Value(i))
 		}
 	}
 	if math.Signbit(depth.Value(0)) {
@@ -100,7 +102,7 @@ func TestSoundSpeedErrors(t *testing.T) {
 	if err := os.WriteFile(noYear, []byte("-1 1500\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if tbl, err := SoundSpeed(noYear); err == nil {
+	if tbl, err := SoundSpeed(noYear, testScope); err == nil {
 		tbl.Release()
 		t.Error("no year in the name: want an error")
 	}

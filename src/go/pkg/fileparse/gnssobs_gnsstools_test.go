@@ -51,29 +51,25 @@ func TestBuildGNSSObsMatchesGnsstools(t *testing.T) {
 	p := parserFor(t, novatel770.FileType, datamodels.GNSSObs.Name)
 	edid := p.StreamEDID(scope, novatel770.LogRANGECMP5B)
 
-	// Ours: BuildGNSSObs -> Parser stamping -> Catalog.Append.
-	parsed, err := datamodels.BuildGNSSObs(p.FileType, datamodels.GNSSObsSource{LogSource: novatel770.LogRANGECMP5B, Epochs: epochs})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer parsed.Release()
-	ours, err := p.stamp(parsed, scope)
+	// Ours: BuildGNSSObs (as the parser calls it) -> Table.Append.
+	ours, err := datamodels.BuildGNSSObs(p.FileType, datamodels.GNSSObsSource{EDID: edid, Epochs: epochs})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer ours.Release()
-	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: t.TempDir()})
+	cat, err := catalog.Build(ctx, catalog.Config{Name: catalog.Local, Warehouse: t.TempDir()}, datamodels.SFG.Only(datamodels.GNSSObs))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cat.Close()
-	if _, err := cat.Append(ctx, datamodels.GNSSObs, ours); err != nil {
-		t.Fatal(err)
-	}
-	oursTbl, err := cat.Table(ctx, datamodels.GNSSObs)
+	obsTable, err := cat.TableOf(datamodels.GNSSObs)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := obsTable.Append(ctx, ours); err != nil {
+		t.Fatal(err)
+	}
+	oursTbl := obsTable.Iceberg()
 
 	// gnsstools: its own writer into its own SQL catalog.
 	dir := t.TempDir()

@@ -214,8 +214,8 @@ func New(spec Spec) (*Conversion, error) {
 		for i, def := range c.defs {
 			for _, prev := range c.defs[:i] {
 				if prev.Name == def.Name {
-					return nil, usagef("--table: %s.%s and %s.%s would both write %s files",
-						prev.Namespace(), prev.Name, def.Namespace(), def.Name, def.Name)
+					return nil, usagef("--table: %s and %s would both write %s files",
+						datamodels.QualifiedName(prev), datamodels.QualifiedName(def), def.Name)
 				}
 			}
 		}
@@ -244,7 +244,7 @@ func New(spec Spec) (*Conversion, error) {
 		if spec.FilesPerSnapshot < 0 {
 			return nil, usagef("--files-per-snapshot %d: want 0 or more", spec.FilesPerSnapshot)
 		}
-		c.sink = &icebergSink{cfg: catalog.Config{Name: spec.SinkCatalog, Warehouse: spec.SinkURI},
+		c.sink = &icebergSink{cfg: catalog.Config{Name: spec.SinkCatalog, Warehouse: spec.SinkURI}, defs: c.defs,
 			props: props, perCommit: spec.FilesPerCommit, perSnapshot: max(spec.FilesPerSnapshot, 1)}
 	}
 	return c, nil
@@ -348,7 +348,7 @@ func (c *Conversion) Run(ctx context.Context) (*Result, error) {
 		}
 	}()
 	err := c.source.Read(ctx, func(rows Rows) {
-		name := rows.Def.Namespace() + "." + rows.Def.Name
+		name := datamodels.QualifiedName(rows.Def)
 		if rows.Err != nil {
 			res.addError("read", name, rows.Err)
 			return

@@ -48,12 +48,12 @@ func col[T arrow.Array](tbl arrow.Table, name string) T {
 }
 
 func TestSoundSpeed(t *testing.T) {
-	tbl, err := SoundSpeed(write(t, "cast_001.cnv", cnv))
+	tbl, err := SoundSpeed(write(t, "cast_001.cnv", cnv), testScope)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tbl.Release()
-	if want, _ := datamodels.ParsedSchema(datamodels.SoundSpeed); !tbl.Schema().Equal(want) {
+	if want, _ := datamodels.SoundSpeed.ArrowSchema(); !tbl.Schema().Equal(want) {
 		t.Fatalf("schema = %v, want sound_speed parsed schema %v", tbl.Schema(), want)
 	}
 	want := []struct{ depth, speed float64 }{{0, 1495.10}, {1, 1495.12}, {1900, 1488.74}}
@@ -77,7 +77,7 @@ func TestDefaultsAndStartTime(t *testing.T) {
 	data := "# start_time = Sep  2 2025 08:00:01 [Instrument's time stamp, first data scan]\n" +
 		"*END*\n" +
 		"   10.0  a  b  c  d  1500.5\n"
-	tbl, err := SoundSpeed(write(t, "svp.cnv", data))
+	tbl, err := SoundSpeed(write(t, "svp.cnv", data), testScope)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestErrors(t *testing.T) {
 		"no *END*":     "* NMEA UTC (Time) = Sep 12 2025 10:15:00\n1 2 3 4 5 1500\n",
 		"bad time":     "* NMEA UTC (Time) = 2025-09-12T10:15:00Z\n*END*\n",
 	} {
-		if tbl, err := SoundSpeed(write(t, "x.cnv", data)); err == nil {
+		if tbl, err := SoundSpeed(write(t, "x.cnv", data), testScope); err == nil {
 			tbl.Release()
 			t.Errorf("%s: want an error", name)
 		}

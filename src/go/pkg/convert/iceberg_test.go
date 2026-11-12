@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apache/iceberg-go"
 	"github.com/apache/iceberg-go/config"
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
@@ -28,14 +29,18 @@ func rawToIcebergSpec(raw, wh string) Spec {
 func tableRows(t *testing.T, wh string, defs ...datamodels.TableDef) map[string]int64 {
 	t.Helper()
 	ctx := context.Background()
-	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh})
+	cat, err := catalog.Load(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh}, datamodels.SFG)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cat.Close()
 	out := map[string]int64{}
 	for _, def := range defs {
-		_, batches, err := cat.Scan(ctx, def, catalog.Selection{Scope: scope})
+		src, err := cat.TableOf(def)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, batches, err := src.Scan(ctx, catalog.Selection{Scope: scope})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -43,7 +48,7 @@ func tableRows(t *testing.T, wh string, defs ...datamodels.TableDef) map[string]
 			if err != nil {
 				t.Fatal(err)
 			}
-			out[def.Namespace()+"."+def.Name] += rec.NumRows()
+			out[datamodels.QualifiedName(def)] += rec.NumRows()
 			rec.Release()
 		}
 	}
@@ -80,16 +85,16 @@ func TestRawToIceberg(t *testing.T) {
 
 	// Each snapshot records the file its rows came from.
 	ctx := context.Background()
-	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh})
+	cat, err := catalog.Load(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh}, datamodels.SFG)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cat.Close()
-	tbl, err := cat.Table(ctx, datamodels.TWTT)
+	tbl, err := cat.TableOf(datamodels.TWTT)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p := tbl.CurrentSnapshot().Summary.Properties; p[catalog.PropSourceFile] != filepath.Join(raw, "a_DFOP00.raw") {
+	if p := tbl.Iceberg().CurrentSnapshot().Summary.Properties; p[catalog.PropSourceFile] != filepath.Join(raw, "a_DFOP00.raw") {
 		t.Errorf("snapshot source %q", p[catalog.PropSourceFile])
 	}
 }
@@ -116,26 +121,26 @@ func TestFilesPerCommit(t *testing.T) {
 			t.Errorf("--files-per-commit %d: %d rows, want %d", perCommit, got, want)
 		}
 		ctx := context.Background()
-		cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh})
+		cat, err := catalog.Load(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh}, datamodels.SFG)
 		if err != nil {
 			t.Fatal(err)
 		}
-		tbl, err := cat.Table(ctx, datamodels.TWTT)
+		tbl, err := cat.TableOf(datamodels.TWTT)
 		if err != nil {
 			t.Fatal(err)
 		}
 		var files []string
-		for snap := tbl.CurrentSnapshot(); snap != nil; {
+		for snap := tbl.Iceberg().CurrentSnapshot(); snap != nil; {
 			files = append(files, filepath.Base(snap.Summary.Properties[catalog.PropSourceFile]))
 			if snap.ParentSnapshotID == nil {
 				break
 			}
-			snap = tbl.Metadata().SnapshotByID(*snap.ParentSnapshotID)
+			snap = tbl.Iceberg().Metadata().SnapshotByID(*snap.ParentSnapshotID)
 		}
 		if got := strings.Join(files, ","); got != "c_DFOP00.raw,b_DFOP00.raw,a_DFOP00.raw" {
 			t.Errorf("--files-per-commit %d: snapshots of %s", perCommit, got)
 		}
-		for range tbl.Metadata().PreviousFiles() {
+		for range tbl.Iceberg().Metadata().PreviousFiles() {
 			commits[perCommit]++
 		}
 		cat.Close()
@@ -259,8 +264,8 @@ func csvRows(t *testing.T, wh string) []string {
 	t.Helper()
 	out := t.TempDir()
 	s := spec(wh, out)
-	for _, c := range datamodels.AttitudeAHRS.Columns {
-		s.Columns = append(s.Columns, c.Name)
+	for _, f := range datamodels.AttitudeAHRS.Schema.Fields() {
+		s.Columns = append(s.Columns, f.Name)
 	}
 	run(t, s)
 	b, err := os.ReadFile(filepath.Join(out, "attitude_ahrs.csv"))
@@ -286,16 +291,16 @@ func TestCopy(t *testing.T) {
 
 	// Each snapshot records where its rows came from.
 	ctx := context.Background()
-	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: dst})
+	cat, err := catalog.Load(ctx, catalog.Config{Name: catalog.Local, Warehouse: dst}, datamodels.SFG)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cat.Close()
-	tbl, err := cat.Table(ctx, datamodels.AttitudeAHRS)
+	tbl, err := cat.TableOf(datamodels.AttitudeAHRS)
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := tbl.CurrentSnapshot().Summary.Properties
+	p := tbl.Iceberg().CurrentSnapshot().Summary.Properties
 	if p[PropCopySource] != catalog.Local+":"+src || p[PropCopySelection] != "--scope net/STA/2026_A_1126" {
 		t.Errorf("snapshot summary %v", p)
 	}
@@ -307,14 +312,14 @@ func TestCopyWindow(t *testing.T) {
 	ctx := context.Background()
 	src, dst := t.TempDir(), t.TempDir()
 	write := func(wh string, start time.Time, n int) {
-		cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh})
+		cat, err := catalog.Build(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh}, datamodels.SFG)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer cat.Close()
 		rows := attitudeRows(t, ahrsEDID, start, n)
 		defer rows.Release()
-		if _, err := cat.Append(ctx, datamodels.AttitudeAHRS, rows); err != nil {
+		if _, err := appendTo(ctx, cat, datamodels.AttitudeAHRS, rows); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -350,12 +355,13 @@ func TestCopyEvolvesSink(t *testing.T) {
 	ctx := context.Background()
 	src, dst := warehouse(t), t.TempDir()
 	old := datamodels.AttitudeAHRS
-	old.Columns = slices.DeleteFunc(slices.Clone(old.Columns), func(c datamodels.Column) bool { return c.Name == "h_mag" })
-	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: dst})
-	if err != nil {
-		t.Fatal(err)
+	fields := slices.DeleteFunc(slices.Clone(old.Schema.Fields()), func(f iceberg.NestedField) bool { return f.Name == "h_mag" })
+	for i := range fields {
+		fields[i].ID = i + 1
 	}
-	if _, err := cat.Table(ctx, old); err != nil {
+	old.Schema = iceberg.NewSchema(0, fields...)
+	cat, err := catalog.Build(ctx, catalog.Config{Name: catalog.Local, Warehouse: dst}, datamodels.SFG.Only(old))
+	if err != nil {
 		t.Fatal(err)
 	}
 	cat.Close()
@@ -400,21 +406,21 @@ func TestFilesPerSnapshot(t *testing.T) {
 		t.Errorf("%d rows, want %d (a, b, c; d replacing a)", got, want)
 	}
 	ctx := context.Background()
-	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh})
+	cat, err := catalog.Load(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh}, datamodels.SFG)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cat.Close()
-	tbl, err := cat.Table(ctx, datamodels.TWTT)
+	tbl, err := cat.TableOf(datamodels.TWTT)
 	if err != nil {
 		t.Fatal(err)
 	}
-	last := tbl.CurrentSnapshot()
+	last := tbl.Iceberg().CurrentSnapshot()
 	if filepath.Base(last.Summary.Properties[catalog.PropSourceFile]) != "d_DFOP00.raw" || last.ParentSnapshotID == nil {
 		t.Fatalf("last snapshot %v, want d alone after a merged one", last.Summary.Properties)
 	}
 	var merged []catalog.SourceFile
-	first := tbl.Metadata().SnapshotByID(*last.ParentSnapshotID)
+	first := tbl.Iceberg().Metadata().SnapshotByID(*last.ParentSnapshotID)
 	if err := json.Unmarshal([]byte(first.Summary.Properties[catalog.PropSourceFiles]), &merged); err != nil || len(merged) != 3 {
 		t.Errorf("first snapshot files %v, %v; want a, b, c", merged, err)
 	}

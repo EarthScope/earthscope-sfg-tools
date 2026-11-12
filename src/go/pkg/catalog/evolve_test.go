@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/apache/iceberg-go"
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
@@ -59,44 +60,48 @@ func TestEvolveAddsOptionalColumns(t *testing.T) {
 	dir := t.TempDir()
 	newCols := []string{"ins_status", "time_status"}
 	old := datamodels.INSPVA
-	old.Columns = slices.DeleteFunc(slices.Clone(old.Columns), func(c datamodels.Column) bool {
-		return slices.Contains(newCols, c.Name)
+	fields := slices.DeleteFunc(slices.Clone(old.Schema.Fields()), func(f iceberg.NestedField) bool {
+		return slices.Contains(newCols, f.Name)
 	})
+	for i := range fields {
+		fields[i].ID = i + 1
+	}
+	old.Schema = iceberg.NewSchema(0, fields...)
 	const edidOld, edidNew = "net.STA.C.NOV000.old", "net.STA.C.NOV000.new"
 
-	cat, err := Open(ctx, Config{Name: Local, Warehouse: dir})
+	cat, err := Build(ctx, Config{Name: Local, Warehouse: dir}, datamodels.SFG.Only(old))
 	if err != nil {
 		t.Fatal(err)
 	}
 	rows := inspvaRows(t, old, edidOld, t0, 3, "")
-	if _, err := cat.Append(ctx, old, rows); err != nil {
+	if _, err := appendRows(ctx, cat, old, rows); err != nil {
 		t.Fatal(err)
 	}
 	rows.Release()
 	cat.Close()
 
-	cat, err = Open(ctx, Config{Name: Local, Warehouse: dir})
+	cat, err = Build(ctx, Config{Name: Local, Warehouse: dir}, datamodels.SFG)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cat.Close()
-	tbl, err := cat.Table(ctx, datamodels.INSPVA)
+	tbl, err := openTable(ctx, cat, datamodels.INSPVA)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range newCols {
-		if f, ok := tbl.Schema().FindFieldByName(name); !ok || f.Required {
+		if f, ok := tbl.Iceberg().Schema().FindFieldByName(name); !ok || f.Required {
 			t.Fatalf("%s: not added as an optional column", name)
 		}
 	}
 	rows = inspvaRows(t, datamodels.INSPVA, edidNew, t0, 2, "INS_SOLUTION_GOOD")
-	if _, err := cat.Append(ctx, datamodels.INSPVA, rows); err != nil {
+	if _, err := appendRows(ctx, cat, datamodels.INSPVA, rows); err != nil {
 		t.Fatalf("append after evolving: %v", err)
 	}
 	rows.Release()
 
-	tbl, _ = cat.Table(ctx, datamodels.INSPVA)
-	at, err := tbl.Scan().ToArrowTable(ctx)
+	tbl, _ = openTable(ctx, cat, datamodels.INSPVA)
+	at, err := tbl.Iceberg().Scan().ToArrowTable(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,23 +146,21 @@ func TestEvolveAddsOptionalColumns(t *testing.T) {
 func TestEvolveRefusesRequiredColumn(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	cat, err := Open(ctx, Config{Name: Local, Warehouse: dir})
+	cat, err := Build(ctx, Config{Name: Local, Warehouse: dir}, datamodels.SFG)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cat.Table(ctx, datamodels.SoundSpeed); err != nil {
+	if _, err := openTable(ctx, cat, datamodels.SoundSpeed); err != nil {
 		t.Fatal(err)
 	}
 	cat.Close()
 
 	grown := datamodels.SoundSpeed
-	grown.Columns = append(slices.Clone(grown.Columns), datamodels.Column{Name: "cast_id", Type: datamodels.SoundSpeed.Columns[0].Type, Required: true})
-	cat, err = Open(ctx, Config{Name: Local, Warehouse: dir})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cat.Close()
-	if _, err := cat.Table(ctx, grown); err == nil {
+	grownFields := slices.Clone(grown.Schema.Fields())
+	grown.Schema = iceberg.NewSchema(0, append(grownFields,
+		iceberg.NestedField{ID: len(grownFields) + 1, Name: "cast_id", Type: iceberg.PrimitiveTypes.String, Required: true})...)
+	if cat, err := Build(ctx, Config{Name: Local, Warehouse: dir}, datamodels.SFG.Only(grown)); err == nil {
+		cat.Close()
 		t.Fatal("want an error adding a required column to an existing table")
 	}
 }

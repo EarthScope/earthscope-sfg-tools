@@ -38,30 +38,40 @@ type Iceberg struct {
 	cat *catalog.Catalog
 }
 
-// OpenIceberg opens the catalog cfg describes as a Sink. Close closes the
-// catalog.
-func OpenIceberg(ctx context.Context, cfg catalog.Config) (*Iceberg, error) {
-	cat, err := catalog.Open(ctx, cfg)
+// OpenIceberg builds defs' tables (datamodels.SFG.Only) in the catalog cfg
+// describes, creating what is missing, as a Sink that writes to them;
+// Write rejects any other table. Other tables are left alone, so an
+// unrelated or incompatible table cannot block these writes. Close closes
+// the catalog.
+func OpenIceberg(ctx context.Context, cfg catalog.Config, defs ...datamodels.TableDef) (*Iceberg, error) {
+	if len(defs) == 0 {
+		return nil, fmt.Errorf("iceberg sink: no tables to write")
+	}
+	cat, err := catalog.Build(ctx, cfg, datamodels.SFG.Only(defs...))
 	if err != nil {
 		return nil, err
 	}
 	return &Iceberg{cat: cat}, nil
 }
 
-// Catalog returns the underlying catalog, e.g. to create tables up front.
+// Catalog returns the underlying catalog.
 func (s *Iceberg) Catalog() *catalog.Catalog { return s.cat }
 
-// Write appends rows to def's table as one snapshot (Catalog.Append
-// validates them).
+// Write appends rows to def's table, in the SFG database that declares it,
+// as one snapshot (Table.Append validates them).
 func (s *Iceberg) Write(ctx context.Context, def datamodels.TableDef, rows arrow.Table) (int64, error) {
-	return s.cat.Append(ctx, def, rows)
+	tbl, err := s.cat.TableOf(def)
+	if err != nil {
+		return 0, err
+	}
+	return tbl.Append(ctx, rows)
 }
 
 // Close closes the catalog.
 func (s *Iceberg) Close() error { return s.cat.Close() }
 
 // Parquet writes each Write as a new file
-// <dir>/<namespace>/<table>/<table>-<UTC timestamp>.parquet, zstd
+// <dir>/<database>/<table>/<table>-<UTC timestamp>.parquet, zstd
 // compressed, with the Arrow schema stored so types round-trip.
 type Parquet struct {
 	dir string
@@ -78,7 +88,10 @@ func (s *Parquet) Write(_ context.Context, def datamodels.TableDef, rows arrow.T
 	if err := def.Validate(rows); err != nil {
 		return 0, err
 	}
-	dir := filepath.Join(s.dir, def.Namespace(), def.Name)
+	dir := filepath.Join(s.dir, def.Name)
+	if db, ok := datamodels.DatabaseOf(def); ok {
+		dir = filepath.Join(s.dir, db.Name, def.Name)
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return 0, err
 	}

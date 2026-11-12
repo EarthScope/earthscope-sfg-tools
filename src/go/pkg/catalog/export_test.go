@@ -13,7 +13,7 @@ import (
 
 func TestScan(t *testing.T) {
 	ctx := context.Background()
-	cat, err := Open(ctx, Config{Name: Local, Warehouse: t.TempDir()})
+	cat, err := Build(ctx, Config{Name: Local, Warehouse: t.TempDir()}, datamodels.SFG)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,7 +21,7 @@ func TestScan(t *testing.T) {
 	write := func(def datamodels.TableDef, rows arrow.Table) {
 		t.Helper()
 		defer rows.Release()
-		if _, err := cat.Append(ctx, def, rows); err != nil {
+		if _, err := appendRows(ctx, cat, def, rows); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -35,7 +35,7 @@ func TestScan(t *testing.T) {
 
 	scan := func(def datamodels.TableDef, sel Selection) (*arrow.Schema, int64) {
 		t.Helper()
-		schema, batches, err := cat.Scan(ctx, def, sel)
+		schema, batches, err := scanTable(ctx, cat, def, sel)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -86,10 +86,6 @@ func TestScan(t *testing.T) {
 		t.Errorf("columns %s, %d rows; want time_instrument,time,h and 10 rows", got, n)
 	}
 
-	// Scan reads; it doesn't create a missing table.
-	if _, _, err := cat.Scan(ctx, datamodels.INSPVA, Selection{Scope: scope}); err == nil {
-		t.Error("scanning a missing table: no error")
-	}
 }
 
 func TestSelectionErrors(t *testing.T) {

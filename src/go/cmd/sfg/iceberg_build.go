@@ -1,0 +1,61 @@
+package main
+
+import (
+	"fmt"
+	"log/slog"
+
+	"github.com/spf13/cobra"
+
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+)
+
+var icebergBuildCmd = &cobra.Command{
+	Use:   "build [--catalog NAME] [--warehouse DIR|URI] [--database NAME...]",
+	Short: "Create the SFG databases and tables in a catalog",
+	Long: "Create every database and table the SFG catalog definition declares (datamodels.SFG: " +
+		"gnssa_l0, gnssa_l1, gnssa_l2), or only those of --database, in the catalog --catalog names: " +
+		"local (a warehouse directory with an SQLite catalog, given by --warehouse) or a catalog of the " +
+		"iceberg-go configuration, such as AWS Glue. Missing databases and tables are created and " +
+		"existing tables gain columns their definitions added; nothing is dropped, so running it again " +
+		"changes nothing.",
+	Args:         cobra.NoArgs,
+	SilenceUsage: true,
+	RunE:         runIcebergBuild,
+}
+
+func runIcebergBuild(cmd *cobra.Command, _ []string) error {
+	f := cmd.Flags()
+	name, _ := f.GetString("catalog")
+	warehouse, _ := f.GetString("warehouse")
+	names, _ := f.GetStringSlice("database")
+	def := datamodels.SFG
+	if len(names) > 0 {
+		def.Databases = nil
+		for _, n := range names {
+			db, ok := datamodels.SFG.Database(n)
+			if !ok {
+				return fmt.Errorf("--database %q: not an SFG database", n)
+			}
+			def.Databases = append(def.Databases, db)
+		}
+	}
+	cfg := catalog.Config{Name: name, Warehouse: warehouse}
+	cat, err := catalog.Build(cmd.Context(), cfg, def)
+	if err != nil {
+		return err
+	}
+	defer cat.Close()
+	for _, db := range def.Databases {
+		slog.Info("built database", "catalog", cfg.String(), "database", db.Name, "tables", len(db.Tables))
+	}
+	return nil
+}
+
+func init() {
+	f := icebergBuildCmd.Flags()
+	f.String("catalog", "", "catalog: local, or a catalog of the iceberg-go configuration (default: its default-catalog)")
+	f.String("warehouse", "", "warehouse: overrides the catalog's configured one; a directory for local")
+	f.StringSlice("database", nil, "databases to build, comma-separated (default: all of gnssa_l0, gnssa_l1, gnssa_l2)")
+	icebergCmd.AddCommand(icebergBuildCmd)
+}

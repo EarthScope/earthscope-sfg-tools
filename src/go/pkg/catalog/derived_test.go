@@ -62,14 +62,14 @@ func derivedRows(t *testing.T, def datamodels.TableDef, edid string, start time.
 // without touching the same table at the other level.
 func TestDerivedTables(t *testing.T) {
 	ctx := context.Background()
-	cat, err := Open(ctx, Config{Name: Local, Warehouse: t.TempDir()})
+	cat, err := Build(ctx, Config{Name: Local, Warehouse: t.TempDir()}, datamodels.SFG)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cat.Close()
 	for _, def := range append(append([]datamodels.TableDef{}, datamodels.Level1Tables...), datamodels.Level2Tables...) {
-		if _, err := cat.Table(ctx, def); err != nil {
-			t.Fatalf("%s.%s: %v", def.Namespace(), def.Name, err)
+		if _, err := openTable(ctx, cat, def); err != nil {
+			t.Fatalf("%s: %v", datamodels.QualifiedName(def), err)
 		}
 	}
 	scope := datamodels.Scope{Network: "net", Station: "STA", Campaign: "2025_A_1126"}
@@ -79,7 +79,7 @@ func TestDerivedTables(t *testing.T) {
 		t.Helper()
 		rows := derivedRows(t, def, edid, t0, n)
 		defer rows.Release()
-		if _, err := cat.Append(ctx, def, rows); err != nil {
+		if _, err := appendRows(ctx, cat, def, rows); err != nil {
 			t.Fatal(err)
 		}
 	}

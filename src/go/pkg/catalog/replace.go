@@ -128,9 +128,9 @@ func StreamWindows(def datamodels.TableDef, rows arrow.Table) (map[string]Window
 		return nil, fmt.Errorf("table has no TimeColumn")
 	}
 	sc := rows.Schema()
-	edidIdx, timeIdx := sc.FieldIndices(datamodels.StreamEDIDColumn.Name), sc.FieldIndices(def.TimeColumn)
+	edidIdx, timeIdx := sc.FieldIndices(datamodels.StreamEDIDName), sc.FieldIndices(def.TimeColumn)
 	if len(edidIdx) != 1 || len(timeIdx) != 1 {
-		return nil, fmt.Errorf("rows need one %s and one %s column", datamodels.StreamEDIDColumn.Name, def.TimeColumn)
+		return nil, fmt.Errorf("rows need one %s and one %s column", datamodels.StreamEDIDName, def.TimeColumn)
 	}
 	ts, ok := sc.Field(timeIdx[0]).Type.(*arrow.TimestampType)
 	if !ok || ts.Unit != arrow.Microsecond {
@@ -138,7 +138,7 @@ func StreamWindows(def datamodels.TableDef, rows arrow.Table) (map[string]Window
 	}
 	edidType := sc.Field(edidIdx[0]).Type
 	if edidType.ID() != arrow.STRING {
-		return nil, fmt.Errorf("%s is %s, want a string", datamodels.StreamEDIDColumn.Name, edidType)
+		return nil, fmt.Errorf("%s is %s, want a string", datamodels.StreamEDIDName, edidType)
 	}
 
 	windows := map[string]Window{}
@@ -151,7 +151,7 @@ func StreamWindows(def datamodels.TableDef, rows arrow.Table) (map[string]Window
 		for i := range e.Len() {
 			if e.IsNull(i) || tm.IsNull(i) {
 				return nil, fmt.Errorf("row has a null %s or %s; cannot replace it idempotently",
-					datamodels.StreamEDIDColumn.Name, def.TimeColumn)
+					datamodels.StreamEDIDName, def.TimeColumn)
 			}
 			id, t := e.Value(i), tm.Value(i)
 			w, ok := windows[id]
@@ -173,7 +173,7 @@ func windowFilter(def datamodels.TableDef, parts []map[string]Window) (iceberg.B
 		for _, id := range slices.Sorted(maps.Keys(windows)) {
 			w := windows[id]
 			preds = append(preds, iceberg.NewAnd(
-				iceberg.EqualTo(iceberg.Reference(datamodels.StreamEDIDColumn.Name), id),
+				iceberg.EqualTo(iceberg.Reference(datamodels.StreamEDIDName), id),
 				iceberg.GreaterThanEqual(iceberg.Reference(def.TimeColumn), iceberg.Timestamp(w.Min)),
 				iceberg.LessThanEqual(iceberg.Reference(def.TimeColumn), iceberg.Timestamp(w.Max)),
 			))

@@ -73,17 +73,21 @@ func runLevel0RINEX(cmd *cobra.Command, _ []string) error {
 	}
 
 	ctx := cmd.Context()
-	cat, err := catalog.Open(ctx, catalog.Config{Name: catalogName, Warehouse: warehouse})
+	cat, err := catalog.Load(ctx, catalog.Config{Name: catalogName, Warehouse: warehouse}, datamodels.SFG.Only(datamodels.GNSSObs))
 	if err != nil {
 		return err
 	}
 	defer cat.Close()
+	obs, err := cat.TableOf(datamodels.GNSSObs)
+	if err != nil {
+		return err
+	}
 	out, err := os.Create(outPath)
 	if err != nil {
 		return err
 	}
 	w := bufio.NewWriter(out)
-	n, err := cat.WriteRINEX(ctx, w, scope, fileType, logSource, day, settings)
+	n, err := catalog.WriteRINEX(ctx, w, obs, scope, fileType, logSource, day, settings)
 	if err == nil {
 		err = w.Flush()
 	}

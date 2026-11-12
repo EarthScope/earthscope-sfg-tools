@@ -37,12 +37,12 @@ func col[T arrow.Array](t *testing.T, tbl arrow.Table, name string) T {
 }
 
 func TestTWTT(t *testing.T) {
-	tbl, err := TWTT(writeSample(t))
+	tbl, err := TWTT(writeSample(t), testScope)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tbl.Release()
-	if want, _ := datamodels.ParsedSchema(datamodels.TWTT); !tbl.Schema().Equal(want) {
+	if want, _ := datamodels.TWTT.ArrowSchema(); !tbl.Schema().Equal(want) {
 		t.Fatalf("schema = %v, want TWTT parsed schema %v", tbl.Schema(), want)
 	}
 	if tbl.NumRows() != 1 {
@@ -69,18 +69,18 @@ func TestTWTT(t *testing.T) {
 	if got := col[*array.Float32](t, tbl, "dbV").Value(0); got != -12 {
 		t.Errorf("dbV = %v", got)
 	}
-	if got := col[*array.String](t, tbl, "Log_Source").Value(0); got != datamodels.LogINTGRPLY {
-		t.Errorf("Log_Source = %q", got)
+	if got := col[*array.String](t, tbl, datamodels.StreamEDIDName).Value(0); got != testEDID(datamodels.LogINTGRPLY) {
+		t.Errorf("stream_edid = %q", got)
 	}
 }
 
 func TestINSPVA(t *testing.T) {
-	tbl, err := INSPVA(writeSample(t))
+	tbl, err := INSPVA(writeSample(t), testScope)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tbl.Release()
-	if want, _ := datamodels.ParsedSchema(datamodels.INSPVA); !tbl.Schema().Equal(want) {
+	if want, _ := datamodels.INSPVA.ArrowSchema(); !tbl.Schema().Equal(want) {
 		t.Fatalf("schema = %v, want inspva parsed schema %v", tbl.Schema(), want)
 	}
 	if tbl.NumRows() != 2 {
@@ -106,7 +106,7 @@ func TestINSPVA(t *testing.T) {
 	if ins.Value(1) != "99" || ts.Value(1) != "FINE" {
 		t.Errorf("statuses = %q, %q, want the unknown code as logged", ins.Value(1), ts.Value(1))
 	}
-	if got := col[*array.String](t, tbl, datamodels.LogSourceColumn).Value(0); got != datamodels.LogINSPVAA {
-		t.Errorf("Log_Source = %q", got)
+	if got := col[*array.String](t, tbl, datamodels.StreamEDIDName).Value(0); got != testEDID(datamodels.LogINSPVAA) {
+		t.Errorf("stream_edid = %q", got)
 	}
 }

@@ -18,29 +18,29 @@ type GNSSAntennaPositionRow struct {
 	PDOP, WRMS         *float64
 }
 
-// BuildGNSSAntennaPositions builds gnss_antenna_positions rows from logSource.
-func BuildGNSSAntennaPositions(rs []GNSSAntennaPositionRow, logSource string) (arrow.Table, error) {
+// BuildGNSSAntennaPositions builds gnss_antenna_positions rows of stream edid.
+func BuildGNSSAntennaPositions(rs []GNSSAntennaPositionRow, edid string) (arrow.Table, error) {
 	b, err := newBuilder(GNSSAntennaPositions)
 	if err != nil {
 		return nil, err
 	}
 	defer b.Release()
 	var (
-		logSrc = col[*array.StringBuilder](b, LogSourceColumn)
-		tm     = col[*array.TimestampBuilder](b, "time")
-		x      = col[*array.Float64Builder](b, "ant_x")
-		y      = col[*array.Float64Builder](b, "ant_y")
-		z      = col[*array.Float64Builder](b, "ant_z")
-		sigX   = col[*array.Float64Builder](b, "ant_sigx")
-		sigY   = col[*array.Float64Builder](b, "ant_sigy")
-		sigZ   = col[*array.Float64Builder](b, "ant_sigz")
-		q      = col[*array.Int32Builder](b, "q")
-		nSats  = col[*array.Int32Builder](b, "number_of_satellites")
-		pdop   = col[*array.Float64Builder](b, "pdop")
-		wrms   = col[*array.Float64Builder](b, "wrms")
+		edidCol = col[*array.StringBuilder](b, StreamEDIDName)
+		tm      = col[*array.TimestampBuilder](b, "time")
+		x       = col[*array.Float64Builder](b, "ant_x")
+		y       = col[*array.Float64Builder](b, "ant_y")
+		z       = col[*array.Float64Builder](b, "ant_z")
+		sigX    = col[*array.Float64Builder](b, "ant_sigx")
+		sigY    = col[*array.Float64Builder](b, "ant_sigy")
+		sigZ    = col[*array.Float64Builder](b, "ant_sigz")
+		q       = col[*array.Int32Builder](b, "q")
+		nSats   = col[*array.Int32Builder](b, "number_of_satellites")
+		pdop    = col[*array.Float64Builder](b, "pdop")
+		wrms    = col[*array.Float64Builder](b, "wrms")
 	)
 	for _, r := range rs {
-		logSrc.Append(logSource)
+		edidCol.Append(edid)
 		tm.Append(micros(r.Time))
 		x.Append(r.X)
 		y.Append(r.Y)

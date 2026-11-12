@@ -21,7 +21,7 @@ import (
 const FileType = "NOV000"
 
 // The NovAtel ASCII log types NOV000.bin files carry, one per table. Each is
-// also the Log_Source value of its rows.
+// also the log source value of its rows.
 const (
 	LogRANGEA    = "RANGEA"              // GNSSObs
 	LogINSPVAA   = datamodels.LogINSPVAA // INSPVA
@@ -29,33 +29,33 @@ const (
 )
 
 // GNSSObs parses the RANGEA logs of the NOV000.bin file at path into GNSSObs
-// rows (see datamodels.ParsedSchema). The caller releases the table.
-func GNSSObs(path string) (arrow.Table, error) {
+// rows (stamped with stream_edid for scope). The caller releases the table.
+func GNSSObs(path string, scope datamodels.Scope) (arrow.Table, error) {
 	r, err := scan(path, LogRANGEA)
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildGNSSObs(FileType, datamodels.GNSSObsSource{LogSource: LogRANGEA, Epochs: r.epochs})
+	return datamodels.BuildGNSSObs(FileType, datamodels.GNSSObsSource{EDID: datamodels.StreamEDID(scope, FileType, LogRANGEA), Epochs: r.epochs})
 }
 
 // INSPVA parses the INSPVAA logs of the NOV000.bin file at path into inspva
-// rows (see datamodels.ParsedSchema). The caller releases the table.
-func INSPVA(path string) (arrow.Table, error) {
+// rows (stamped with stream_edid for scope). The caller releases the table.
+func INSPVA(path string, scope datamodels.Scope) (arrow.Table, error) {
 	r, err := scan(path, LogINSPVAA)
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildINSPVA(r.inspva, LogINSPVAA)
+	return datamodels.BuildINSPVA(r.inspva, datamodels.StreamEDID(scope, FileType, LogINSPVAA))
 }
 
 // INSSTDEV parses the INSSTDEVA logs of the NOV000.bin file at path into
-// insstdev rows (see datamodels.ParsedSchema). The caller releases the table.
-func INSSTDEV(path string) (arrow.Table, error) {
+// insstdev rows (stamped with stream_edid for scope). The caller releases the table.
+func INSSTDEV(path string, scope datamodels.Scope) (arrow.Table, error) {
 	r, err := scan(path, LogINSSTDEVA)
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildINSSTDEV(r.insstdev, LogINSSTDEVA)
+	return datamodels.BuildINSSTDEV(r.insstdev, datamodels.StreamEDID(scope, FileType, LogINSSTDEVA))
 }
 
 // records are the decoded logs of one NOV000.bin scan.

@@ -10,6 +10,8 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"gitlab.com/earthscope/gnsstools/core/gnss/gnsstime"
+
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
 // rangea is a RANGEA with GPS PRN 30 L1 C/A and L2 P(Y), its header carrying
@@ -78,7 +80,7 @@ func TestGNSSObs(t *testing.T) {
 		good[40:],
 	)
 
-	tbl, err := GNSSObs(path)
+	tbl, err := GNSSObs(path, testScope)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +123,7 @@ func TestINSPVAStatus(t *testing.T) {
 		inspva("FINESTEERING", "188418.000", "INS_SOLUTION_GOOD"),
 		inspva("COARSESTEERING", "188419.000", "INS_ALIGNING"),
 	)
-	tbl, err := INSPVA(path)
+	tbl, err := INSPVA(path, testScope)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,8 +148,8 @@ func TestINSWeekZeroSkipped(t *testing.T) {
 		"#INSSTDEVA,USB2,0,49.0,COARSEADJUSTING,0,12.150,02440000,2396,15823;0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,00000000,1,0,7fd1b3,0*3af1509c\r\n",
 		"#INSPVAA,USB2,0,69.0,FINESTEERING,2326,188418.000,02000000,5103,15823;2326,188418.000,42.13003285,-125.11183814,-31.878,-0.2412,0.6377,0.2949,2.6278,0.2994,70.4168,INS_SOLUTION_GOOD*12345678\r\n",
 	)
-	for name, parse := range map[string]func(string) (arrow.Table, error){"inspva": INSPVA, "insstdev": INSSTDEV} {
-		tbl, err := parse(path)
+	for name, parse := range map[string]func(string, datamodels.Scope) (arrow.Table, error){"inspva": INSPVA, "insstdev": INSSTDEV} {
+		tbl, err := parse(path, testScope)
 		if err != nil {
 			t.Fatal(err)
 		}

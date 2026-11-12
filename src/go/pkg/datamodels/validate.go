@@ -3,6 +3,7 @@ package datamodels
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -10,11 +11,11 @@ import (
 )
 
 // Validate checks rows against t: every schema column present, no nulls in
-// required columns, and every value inside its Column's bounds and IsIn set
-// (tables defined by External carry no bounds). It reports one error per
-// offending column.
+// required columns, and every value inside its column's Check bounds and
+// IsIn set (tables defined by External carry no checks). It reports one
+// error per offending column.
 func (t TableDef) Validate(rows arrow.Table) error {
-	schema, err := t.Schema()
+	schema, err := t.IcebergSchema()
 	if err != nil {
 		return err
 	}
@@ -35,27 +36,28 @@ func (t TableDef) Validate(rows arrow.Table) error {
 			errs = append(errs, fmt.Errorf("%s.%s: %d nulls in a required column", t.Name, f.Name, col.NullN()))
 		}
 	}
-	for _, c := range t.Columns {
-		col := column(c.Name)
+	for _, name := range slices.Sorted(maps.Keys(t.Checks)) {
+		c := t.Checks[name]
+		col := column(name)
 		if col == nil || (c.Ge == nil && c.Le == nil && c.Gt == nil && c.Lt == nil && c.IsIn == nil) {
 			continue
 		}
 		bad, first, err := countViolations(c, col.Data().Chunks())
 		if err != nil {
-			errs = append(errs, fmt.Errorf("%s.%s: %w", t.Name, c.Name, err))
+			errs = append(errs, fmt.Errorf("%s.%s: %w", t.Name, name, err))
 		} else if bad > 0 {
-			errs = append(errs, fmt.Errorf("%s.%s: %d values out of range, first %v", t.Name, c.Name, bad, first))
+			errs = append(errs, fmt.Errorf("%s.%s: %d values out of range, first %v", t.Name, name, bad, first))
 		}
 	}
 	return errors.Join(errs...)
 }
 
-func (c Column) inBounds(v float64) bool {
+func (c Check) inBounds(v float64) bool {
 	return (c.Ge == nil || v >= *c.Ge) && (c.Le == nil || v <= *c.Le) &&
 		(c.Gt == nil || v > *c.Gt) && (c.Lt == nil || v < *c.Lt)
 }
 
-func countViolations(c Column, chunks []arrow.Array) (bad int, first any, err error) {
+func countViolations(c Check, chunks []arrow.Array) (bad int, first any, err error) {
 	check := func(ok bool, v any) {
 		if !ok {
 			if bad == 0 {

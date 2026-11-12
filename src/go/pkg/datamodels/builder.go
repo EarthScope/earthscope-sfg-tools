@@ -2,7 +2,6 @@ package datamodels
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -16,35 +15,10 @@ type Builder struct {
 	rb  *array.RecordBuilder
 }
 
-// LogSourceColumn is the Log_Source column parsers return: each row's log
-// source, from which fileparse.Parser.Parse derives its stream_edid. No
-// table stores it.
-const LogSourceColumn = "Log_Source"
-
-// StampedColumns are the columns of a table that parsers do not produce:
-// fileparse.Parser.Parse fills them from the scope and Log_Source.
-var StampedColumns = []string{StreamEDIDColumn.Name}
-
-// ParsedSchema is the schema of def's rows as a parser returns them: a
-// required Log_Source column, then def's Arrow schema without the
-// StampedColumns columns.
-func ParsedSchema(def TableDef) (*arrow.Schema, error) {
-	full, err := def.ArrowSchema()
-	if err != nil {
-		return nil, err
-	}
-	fields := []arrow.Field{{Name: LogSourceColumn, Type: arrow.BinaryTypes.String}}
-	for _, f := range full.Fields() {
-		if !slices.Contains(StampedColumns, f.Name) {
-			fields = append(fields, f)
-		}
-	}
-	return arrow.NewSchema(fields, nil), nil
-}
-
-// newBuilder returns a Builder for def's parsed schema (see ParsedSchema).
+// newBuilder returns a Builder for def's full Arrow schema, stream_edid
+// included: parsers fill every column.
 func newBuilder(def TableDef) (*Builder, error) {
-	sc, err := ParsedSchema(def)
+	sc, err := def.ArrowSchema()
 	if err != nil {
 		return nil, err
 	}

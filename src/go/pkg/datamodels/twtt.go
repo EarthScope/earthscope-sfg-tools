@@ -20,15 +20,15 @@ type TWTTRow struct {
 	TAT        *float64 // beacon turn-around time [s]
 }
 
-// BuildTWTT builds travel_times rows from logSource.
-func BuildTWTT(rs []TWTTRow, logSource string) (arrow.Table, error) {
+// BuildTWTT builds travel_times rows of stream edid.
+func BuildTWTT(rs []TWTTRow, edid string) (arrow.Table, error) {
 	b, err := newBuilder(TWTT)
 	if err != nil {
 		return nil, err
 	}
 	defer b.Release()
 	var (
-		logSrc     = col[*array.StringBuilder](b, LogSourceColumn)
+		edidCol    = col[*array.StringBuilder](b, StreamEDIDName)
 		mtID       = col[*array.StringBuilder](b, "MT_ID")
 		tTransmit  = col[*array.TimestampBuilder](b, "T_transmit")
 		tReceive   = col[*array.TimestampBuilder](b, "T_receive")
@@ -39,7 +39,7 @@ func BuildTWTT(rs []TWTTRow, logSource string) (arrow.Table, error) {
 		tat        = col[*array.Float64Builder](b, "tat")
 	)
 	for _, r := range rs {
-		logSrc.Append(logSource)
+		edidCol.Append(edid)
 		mtID.Append(r.MTID)
 		tTransmit.Append(micros(r.TTransmit))
 		tReceive.Append(micros(r.TReceive))

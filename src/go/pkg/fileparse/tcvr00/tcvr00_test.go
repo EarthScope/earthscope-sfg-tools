@@ -88,7 +88,7 @@ func col[T arrow.Array](tbl arrow.Table, name string) T {
 
 func checkSchema(t *testing.T, tbl arrow.Table, def datamodels.TableDef, rows int64) {
 	t.Helper()
-	if want, _ := datamodels.ParsedSchema(def); !tbl.Schema().Equal(want) {
+	if want, _ := def.ArrowSchema(); !tbl.Schema().Equal(want) {
 		t.Fatalf("schema = %v, want %s parsed schema %v", tbl.Schema(), def.Name, want)
 	}
 	if tbl.NumRows() != rows {
@@ -97,7 +97,7 @@ func checkSchema(t *testing.T, tbl arrow.Table, def datamodels.TableDef, rows in
 }
 
 func TestInterrogations(t *testing.T) {
-	tbl, err := Interrogations(writeSession(t))
+	tbl, err := Interrogations(writeSession(t), testScope)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestInterrogations(t *testing.T) {
 }
 
 func TestRanges(t *testing.T) {
-	tbl, err := Ranges(writeSession(t))
+	tbl, err := Ranges(writeSession(t), testScope)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,19 +162,19 @@ func TestRanges(t *testing.T) {
 }
 
 func TestSettings(t *testing.T) {
-	tbl, err := Settings(writeSession(t))
+	tbl, err := Settings(writeSession(t), testScope)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tbl.Release()
 	checkSchema(t, tbl, datamodels.TransceiverSettings, 13+2+3+5+11) // CS, PORT; US, FS, DIAG
-	ls, cmd := col[*array.String](tbl, datamodels.LogSourceColumn), col[*array.String](tbl, "command")
+	ls, cmd := col[*array.String](tbl, datamodels.StreamEDIDName), col[*array.String](tbl, "command")
 	key, val := col[*array.String](tbl, "key"), col[*array.String](tbl, "value")
-	want := map[string]string{"CS": LogConfig, "PORT": LogConfig, "US": LogInfo, "FS": LogInfo, "DIAG": LogInfo}
+	want := map[string]string{"CS": testEDID(LogConfig), "PORT": testEDID(LogConfig), "US": testEDID(LogInfo), "FS": testEDID(LogInfo), "DIAG": testEDID(LogInfo)}
 	var tat, fv bool
 	for i := 0; i < key.Len(); i++ {
 		if ls.Value(i) != want[cmd.Value(i)] {
-			t.Errorf("row %d: %s reply has Log_Source %q, want %q", i, cmd.Value(i), ls.Value(i), want[cmd.Value(i)])
+			t.Errorf("row %d: %s reply has stream_edid %q, want %q", i, cmd.Value(i), ls.Value(i), want[cmd.Value(i)])
 		}
 		tat = tat || (cmd.Value(i) == "CS" && key.Value(i) == "TAT" && val.Value(i) == "640")
 		fv = fv || (cmd.Value(i) == "FS" && key.Value(i) == "FV" && val.Value(i) == "3.12.08.09")
@@ -208,9 +208,9 @@ func TestParseFile(t *testing.T) {
 	}
 	for _, c := range []struct {
 		name string
-		f    func(string) (arrow.Table, error)
+		f    func(string, datamodels.Scope) (arrow.Table, error)
 	}{{"interrogations", Interrogations}, {"ranges", Ranges}, {"settings", Settings}} {
-		tbl, err := c.f(path)
+		tbl, err := c.f(path, testScope)
 		if err != nil {
 			t.Fatal(err)
 		}

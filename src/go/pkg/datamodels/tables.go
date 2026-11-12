@@ -3,7 +3,6 @@ package datamodels
 import (
 	"fmt"
 	"maps"
-	"slices"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -18,16 +17,36 @@ import (
 // Iceberg tracks columns by field ID, which is assigned in declaration order
 // starting at 1, so new columns must only ever be appended.
 
-// Column is one table column plus the value constraints enforced at ingest.
-type Column struct {
-	Name     string
-	Type     iceberg.Type
-	Doc      string
-	Required bool
+// field is shorthand for an Iceberg schema field in the table definitions.
+// Definitions leave ID zero: newSchema numbers fields in declaration order.
+type field = iceberg.NestedField
+
+// Check is the value constraint of one column, enforced at ingest by
+// Validate.
+type Check struct {
 	// Inclusive (Ge, Le) and exclusive (Gt, Lt) bounds; nil means unbounded.
 	Ge, Le, Gt, Lt *float64
 	// IsIn lists the allowed values of a string column; nil allows any.
 	IsIn []string
+}
+
+// checks merges check sets, e.g. a shared column group's with a table's own.
+func checks(sets ...map[string]Check) map[string]Check {
+	out := map[string]Check{}
+	for _, s := range sets {
+		maps.Copy(out, s)
+	}
+	return out
+}
+
+// newSchema is the schema of fields, numbered 1, 2, ... in order.
+func newSchema(fields ...field) *iceberg.Schema {
+	numbered := make([]field, len(fields))
+	for i, f := range fields {
+		f.ID = i + 1
+		numbered[i] = f
+	}
+	return iceberg.NewSchema(0, numbered...)
 }
 
 // PartitionKey is one partition field: a transform applied to a source column.
@@ -37,12 +56,17 @@ type PartitionKey struct {
 	Name      string // defaults to Source
 }
 
-// TableDef is an Iceberg table definition: name, level, columns and layout.
+// TableDef is an Iceberg table definition: name, level, schema and layout.
 type TableDef struct {
-	Name    string
-	Level   int
-	Doc     string
-	Columns []Column
+	Name  string
+	Level int
+	Doc   string
+	// Schema is the table's Iceberg schema; nil when External is set (use
+	// IcebergSchema). Iceberg tracks columns by field ID, so a new column
+	// must only be appended, taking the next ID.
+	Schema *iceberg.Schema
+	// Checks are value constraints by column name, enforced by Validate.
+	Checks map[string]Check
 	// PartitionBy defaults to identity on stream_edid, or to
 	// External's spec. Set on an External table, it overrides that spec;
 	// keys name columns of External's schema.
@@ -50,11 +74,11 @@ type TableDef struct {
 	// SortBy names the columns of the table's ascending sort order.
 	SortBy []string
 	// External, when set, supplies the whole table definition from the
-	// library that owns it (see GNSSObs); Columns and SortBy are then
-	// unused, and PartitionBy, if set, overrides its partition spec.
+	// library that owns it (see GNSSObs); Schema, Checks and SortBy are
+	// then unused, and PartitionBy, if set, overrides its partition spec.
 	External func() (External, error)
 	// TimeColumn is the timestamp column that orders a stream's rows.
-	// Catalog.Append replaces existing rows by (stream_edid, TimeColumn
+	// Table.Append replaces existing rows by (stream_edid, TimeColumn
 	// window), so re-ingesting a file does not duplicate its rows.
 	TimeColumn string
 }
@@ -81,59 +105,29 @@ var (
 	timestamptz = iceberg.PrimitiveTypes.TimestampTz
 )
 
-// StreamEDIDColumn is the first column of every table built with level0 or
-// derived: the rows' stream EDID (see StreamEDID). It is the only identity
-// column: network, station, campaign, file type and log source are its
-// fields, not columns of their own.
-var StreamEDIDColumn = Column{Name: "stream_edid", Type: str, Required: true,
-	Doc: "Stream EDID, network.station.campaign.file_type.log_source"}
-
-// level0 prepends StreamEDIDColumn to cols.
-func level0(cols ...Column) []Column {
-	return append([]Column{StreamEDIDColumn}, cols...)
-}
+// StreamEDIDName names the stream_edid column every table declares first:
+// the rows' stream EDID (see StreamEDID, DerivedEDID), which parsers fill.
+// It is the only identity column: network, station, campaign, file type
+// and log source are its fields, not columns of their own.
+const StreamEDIDName = "stream_edid"
 
 // streamPartitions is the default partitioning: one partition per stream.
 // A stream EDID starts network.station., so its partitions nest within
 // each network and station.
 var streamPartitions = []PartitionKey{
-	{Source: StreamEDIDColumn.Name, Transform: iceberg.IdentityTransform{}},
+	{Source: StreamEDIDName, Transform: iceberg.IdentityTransform{}},
 }
 
-// Namespace is the catalog namespace of the table's level, e.g. gnssa_l0.
-func (t TableDef) Namespace() string { return fmt.Sprintf("gnssa_l%d", t.Level) }
-
-// Identifier is the catalog identifier (namespace, name).
-func (t TableDef) Identifier() table.Identifier { return table.Identifier{t.Namespace(), t.Name} }
-
-// Column returns the named column.
-func (t TableDef) Column(name string) (Column, bool) {
-	for _, c := range t.Columns {
-		if c.Name == name {
-			return c, true
-		}
-	}
-	return Column{}, false
-}
-
-// Schema is the Iceberg schema: External's, or Columns with field IDs in
-// declaration order.
-func (t TableDef) Schema() (*iceberg.Schema, error) {
+// IcebergSchema is the table's Iceberg schema: Schema, or External's.
+func (t TableDef) IcebergSchema() (*iceberg.Schema, error) {
 	if t.External != nil {
 		ext, err := t.External()
 		return ext.Schema, err
 	}
-	return t.columnSchema(), nil
-}
-
-func (t TableDef) columnSchema() *iceberg.Schema {
-	fields := make([]iceberg.NestedField, len(t.Columns))
-	for i, c := range t.Columns {
-		fields[i] = iceberg.NestedField{
-			ID: i + 1, Name: c.Name, Type: c.Type, Required: c.Required, Doc: c.Doc,
-		}
+	if t.Schema == nil {
+		return nil, fmt.Errorf("%s: no schema", t.Name)
 	}
-	return iceberg.NewSchema(0, fields...)
+	return t.Schema, nil
 }
 
 // PartitionSpec is built from PartitionBy when set, against External's
@@ -151,7 +145,11 @@ func (t TableDef) PartitionSpec() (iceberg.PartitionSpec, error) {
 	if keys == nil {
 		keys = streamPartitions
 	}
-	return t.buildSpec(t.columnSchema(), keys)
+	schema, err := t.IcebergSchema()
+	if err != nil {
+		return iceberg.PartitionSpec{}, err
+	}
+	return t.buildSpec(schema, keys)
 }
 
 // buildSpec is the partition spec of keys over schema's columns.
@@ -183,7 +181,10 @@ func (t TableDef) SortOrder() (table.SortOrder, error) {
 	if len(t.SortBy) == 0 {
 		return table.UnsortedSortOrder, nil
 	}
-	schema := t.columnSchema()
+	schema, err := t.IcebergSchema()
+	if err != nil {
+		return table.SortOrder{}, err
+	}
 	fields := make([]table.SortField, len(t.SortBy))
 	for i, name := range t.SortBy {
 		f, ok := schema.FindFieldByName(name)
@@ -215,26 +216,26 @@ func (t TableDef) Properties() (iceberg.Properties, error) {
 
 // ArrowSchema is the Arrow schema of a full row, for building write batches.
 func (t TableDef) ArrowSchema() (*arrow.Schema, error) {
-	sc, err := t.Schema()
+	sc, err := t.IcebergSchema()
 	if err != nil {
 		return nil, err
 	}
 	return table.SchemaToArrowSchema(sc, nil, true, false)
 }
 
-// AllTables lists every table definition, Level 0 to 2.
-func AllTables() []TableDef {
-	return slices.Concat(Level0Tables, Level1Tables, Level2Tables)
-}
+// AllTables lists every table of the SFG catalog, Level 0 to 2.
+func AllTables() []TableDef { return SFG.Tables() }
 
-// TableByName returns the table named name, either qualified
-// (gnssa_l1.garpos) or bare (inspva). A bare name shared by more than one
-// level is an error.
+// TableByName returns the SFG table named name, either qualified by its
+// database (gnssa_l1.garpos) or bare (inspva). A bare name in more than one
+// database is an error.
 func TableByName(name string) (TableDef, error) {
 	var found []TableDef
-	for _, def := range AllTables() {
-		if name == def.Name || name == def.Namespace()+"."+def.Name {
-			found = append(found, def)
+	for _, db := range SFG.Databases {
+		for _, def := range db.Tables {
+			if name == def.Name || name == db.Name+"."+def.Name {
+				found = append(found, def)
+			}
 		}
 	}
 	switch len(found) {
@@ -245,7 +246,7 @@ func TableByName(name string) (TableDef, error) {
 	default:
 		names := make([]string, len(found))
 		for i, def := range found {
-			names[i] = def.Namespace() + "." + def.Name
+			names[i] = QualifiedName(def)
 		}
 		return TableDef{}, fmt.Errorf("table %q is ambiguous: one of %s", name, strings.Join(names, ", "))
 	}

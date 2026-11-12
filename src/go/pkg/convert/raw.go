@@ -393,9 +393,9 @@ func filterTable(tbl arrow.Table, edid string) (arrow.Table, error) {
 
 // filterStream is the rows of rec whose stream_edid is edid.
 func filterStream(rec arrow.RecordBatch, edid string) (arrow.RecordBatch, error) {
-	idx := rec.Schema().FieldIndices(datamodels.StreamEDIDColumn.Name)
+	idx := rec.Schema().FieldIndices(datamodels.StreamEDIDName)
 	if len(idx) != 1 {
-		return nil, fmt.Errorf("rows have no %s column", datamodels.StreamEDIDColumn.Name)
+		return nil, fmt.Errorf("rows have no %s column", datamodels.StreamEDIDName)
 	}
 	edids := rec.Column(idx[0]).(*array.String)
 	b := array.NewBooleanBuilder(memory.DefaultAllocator)

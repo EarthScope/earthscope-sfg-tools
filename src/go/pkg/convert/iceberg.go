@@ -57,7 +57,7 @@ func newIcebergSource(spec Spec) (*icebergSource, error) {
 		if _, err := s.sel.Filter(def); err != nil {
 			return nil, usagef("%s: %w", def.Name, err)
 		}
-		sc, err := def.Schema()
+		sc, err := def.IcebergSchema()
 		if err != nil {
 			return nil, err
 		}
@@ -72,18 +72,23 @@ func newIcebergSource(spec Spec) (*icebergSource, error) {
 }
 
 func (s *icebergSource) Read(ctx context.Context, write func(Rows)) error {
-	cat, err := catalog.Open(ctx, s.cfg)
+	cat, err := catalog.Load(ctx, s.cfg, datamodels.SFG.Only(s.defs...))
 	if err != nil {
 		return err
 	}
 	defer cat.Close()
 	for _, def := range s.defs {
+		tbl, err := cat.TableOf(def)
+		if err != nil {
+			write(Rows{Def: def, Err: err})
+			continue
+		}
 		if s.byStream {
-			schema, groups, err := s.streamGroups(ctx, cat, def)
+			schema, groups, err := s.streamGroups(ctx, tbl)
 			write(Rows{Def: def, Schema: schema, Groups: groups, Err: err})
 			continue
 		}
-		schema, batches, err := cat.Scan(ctx, def, s.sel)
+		schema, batches, err := tbl.Scan(ctx, s.sel)
 		var groups iter.Seq2[Group, error]
 		if err == nil {
 			groups = func(yield func(Group, error) bool) {
@@ -113,11 +118,12 @@ const copyChunk = time.Hour
 // Iceberg sink replaces each group's stream over the group's time span, so
 // the groups of one stream must not overlap in time: chunks are
 // [t, t+copyChunk), and no time is split across two groups.
-func (s *icebergSource) streamGroups(ctx context.Context, cat *catalog.Catalog, def datamodels.TableDef) (*arrow.Schema, iter.Seq2[Group, error], error) {
+func (s *icebergSource) streamGroups(ctx context.Context, src *catalog.Table) (*arrow.Schema, iter.Seq2[Group, error], error) {
+	def := src.Def()
 	// The streams and their time spans, from two columns.
 	spanSel := s.sel
-	spanSel.Columns = []string{datamodels.StreamEDIDColumn.Name, def.TimeColumn}
-	spanSchema, batches, err := cat.Scan(ctx, def, spanSel)
+	spanSel.Columns = []string{datamodels.StreamEDIDName, def.TimeColumn}
+	spanSchema, batches, err := src.Scan(ctx, spanSel)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -151,7 +157,7 @@ func (s *icebergSource) streamGroups(ctx context.Context, cat *catalog.Catalog, 
 				if !s.sel.End.IsZero() && sel.End.After(s.sel.End) {
 					sel.End = s.sel.End
 				}
-				tbl, err := scanTable(ctx, cat, def, sel)
+				tbl, err := scanTable(ctx, src, sel)
 				if err != nil {
 					yield(Group{}, fmt.Errorf("%s from %s: %w", st.EDID, sel.Start.Format(time.RFC3339), err))
 					return
@@ -169,9 +175,9 @@ func (s *icebergSource) streamGroups(ctx context.Context, cat *catalog.Catalog, 
 	return schema, groups, nil
 }
 
-// scanTable reads the rows sel selects from def's table into one table.
-func scanTable(ctx context.Context, cat *catalog.Catalog, def datamodels.TableDef, sel catalog.Selection) (arrow.Table, error) {
-	schema, batches, err := cat.Scan(ctx, def, sel)
+// scanTable reads the rows sel selects from src into one table.
+func scanTable(ctx context.Context, src *catalog.Table, sel catalog.Selection) (arrow.Table, error) {
+	schema, batches, err := src.Scan(ctx, sel)
 	if err != nil {
 		return nil, err
 	}
@@ -192,16 +198,17 @@ func scanTable(ctx context.Context, cat *catalog.Catalog, def datamodels.TableDe
 
 // icebergSink appends each group to its table in a catalog as one snapshot,
 // replacing each of the group's streams over its time span
-// (catalog.Append), so re-running a conversion doesn't duplicate rows.
+// (catalog.Table.Append), so re-running a conversion doesn't duplicate rows.
 // Up to perSnapshot groups are merged into one snapshot, each still
 // replacing only its own streams' windows (catalog.Batch.AppendParts); a
 // group overlapping one already merged, or rows past snapshotRows, start a
 // new snapshot. Snapshots are committed perCommit at a time (0: all of a
-// table's at once). Missing namespaces and tables are created; older
-// schemas are evolved.
+// table's at once). The first Write builds the tables to write (defs):
+// missing databases and tables are created; older schemas are evolved.
 type icebergSink struct {
 	cfg         catalog.Config
-	props       map[string]string // added to every snapshot's summary
+	defs        []datamodels.TableDef // the tables it writes, built on the first Write
+	props       map[string]string     // added to every snapshot's summary
 	perCommit   int
 	perSnapshot int
 	cat         *catalog.Catalog
@@ -278,17 +285,18 @@ func groupWindows(def datamodels.TableDef, g *Group) (map[string]catalog.Window,
 
 func (s *icebergSink) Write(ctx context.Context, rows Rows) ([]Output, error) {
 	if s.cat == nil && s.openErr == nil {
-		s.cat, s.openErr = catalog.Open(ctx, s.cfg)
+		s.cat, s.openErr = catalog.Build(ctx, s.cfg, datamodels.SFG.Only(s.defs...))
 	}
 	if s.openErr != nil {
 		return nil, s.openErr
 	}
-	// The table exists afterwards even if no group has rows.
-	batch, err := s.cat.NewBatch(ctx, rows.Def)
+	// Build made the table, so it exists even if no group has rows.
+	tbl, err := s.cat.TableOf(rows.Def)
 	if err != nil {
 		return nil, err
 	}
-	name := rows.Def.Namespace() + "." + rows.Def.Name
+	batch := tbl.NewBatch()
+	name := datamodels.QualifiedName(rows.Def)
 	var n int64
 	var errs []error
 	var sources []string // the staged groups' source files
@@ -305,11 +313,12 @@ func (s *icebergSink) Write(ctx context.Context, rows Rows) ([]Output, error) {
 		}
 		sources = nil
 		if batch.Failed() {
-			next, err := s.cat.NewBatch(ctx, rows.Def)
-			if err != nil {
-				return err
+			// The failure may be another writer's commit: start the next
+			// batch from the latest snapshot, not the one that conflicted.
+			if err := tbl.Refresh(ctx); err != nil {
+				errs = append(errs, err)
 			}
-			batch = next
+			batch = tbl.NewBatch()
 		}
 		return nil
 	}

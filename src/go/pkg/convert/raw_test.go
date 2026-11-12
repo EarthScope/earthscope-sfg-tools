@@ -60,7 +60,7 @@ func sampleRows(t *testing.T) map[string]int64 {
 		if err != nil {
 			t.Fatal(err)
 		}
-		rows[p.Table.Namespace()+"."+p.Table.Name] = tbl.NumRows()
+		rows[datamodels.QualifiedName(p.Table)] = tbl.NumRows()
 		tbl.Release()
 	}
 	return rows

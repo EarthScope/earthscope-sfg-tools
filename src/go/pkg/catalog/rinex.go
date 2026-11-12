@@ -32,17 +32,17 @@ var ErrNoObservations = errors.New("no observations")
 // and first/last times come from the epochs. The day's epochs are held in
 // memory, since a RINEX 3/4 header needs every epoch before the first is
 // written.
-func (c *Catalog) WriteRINEX(ctx context.Context, w io.Writer, scope datamodels.Scope, fileType, logSource string, day time.Time, settings *rinex.Settings) (int, error) {
-	tbl, err := c.Table(ctx, datamodels.GNSSObs)
-	if err != nil {
-		return 0, err
+func WriteRINEX(ctx context.Context, w io.Writer, obs *Table, scope datamodels.Scope, fileType, logSource string, day time.Time, settings *rinex.Settings) (int, error) {
+	if obs.Def().Name != datamodels.GNSSObs.Name {
+		return 0, fmt.Errorf("WriteRINEX reads %s, not %s", datamodels.GNSSObs.Name, obs.Def().Name)
 	}
+	tbl := obs.Iceberg()
 	edid := datamodels.StreamEDID(scope, fileType, logSource)
 	start := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.UTC)
 	// Rows are grouped into epochs batch by batch, so only the epochs are
 	// held; an epoch split across batches is merged by time.
 	byTime := map[time.Time]*observation.Epoch{}
-	err = gnssiceberg.ReadObservationRows(ctx, tbl, gnssiceberg.ScanOptions{}, edid, start, start.AddDate(0, 0, 1),
+	err := gnssiceberg.ReadObservationRows(ctx, tbl, gnssiceberg.ScanOptions{}, edid, start, start.AddDate(0, 0, 1),
 		func(batch []schema.ObservationRow) error {
 			eps, err := schema.GroupToEpochs(batch, nil)
 			if err != nil {

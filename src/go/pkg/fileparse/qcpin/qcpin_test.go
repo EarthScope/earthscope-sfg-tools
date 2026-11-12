@@ -45,15 +45,15 @@ func writeSample(t *testing.T) string {
 	return path
 }
 
-func parse(t *testing.T, fn func(path string) (arrow.Table, error), path string, def datamodels.TableDef) arrow.Table {
+func parse(t *testing.T, fn func(path string, scope datamodels.Scope) (arrow.Table, error), path string, def datamodels.TableDef) arrow.Table {
 	t.Helper()
-	tbl, err := fn(path)
+	tbl, err := fn(path, testScope)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want, _ := datamodels.ParsedSchema(def); !tbl.Schema().Equal(want) {
+	if want, _ := def.ArrowSchema(); !tbl.Schema().Equal(want) {
 		tbl.Release()
-		t.Fatalf("schema = %v, want %s parsed schema %v", tbl.Schema(), def.Name, want)
+		t.Fatalf("schema = %v, want %s schema %v", tbl.Schema(), def.Name, want)
 	}
 	return tbl
 }
@@ -95,8 +95,8 @@ func TestSample(t *testing.T) {
 		tbl  arrow.Table
 		want string
 	}{{tt, datamodels.LogINTGRPLY}, {att, datamodels.LogAHRS}, {pos, datamodels.LogGNSSINS}, {obs, LogRANGEA}} {
-		if got := col[*array.String](c.tbl, datamodels.LogSourceColumn).Value(0); got != c.want {
-			t.Errorf("Log_Source = %q, want %q", got, c.want)
+		if got := col[*array.String](c.tbl, datamodels.StreamEDIDName).Value(0); got != testEDID(c.want) {
+			t.Errorf("stream_edid = %q, want %q", got, testEDID(c.want))
 		}
 	}
 }
@@ -108,7 +108,7 @@ func TestParseFile(t *testing.T) {
 		t.Skip("set SFG_QCPIN to a .pin file")
 	}
 	for _, c := range []struct {
-		fn  func(path string) (arrow.Table, error)
+		fn  func(path string, scope datamodels.Scope) (arrow.Table, error)
 		def datamodels.TableDef
 	}{
 		{TWTT, datamodels.TWTT},

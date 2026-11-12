@@ -40,7 +40,7 @@ func TestAntennaPositions(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tbl.Release()
-	if want, _ := datamodels.ParsedSchema(datamodels.GNSSAntennaPositions); !tbl.Schema().Equal(want) {
+	if want, _ := datamodels.GNSSAntennaPositions.ArrowSchema(); !tbl.Schema().Equal(want) {
 		t.Fatalf("schema = %v, want gnss_antenna_positions parsed schema %v", tbl.Schema(), want)
 	}
 	if tbl.NumRows() != 2 {

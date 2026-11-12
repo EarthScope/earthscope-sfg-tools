@@ -17,31 +17,31 @@ import (
 const FileType = "DFOP00"
 
 // TWTT parses the events of the DFOP00 file at path into
-// travel_times rows (see datamodels.ParsedSchema):
+// travel_times rows (stamped with stream_edid for scope):
 // each range event pairs with the most recent preceding interrogation, and a
 // zero range (no reply detected) yields no row. The caller releases the
 // table.
-func TWTT(path string) (arrow.Table, error) {
+func TWTT(path string, scope datamodels.Scope) (arrow.Table, error) {
 	events, err := parseEvents(path)
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildTWTT(sv3.TravelTimes(events), datamodels.LogINTGRPLY)
+	return datamodels.BuildTWTT(sv3.TravelTimes(events), datamodels.StreamEDID(scope, FileType, datamodels.LogINTGRPLY))
 }
 
 // INSPVA parses the NOV_INS blocks of the DFOP00 file at path into inspva
-// rows (see datamodels.ParsedSchema): one row per distinct block, the NovAtel
+// rows (stamped with stream_edid for scope): one row per distinct block, the NovAtel
 // INS solution at the event. The caller releases the table.
 //
 // The events' AHRS and GNSS blocks are not parsed: the GNSS block is this
 // INS position, rounded, with the receiver's single-point std devs, and the
 // AHRS00 files log the AHRS at full rate.
-func INSPVA(path string) (arrow.Table, error) {
+func INSPVA(path string, scope datamodels.Scope) (arrow.Table, error) {
 	events, err := parseEvents(path)
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildINSPVA(sv3.INSPVA(events), datamodels.LogINSPVAA)
+	return datamodels.BuildINSPVA(sv3.INSPVA(events), datamodels.StreamEDID(scope, FileType, datamodels.LogINSPVAA))
 }
 
 // parseEvents reads the events of the DFOP00 file at path, logging how many

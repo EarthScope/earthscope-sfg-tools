@@ -41,13 +41,13 @@ const timeStatusUnknown uint8 = 20
 const readerSize = 64 << 10
 
 // GNSSObs parses the RANGECMPB and RANGECMP5B logs of the NOV770 file at path
-// into GNSSObs rows (see datamodels.ParsedSchema), in one pass. Each log type
-// and antenna gets its own Log_Source (datamodels.LogSource), and so its own
+// into GNSSObs rows (stamped with stream_edid for scope), in one pass. Each log type
+// and antenna gets its own log source (datamodels.LogSource), and so its own
 // stream EDID: RANGECMP5B, RANGECMP5B_1. Messages whose time status is
 // UNKNOWN or whose week is 0 (no time fix), or whose epoch time fails
 // gnssiceberg.ValidateEpoch, are skipped.
 // The caller releases the table.
-func GNSSObs(path string) (arrow.Table, error) {
+func GNSSObs(path string, scope datamodels.Scope) (arrow.Table, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func GNSSObs(path string) (arrow.Table, error) {
 	names := slices.Sorted(maps.Keys(bySource))
 	sources := make([]datamodels.GNSSObsSource, len(names))
 	for i, name := range names {
-		sources[i] = datamodels.GNSSObsSource{LogSource: name, Epochs: bySource[name]}
+		sources[i] = datamodels.GNSSObsSource{EDID: datamodels.StreamEDID(scope, FileType, name), Epochs: bySource[name]}
 		slog.Debug("parsed NOV770", "file", filepath.Base(path), "log_source", name, "epochs", len(bySource[name]))
 	}
 	slog.Debug("parsed NOV770", "file", filepath.Base(path), "failed", failed, "unknown_time", skipped, "bad_time", badTime)

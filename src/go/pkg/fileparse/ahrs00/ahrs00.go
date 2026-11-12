@@ -18,7 +18,7 @@ import (
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/internal/xsens"
 )
 
-// FileType names the file type in stream EDIDs. Its rows' Log_Source is
+// FileType names the file type in stream EDIDs. Its rows' log source is
 // datamodels.LogAHRS.
 const FileType = "AHRS00"
 
@@ -129,13 +129,13 @@ func readFile(path string) ([]datamodels.AttitudeAHRSRow, Stats, error) {
 }
 
 // AttitudeAHRS parses the AHRS00.bin file at path into attitude_ahrs rows
-// (see datamodels.ParsedSchema). The caller releases the table.
-func AttitudeAHRS(path string) (arrow.Table, error) {
+// (stamped with stream_edid for scope). The caller releases the table.
+func AttitudeAHRS(path string, scope datamodels.Scope) (arrow.Table, error) {
 	rs, stats, err := readFile(path)
 	if err != nil {
 		return nil, err
 	}
 	slog.Debug("parsed AHRS00", "file", filepath.Base(path), "rows", len(rs),
 		"packets", stats.Packets, "corrupt_packets", stats.CorruptPackets, "bad_messages", stats.BadMessages)
-	return datamodels.BuildAttitudeAHRS(rs, datamodels.LogAHRS)
+	return datamodels.BuildAttitudeAHRS(rs, datamodels.StreamEDID(scope, FileType, datamodels.LogAHRS))
 }

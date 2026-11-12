@@ -14,10 +14,10 @@ func f64(v float64) *float64 { return &v }
 func i32(v int32) *int32     { return &v }
 func strp(v string) *string  { return &v }
 
-// checkParsed fails unless tbl has def's parsed schema and n rows.
+// checkParsed fails unless tbl has def's full schema and n rows.
 func checkParsed(t *testing.T, tbl arrow.Table, def TableDef, n int64) {
 	t.Helper()
-	want, err := ParsedSchema(def)
+	want, err := def.ArrowSchema()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,10 +159,10 @@ func TestBuildersFillEveryColumn(t *testing.T) {
 				DBV: &dbv, Telemetry: strp("NONE"), Doppler: f64(0)}}, "x")
 		},
 		TransceiverSettings.Name: func() (arrow.Table, error) {
-			return BuildTransceiverSettings([]TransceiverSettingRow{{LogSource: "x", Time: t0, Unit: strp("2010"), Command: "CS", Key: "TAT", Value: "640"}})
+			return BuildTransceiverSettings([]TransceiverSettingRow{{EDID: "x", Time: t0, Unit: strp("2010"), Command: "CS", Key: "TAT", Value: "640"}})
 		},
 		GNSSObs.Name: func() (arrow.Table, error) {
-			return BuildGNSSObs("x", GNSSObsSource{LogSource: "x", Epochs: []observation.Epoch{{Time: t0,
+			return BuildGNSSObs("x", GNSSObsSource{EDID: "x", Epochs: []observation.Epoch{{Time: t0,
 				ReceiverClockOffset: 1e-7, EpochFlag: 1, Satellites: observation.Satellites{glo}}}})
 		},
 	}

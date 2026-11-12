@@ -68,7 +68,7 @@ func wrongSchema() arrow.Table {
 // sinks returns one of each Sink, writing under t.TempDir().
 func sinks(t *testing.T) map[string]Sink {
 	t.Helper()
-	ice, err := OpenIceberg(context.Background(), catalog.Config{Name: catalog.Local, Warehouse: t.TempDir()})
+	ice, err := OpenIceberg(context.Background(), catalog.Config{Name: catalog.Local, Warehouse: t.TempDir()}, datamodels.AllTables()...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestParquetRoundTrip(t *testing.T) {
 	if n != 3 {
 		t.Fatalf("wrote %d rows, want 3", n)
 	}
-	paths, _ := filepath.Glob(filepath.Join(dir, def.Namespace(), def.Name, "*.parquet"))
+	paths, _ := filepath.Glob(filepath.Join(dir, "gnssa_l0", def.Name, "*.parquet"))
 	if len(paths) != 1 {
 		t.Fatalf("%d parquet files, want 1", len(paths))
 	}

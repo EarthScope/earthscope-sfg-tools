@@ -27,7 +27,7 @@ import (
 const (
 	// FileType names the file type in stream EDIDs.
 	FileType = "SEABIRD"
-	// LogType is the one log type Sea-Bird files carry, and the Log_Source
+	// LogType is the one log type Sea-Bird files carry, and the log source
 	// value of their rows.
 	LogType = "SEABIRD"
 )
@@ -56,11 +56,11 @@ type header struct {
 	badFlag            *float64
 }
 
-// SoundSpeed parses the Sea-Bird .cnv file at path into sound_speed rows (see
-// datamodels.ParsedSchema), every row at the header's cast time. Data rows
+// SoundSpeed parses the Sea-Bird .cnv file at path into sound_speed rows (stamped with
+// stream_edid for scope), every row at the header's cast time. Data rows
 // that are short, not numeric, flagged bad or above the surface are skipped
 // and counted. The caller releases the table.
-func SoundSpeed(path string) (arrow.Table, error) {
+func SoundSpeed(path string, scope datamodels.Scope) (arrow.Table, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -100,7 +100,7 @@ func SoundSpeed(path string) (arrow.Table, error) {
 	}
 	slog.Debug("parsed SEABIRD", "file", filepath.Base(path), "rows", len(rs), "bad_lines", bad,
 		"cast_time", h.castTime.Format(time.RFC3339))
-	return datamodels.BuildSoundSpeed(rs, LogType)
+	return datamodels.BuildSoundSpeed(rs, datamodels.StreamEDID(scope, FileType, LogType))
 }
 
 // readHeader reads sc up to and including the "*END*" line.

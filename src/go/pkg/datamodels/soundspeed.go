@@ -14,21 +14,21 @@ type SoundSpeedRow struct {
 	Speed float64   // [m/s]
 }
 
-// BuildSoundSpeed builds sound_speed rows from logSource.
-func BuildSoundSpeed(rs []SoundSpeedRow, logSource string) (arrow.Table, error) {
+// BuildSoundSpeed builds sound_speed rows of stream edid.
+func BuildSoundSpeed(rs []SoundSpeedRow, edid string) (arrow.Table, error) {
 	b, err := newBuilder(SoundSpeed)
 	if err != nil {
 		return nil, err
 	}
 	defer b.Release()
 	var (
-		logSrc = col[*array.StringBuilder](b, LogSourceColumn)
-		tm     = col[*array.TimestampBuilder](b, "time")
-		depth  = col[*array.Float64Builder](b, "depth")
-		speed  = col[*array.Float64Builder](b, "speed")
+		edidCol = col[*array.StringBuilder](b, StreamEDIDName)
+		tm      = col[*array.TimestampBuilder](b, "time")
+		depth   = col[*array.Float64Builder](b, "depth")
+		speed   = col[*array.Float64Builder](b, "speed")
 	)
 	for _, r := range rs {
-		logSrc.Append(logSource)
+		edidCol.Append(edid)
 		tm.Append(micros(r.Time))
 		depth.Append(r.Depth)
 		speed.Append(r.Speed)

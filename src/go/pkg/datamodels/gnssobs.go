@@ -12,11 +12,11 @@ import (
 	"gitlab.com/earthscope/gnsstools/geodata/gnssiceberg"
 )
 
-// GNSSObsSource is the epochs from one log source (file, or antenna of a
-// file) to be written to GNSSObs.
+// GNSSObsSource is the epochs from one stream (a file's log source, or one
+// antenna of a file) to be written to GNSSObs.
 type GNSSObsSource struct {
-	LogSource string
-	Epochs    []observation.Epoch
+	EDID   string // the stream's EDID (see StreamEDID)
+	Epochs []observation.Epoch
 }
 
 // BuildGNSSObs flattens epochs into GNSSObs rows, one per (epoch, satellite,
@@ -29,8 +29,7 @@ type GNSSObsSource struct {
 // fails gnssiceberg.ValidateEpoch (zero, before 1980, or in the future) is an
 // error here: parsers drop and count such epochs before calling this.
 //
-// Rows are in ParsedSchema form: each carries its source's
-// LogSource, from which fileparse.Parser.Parse derives stream_edid.
+// Each row's stream_edid is its source's EDID.
 //
 // fileSource is the type of the file the epochs were parsed from (e.g.
 // NOV770), for errors.
@@ -38,7 +37,7 @@ func BuildGNSSObs(fileSource string, sources ...GNSSObsSource) (arrow.Table, err
 	for _, src := range sources {
 		for i, epoch := range src.Epochs {
 			if err := gnssiceberg.ValidateEpoch(epoch.Time); err != nil {
-				return nil, fmt.Errorf("%s %s epoch %d: %w", fileSource, src.LogSource, i, err)
+				return nil, fmt.Errorf("%s %s epoch %d: %w", fileSource, src.EDID, i, err)
 			}
 		}
 	}
@@ -49,7 +48,7 @@ func BuildGNSSObs(fileSource string, sources ...GNSSObsSource) (arrow.Table, err
 	defer b.Release()
 
 	var (
-		logSrc        = col[*array.StringBuilder](b, LogSourceColumn)
+		edidCol       = col[*array.StringBuilder](b, StreamEDIDName)
 		timeUTC       = col[*array.TimestampBuilder](b, "time_utc")
 		timeGPST      = col[*array.TimestampBuilder](b, "time_gpst")
 		timeSubUsPs   = col[*array.Int32Builder](b, "time_sub_us_ps")
@@ -78,7 +77,7 @@ func BuildGNSSObs(fileSource string, sources ...GNSSObsSource) (arrow.Table, err
 			subUsPs := int32(epoch.Time.Nanosecond()%1000)*1000 + int32(epoch.EpochPico)
 			for _, sat := range epoch.Satellites {
 				for _, obs := range sat.Observations {
-					logSrc.Append(src.LogSource)
+					edidCol.Append(src.EDID)
 					timeUTC.Append(utc)
 					timeGPST.Append(gpst)
 					timeSubUsPs.Append(subUsPs)

@@ -155,7 +155,7 @@ func (c *Conversion) result() *Result {
 		Errors:  []Error{},
 	}
 	for _, def := range c.defs {
-		res.Source.Tables = append(res.Source.Tables, def.Namespace()+"."+def.Name)
+		res.Source.Tables = append(res.Source.Tables, datamodels.QualifiedName(def))
 	}
 	return res
 }
@@ -187,11 +187,11 @@ type streamTally struct {
 }
 
 func newStreamTally(def datamodels.TableDef, schema *arrow.Schema) *streamTally {
-	t := &streamTally{table: def.Namespace() + "." + def.Name, edid: -1, time: -1, byEDID: map[string]*Stream{}}
+	t := &streamTally{table: datamodels.QualifiedName(def), edid: -1, time: -1, byEDID: map[string]*Stream{}}
 	if schema == nil {
 		return t
 	}
-	if idx := schema.FieldIndices(datamodels.StreamEDIDColumn.Name); len(idx) == 1 {
+	if idx := schema.FieldIndices(datamodels.StreamEDIDName); len(idx) == 1 {
 		t.edid = idx[0]
 	}
 	if idx := schema.FieldIndices(def.TimeColumn); len(idx) == 1 {

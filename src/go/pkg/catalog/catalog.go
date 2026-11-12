@@ -1,3 +1,17 @@
+// Package catalog reads and writes the SFG Iceberg tables.
+//
+// It follows the catalog's own hierarchy: a Catalog holds Databases
+// (Iceberg namespaces), which hold Tables. What exists is declared in
+// datamodels (CatalogDef, DatabaseDef, TableDef); where it lives is a
+// Config, so the same definitions build and serve AWS Glue, a REST
+// catalog, or a local SQLite warehouse. Build makes the catalog hold a
+// definition and Load opens what it already holds; either returns the
+// live tree, in which databases and tables are found by name:
+//
+//	cat, err := catalog.Build(ctx, catalog.Config{Name: "glue"}, datamodels.SFG) // or {Name: catalog.Local, Warehouse: dir}
+//	db, err := cat.Database("gnssa_l0")
+//	tbl, err := db.Table("inspva")
+//	n, err := tbl.Append(ctx, rows)
 package catalog
 
 import (
@@ -9,9 +23,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/apache/iceberg-go"
 	icecat "github.com/apache/iceberg-go/catalog"
 	_ "github.com/apache/iceberg-go/catalog/glue"
@@ -20,7 +31,6 @@ import (
 	sqlcat "github.com/apache/iceberg-go/catalog/sql"
 	"github.com/apache/iceberg-go/config"
 	_ "github.com/apache/iceberg-go/io/gocloud" // s3://, gs:// and abfs[s]:// table IO
-	"github.com/apache/iceberg-go/table"
 	"github.com/uptrace/bun/driver/sqliteshim"
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
@@ -59,14 +69,69 @@ func (cfg Config) String() string {
 	return name + ":" + cfg.Warehouse
 }
 
-// Catalog is an Iceberg catalog holding the tables (see Config).
+// Catalog is a connection to one Iceberg catalog (see Config), holding the
+// Databases of the definition it was built or loaded with. It is not safe
+// for concurrent use.
 type Catalog struct {
-	cat    icecat.Catalog
-	tables map[string]*table.Table
+	def datamodels.CatalogDef
+	cat icecat.Catalog
+	dbs map[string]*Database
 }
 
-// Open opens the catalog cfg names, creating a Local warehouse if needed.
-func Open(ctx context.Context, cfg Config) (*Catalog, error) {
+// Build opens the catalog cfg names and makes it hold everything def
+// declares: it creates each missing database and table, evolves existing
+// tables to their definitions (see evolve), and opens them all. It never
+// drops or rewrites data, so building again changes nothing.
+func Build(ctx context.Context, cfg Config, def datamodels.CatalogDef) (*Catalog, error) {
+	cat, err := openIceberg(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return connect(ctx, cat, def, buildDatabase)
+}
+
+// Load opens the catalog cfg names and the tables of def it already holds,
+// at their latest snapshots, for reading: it creates and evolves nothing.
+// A declared table the catalog lacks is left out; Database.Table reports
+// it (ErrNotInCatalog).
+func Load(ctx context.Context, cfg Config, def datamodels.CatalogDef) (*Catalog, error) {
+	if cfg.Name == Local {
+		// Reading must not create a warehouse (openIceberg would).
+		db := filepath.Join(cfg.Warehouse, "catalog.db")
+		if _, err := os.Stat(db); err != nil {
+			return nil, fmt.Errorf("local warehouse %s: no catalog.db: %w", cfg.Warehouse, err)
+		}
+	}
+	cat, err := openIceberg(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return connect(ctx, cat, def, loadDatabase)
+}
+
+// connect opens each of def's databases in cat with open. It closes cat
+// on error.
+func connect(ctx context.Context, cat icecat.Catalog, def datamodels.CatalogDef,
+	open func(context.Context, icecat.Catalog, datamodels.DatabaseDef) (*Database, error)) (*Catalog, error) {
+	c := &Catalog{def: def, cat: cat, dbs: make(map[string]*Database, len(def.Databases))}
+	for _, dbdef := range def.Databases {
+		if _, dup := c.dbs[dbdef.Name]; dup {
+			c.Close()
+			return nil, fmt.Errorf("catalog %s declares database %s twice", def.Name, dbdef.Name)
+		}
+		db, err := open(ctx, cat, dbdef)
+		if err != nil {
+			c.Close()
+			return nil, err
+		}
+		c.dbs[dbdef.Name] = db
+	}
+	return c, nil
+}
+
+// openIceberg opens the iceberg-go catalog cfg names, creating a Local
+// warehouse if needed.
+func openIceberg(ctx context.Context, cfg Config) (icecat.Catalog, error) {
 	name, props := cfg.Name, maps.Clone(cfg.Props)
 	if props == nil {
 		props = iceberg.Properties{}
@@ -94,10 +159,10 @@ func Open(ctx context.Context, cfg Config) (*Catalog, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening catalog %s: %w", cfg, err)
 	}
-	return &Catalog{cat: cat, tables: make(map[string]*table.Table)}, nil
+	return cat, nil
 }
 
-// Check reports whether name is a catalog Open can find: Local, a catalog of
+// Check reports whether name is a catalog Build and Load can find: Local, a catalog of
 // the iceberg-go configuration, or "" for its default-catalog.
 func Check(name string) error {
 	if name == Local || name == "" {
@@ -152,297 +217,28 @@ func (c *Catalog) Close() error {
 	return nil
 }
 
-// Table loads def's table, creating its namespace and table if needed.
-func (c *Catalog) Table(ctx context.Context, def datamodels.TableDef) (*table.Table, error) {
-	key := def.Namespace() + "." + def.Name
-	if tbl, ok := c.tables[key]; ok {
-		return tbl, nil
+// Def is the definition the catalog was built or loaded with.
+func (c *Catalog) Def() datamodels.CatalogDef { return c.def }
+
+// Database returns the database named name. It does no I/O.
+func (c *Catalog) Database(name string) (*Database, error) {
+	if db, ok := c.dbs[name]; ok {
+		return db, nil
 	}
-	// A new namespace gets no location: the catalog places its tables at
-	// <warehouse>/<namespace>.db/<table>, or where the server decides (rest).
-	ns := table.Identifier{def.Namespace()}
-	err := c.cat.CreateNamespace(ctx, ns, nil)
-	if err != nil && !errors.Is(err, icecat.ErrNamespaceAlreadyExists) {
-		return nil, fmt.Errorf("creating namespace %s: %w", def.Namespace(), err)
-	}
-	tbl, err := c.cat.LoadTable(ctx, def.Identifier())
-	switch {
-	case errors.Is(err, icecat.ErrNoSuchTable):
-		tbl, err = c.create(ctx, def)
-	case err == nil:
-		tbl, err = c.evolve(ctx, tbl, def)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", key, err)
-	}
-	c.tables[key] = tbl
-	return tbl, nil
+	return nil, fmt.Errorf("catalog %s has no database %q", c.def.Name, name)
 }
 
-// evolve adds to tbl the columns def has and tbl lacks, so a table created by
-// an earlier version of def takes new optional columns; existing rows read
-// them as null. A missing required column is an error: old rows would
-// violate it. Columns def no longer has are left alone. Tables defined by
-// another library (def.External) are not evolved.
-func (c *Catalog) evolve(ctx context.Context, tbl *table.Table, def datamodels.TableDef) (*table.Table, error) {
-	if def.External != nil {
-		return tbl, nil
+// TableOf returns def's table in the catalog's database that declares it
+// (matched by name and level, see datamodels.CatalogDef.DatabaseOf); a
+// shorthand for Database(name).Table(def.Name). It does no I/O.
+func (c *Catalog) TableOf(def datamodels.TableDef) (*Table, error) {
+	dbdef, ok := c.def.DatabaseOf(def)
+	if !ok {
+		return nil, fmt.Errorf("catalog %s declares no table %s (level %d)", c.def.Name, def.Name, def.Level)
 	}
-	var missing []datamodels.Column
-	for _, col := range def.Columns {
-		if _, ok := tbl.Schema().FindFieldByName(col.Name); !ok {
-			missing = append(missing, col)
-		}
-	}
-	if len(missing) == 0 {
-		return tbl, nil
-	}
-	tx := tbl.NewTransaction()
-	update := tx.UpdateSchema(true, false)
-	for _, col := range missing {
-		if col.Required {
-			return nil, fmt.Errorf("table lacks required column %q; it cannot be added to existing rows", col.Name)
-		}
-		update = update.AddColumn([]string{col.Name}, col.Type, col.Doc, false, nil)
-	}
-	if err := update.Commit(); err != nil {
-		return nil, fmt.Errorf("adding columns: %w", err)
-	}
-	return tx.Commit(ctx)
-}
-
-func (c *Catalog) create(ctx context.Context, def datamodels.TableDef) (*table.Table, error) {
-	spec, err := def.PartitionSpec()
+	db, err := c.Database(dbdef.Name)
 	if err != nil {
 		return nil, err
 	}
-	order, err := def.SortOrder()
-	if err != nil {
-		return nil, err
-	}
-	schema, err := def.Schema()
-	if err != nil {
-		return nil, err
-	}
-	props, err := def.Properties()
-	if err != nil {
-		return nil, err
-	}
-	return c.cat.CreateTable(ctx, def.Identifier(), schema,
-		icecat.WithPartitionSpec(&spec),
-		icecat.WithSortOrder(order),
-		icecat.WithProperties(props),
-	)
-}
-
-// inTableOrder returns rows relabelled with tbl's own schema: its column
-// order and field IDs, matched by name. Rows built from a TableDef carry the
-// def's field IDs (declaration order) in their Arrow field metadata, and
-// iceberg-go maps written columns by those IDs; an evolved table (see
-// evolve) numbers its added columns after the ones it had, so def-labelled
-// rows would land values in the wrong columns. A table column missing from
-// rows is written as nulls if optional; a rows column the table lacks, or a
-// type mismatch, is an error. The caller releases the result.
-func inTableOrder(tbl *table.Table, rows arrow.Table) (arrow.Table, error) {
-	n := rows.NumRows()
-	tsc, err := table.SchemaToArrowSchema(tbl.Schema(), nil, true, false)
-	if err != nil {
-		return nil, err
-	}
-	outFields := tsc.Fields()
-	cols := make([]arrow.Column, len(outFields))
-	release := func() {
-		for i := range cols {
-			if cols[i].Data() != nil {
-				cols[i].Release()
-			}
-		}
-	}
-	used := 0
-	for i, f := range outFields {
-		idx := rows.Schema().FieldIndices(f.Name)
-		switch {
-		case len(idx) == 1:
-			data := rows.Column(idx[0]).Data()
-			if !arrow.TypeEqual(data.DataType(), f.Type) {
-				release()
-				return nil, fmt.Errorf("column %q is %s, table has %s", f.Name, data.DataType(), f.Type)
-			}
-			cols[i] = *arrow.NewColumn(f, data)
-			used++
-		case !f.Nullable:
-			release()
-			return nil, fmt.Errorf("rows lack required column %q", f.Name)
-		default:
-			nulls := array.MakeArrayOfNull(memory.DefaultAllocator, f.Type, int(n))
-			chunked := arrow.NewChunked(f.Type, []arrow.Array{nulls})
-			nulls.Release()
-			cols[i] = *arrow.NewColumn(f, chunked)
-			chunked.Release()
-		}
-	}
-	if used != int(rows.NumCols()) {
-		release()
-		return nil, fmt.Errorf("rows have columns the table lacks")
-	}
-	out := array.NewTable(tsc, cols, n)
-	release()
-	return out, nil
-}
-
-// appendBatchRows is the row count per write batch when appending.
-const appendBatchRows = 1 << 20
-
-// Append writes a full-row Arrow table (a file parser's output for def) as
-// one snapshot, replacing rather than adding to what is already there: for
-// each stream_edid in rows, existing rows of that stream whose
-// def.TimeColumn falls within the stream's time range in rows are deleted in
-// the same commit (see ReplaceFilter). Re-ingesting a file therefore leaves
-// the table as one copy of its rows, and re-ingesting it with a fixed parser
-// replaces the old output.
-//
-// This assumes files of one stream do not overlap in time: a file whose
-// range overlaps another file of the same stream replaces that file's rows
-// in the overlap. Only the new rows' range is replaced, so if a re-parse
-// covers a narrower range than before, the old rows outside it remain.
-func (c *Catalog) Append(ctx context.Context, def datamodels.TableDef, rows arrow.Table, opts ...AppendOption) (int64, error) {
-	b, err := c.NewBatch(ctx, def)
-	if err != nil {
-		return 0, err
-	}
-	if _, err := b.Append(ctx, rows, opts...); err != nil {
-		return 0, err
-	}
-	return b.Commit(ctx)
-}
-
-// A Batch stages appends to one table and commits them together: each
-// Append is its own snapshot, with its own summary properties, as with
-// Catalog.Append, but the catalog is updated once, at Commit. Each staged
-// Append sees the ones before it, so a batch leaves the table as the same
-// appends committed one by one would. Staged rows are written to storage at
-// Append; only the commit is deferred.
-type Batch struct {
-	c      *Catalog
-	def    datamodels.TableDef
-	tbl    *table.Table
-	tx     *table.Transaction
-	staged int64 // rows staged since the last Commit
-	n      int   // appends staged since the last Commit
-}
-
-// NewBatch starts a batch of appends to def's table, creating or evolving
-// the table as Table does.
-func (c *Catalog) NewBatch(ctx context.Context, def datamodels.TableDef) (*Batch, error) {
-	tbl, err := c.Table(ctx, def)
-	if err != nil {
-		return nil, err
-	}
-	return &Batch{c: c, def: def, tbl: tbl, tx: tbl.NewTransaction()}, nil
-}
-
-// Append stages rows as one snapshot, as Catalog.Append would commit them,
-// and returns the rows staged. An error before anything is staged leaves
-// the batch as it was; Failed reports whether an error left it unusable.
-func (b *Batch) Append(ctx context.Context, rows arrow.Table, opts ...AppendOption) (int64, error) {
-	return b.AppendParts(ctx, []arrow.Table{rows}, opts...)
-}
-
-// AppendParts stages parts (e.g. several files' rows) as one snapshot: each
-// part replaces its own streams' windows (see StreamWindows), as if appended
-// alone, but they are written together. Parts must not overlap: two parts
-// with rows of one stream at a shared time would both be kept, where
-// appending them in turn keeps the second.
-func (b *Batch) AppendParts(ctx context.Context, parts []arrow.Table, opts ...AppendOption) (int64, error) {
-	var windows []map[string]Window
-	var recs []arrow.RecordBatch
-	defer func() {
-		for _, r := range recs {
-			r.Release()
-		}
-	}()
-	var schema *arrow.Schema
-	for _, rows := range parts {
-		if rows.NumRows() == 0 {
-			continue
-		}
-		if err := b.def.Validate(rows); err != nil {
-			return 0, err
-		}
-		w, err := StreamWindows(b.def, rows)
-		if err != nil {
-			return 0, fmt.Errorf("%s: %w", b.def.Name, err)
-		}
-		windows = append(windows, w)
-		if schema == nil {
-			schema = rows.Schema()
-		} else if !schema.Equal(rows.Schema()) {
-			return 0, fmt.Errorf("%s: parts have different schemas", b.def.Name)
-		}
-		rdr := array.NewTableReader(rows, -1)
-		for rdr.Next() {
-			rec := rdr.RecordBatch()
-			rec.Retain()
-			recs = append(recs, rec)
-		}
-		rdr.Release()
-	}
-	if len(windows) == 0 {
-		return 0, nil
-	}
-	if b.tx == nil {
-		return 0, fmt.Errorf("%s: batch failed earlier", b.def.Name)
-	}
-	var o appendOptions
-	for _, opt := range opts {
-		if err := opt(&o); err != nil {
-			return 0, err
-		}
-	}
-	filter, err := windowFilter(b.def, windows)
-	if err != nil {
-		return 0, fmt.Errorf("%s: %w", b.def.Name, err)
-	}
-	rows := array.NewTableFromRecords(schema, recs)
-	defer rows.Release()
-	ordered, err := inTableOrder(b.tbl, rows)
-	if err != nil {
-		return 0, fmt.Errorf("%s: %w", b.def.Name, err)
-	}
-	defer ordered.Release()
-	if err := b.tx.OverwriteTable(ctx, ordered, appendBatchRows, o.props, table.WithOverwriteFilter(filter)); err != nil {
-		b.tx = nil // the transaction may hold part of this write
-		return 0, fmt.Errorf("writing %s: %w", b.def.Name, err)
-	}
-	b.staged += rows.NumRows()
-	b.n++
-	return rows.NumRows(), nil
-}
-
-// Failed reports whether an Append error left the batch unable to stage
-// or commit; what it had staged is lost.
-func (b *Batch) Failed() bool { return b.tx == nil }
-
-// Staged is the number of appends staged since the last Commit.
-func (b *Batch) Staged() int { return b.n }
-
-// Commit commits the staged appends in one catalog update and returns
-// their rows. The batch can then stage more.
-func (b *Batch) Commit(ctx context.Context) (int64, error) {
-	if b.tx == nil {
-		return 0, fmt.Errorf("%s: batch failed earlier", b.def.Name)
-	}
-	if b.n == 0 {
-		return 0, nil
-	}
-	updated, err := b.tx.Commit(ctx)
-	b.n, b.tx = 0, nil
-	if err != nil {
-		return 0, fmt.Errorf("committing %s: %w", b.def.Name, err)
-	}
-	n := b.staged
-	b.staged = 0
-	b.tbl, b.tx = updated, updated.NewTransaction()
-	b.c.tables[b.def.Namespace()+"."+b.def.Name] = updated
-	return n, nil
+	return db.Table(def.Name)
 }

@@ -59,11 +59,17 @@ func attitudeRows(t *testing.T, edid string, start time.Time, n int) arrow.Table
 // count is the number of rows in def's table, and of those, the rows of edid.
 func count(t *testing.T, cat *Catalog, def datamodels.TableDef, edid string) (all, stream int64) {
 	t.Helper()
-	tbl, err := cat.Table(context.Background(), def)
+	tbl, err := openTable(context.Background(), cat, def)
 	if err != nil {
 		t.Fatal(err)
 	}
-	at, err := tbl.Scan().ToArrowTable(context.Background())
+	return countTable(t, tbl, edid)
+}
+
+// countTable is the table's row count, and the rows of stream edid.
+func countTable(t *testing.T, tbl *Table, edid string) (all, stream int64) {
+	t.Helper()
+	at, err := tbl.Iceberg().Scan().ToArrowTable(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +91,7 @@ func count(t *testing.T, cat *Catalog, def datamodels.TableDef, edid string) (al
 
 func TestAppendIsIdempotent(t *testing.T) {
 	ctx := context.Background()
-	cat, err := Open(ctx, Config{Name: Local, Warehouse: t.TempDir()})
+	cat, err := Build(ctx, Config{Name: Local, Warehouse: t.TempDir()}, datamodels.SFG)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +101,7 @@ func TestAppendIsIdempotent(t *testing.T) {
 	write := func(rows arrow.Table, opts ...AppendOption) {
 		t.Helper()
 		defer rows.Release()
-		if _, err := cat.Append(ctx, def, rows, opts...); err != nil {
+		if _, err := appendRows(ctx, cat, def, rows, opts...); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -112,8 +118,8 @@ func TestAppendIsIdempotent(t *testing.T) {
 	}
 	write(attitudeRows(t, a, t0, 10), WithSource(src)) // file 1 of stream a
 	check("first ingest", 10, 10)
-	tbl, _ := cat.Table(ctx, def)
-	if p := tbl.CurrentSnapshot().Summary.Properties; p[PropSourceFile] != src || len(p[PropSourceSHA256]) != 64 {
+	tbl, _ := openTable(ctx, cat, def)
+	if p := tbl.Iceberg().CurrentSnapshot().Summary.Properties; p[PropSourceFile] != src || len(p[PropSourceSHA256]) != 64 {
 		t.Errorf("snapshot properties = %v, want source file and sha256", p)
 	}
 
@@ -137,14 +143,14 @@ func TestAppendIsIdempotent(t *testing.T) {
 // one by one would, with one snapshot per append.
 func TestBatch(t *testing.T) {
 	ctx := context.Background()
-	cat, err := Open(ctx, Config{Name: Local, Warehouse: t.TempDir()})
+	cat, err := Build(ctx, Config{Name: Local, Warehouse: t.TempDir()}, datamodels.SFG)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cat.Close()
 	def := datamodels.AttitudeAHRS
 	const a = "net.STA.2026_A_1126.AHRS00.AHRS00"
-	b, err := cat.NewBatch(ctx, def)
+	b, err := newBatch(ctx, cat, def)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,14 +178,14 @@ func TestBatch(t *testing.T) {
 	if all, _ := count(t, cat, def, a); all != 17 {
 		t.Errorf("%d rows, want 17 (file 2 replaces file 1's last row)", all)
 	}
-	tbl, _ := cat.Table(ctx, def)
+	tbl, _ := openTable(ctx, cat, def)
 	var files []string
-	for snap := tbl.CurrentSnapshot(); snap != nil; {
+	for snap := tbl.Iceberg().CurrentSnapshot(); snap != nil; {
 		files = append([]string{snap.Summary.Properties["file"]}, files...)
 		if snap.ParentSnapshotID == nil {
 			break
 		}
-		snap = tbl.Metadata().SnapshotByID(*snap.ParentSnapshotID)
+		snap = tbl.Iceberg().Metadata().SnapshotByID(*snap.ParentSnapshotID)
 	}
 	if strings.Join(files, ",") != "1,2,3" {
 		t.Errorf("snapshot files %v, want 1,2,3", files)
@@ -199,7 +205,7 @@ func TestBatch(t *testing.T) {
 // window: rows of the same stream between the parts' windows stay.
 func TestAppendParts(t *testing.T) {
 	ctx := context.Background()
-	cat, err := Open(ctx, Config{Name: Local, Warehouse: t.TempDir()})
+	cat, err := Build(ctx, Config{Name: Local, Warehouse: t.TempDir()}, datamodels.SFG)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,12 +213,12 @@ func TestAppendParts(t *testing.T) {
 	def := datamodels.AttitudeAHRS
 	const a, b = "net.STA.2026_A_1126.AHRS00.AHRS00", "net.STA.2026_A_1126.DFOP00.DFOP00"
 	all := attitudeRows(t, a, t0, 30) // :31 to 20:55:00
-	if _, err := cat.Append(ctx, def, all); err != nil {
+	if _, err := appendRows(ctx, cat, def, all); err != nil {
 		t.Fatal(err)
 	}
 	all.Release()
 
-	batch, err := cat.NewBatch(ctx, def)
+	batch, err := newBatch(ctx, cat, def)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,9 +245,9 @@ func TestAppendParts(t *testing.T) {
 	if total, gotA := count(t, cat, def, a); total != 34 || gotA != 30 {
 		t.Errorf("%d rows (%d of stream a), want 34 (30)", total, gotA)
 	}
-	tbl, _ := cat.Table(ctx, def)
+	tbl, _ := openTable(ctx, cat, def)
 	var got []SourceFile
-	if err := json.Unmarshal([]byte(tbl.CurrentSnapshot().Summary.Properties[PropSourceFiles]), &got); err != nil || len(got) != 3 {
+	if err := json.Unmarshal([]byte(tbl.Iceberg().CurrentSnapshot().Summary.Properties[PropSourceFiles]), &got); err != nil || len(got) != 3 {
 		t.Errorf("snapshot source files %v, %v; want the three", got, err)
 	}
 }

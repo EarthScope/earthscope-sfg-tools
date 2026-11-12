@@ -26,7 +26,7 @@ import (
 const (
 	// FileType names the file type in stream EDIDs.
 	FileType = "CTD"
-	// LogType is the one log type CTD files carry, and the Log_Source value
+	// LogType is the one log type CTD files carry, and the log source value
 	// of their rows.
 	LogType = "CTD"
 )
@@ -48,11 +48,11 @@ func ProfileTime(path string) (time.Time, error) {
 	return time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC), nil
 }
 
-// SoundSpeed parses the CTD profile at path into sound_speed rows (see
-// datamodels.ParsedSchema). Lines that are not two numbers, or whose depth
+// SoundSpeed parses the CTD profile at path into sound_speed rows (stamped with
+// stream_edid for scope). Lines that are not two numbers, or whose depth
 // is above the surface, are skipped and counted. The caller releases the
 // table.
-func SoundSpeed(path string) (arrow.Table, error) {
+func SoundSpeed(path string, scope datamodels.Scope) (arrow.Table, error) {
 	at, err := ProfileTime(path)
 	if err != nil {
 		return nil, err
@@ -63,7 +63,7 @@ func SoundSpeed(path string) (arrow.Table, error) {
 	}
 	slog.Debug("parsed CTD", "file", filepath.Base(path), "rows", len(rs), "bad_lines", bad,
 		"time", at.Format(time.DateOnly))
-	return datamodels.BuildSoundSpeed(rs, LogType)
+	return datamodels.BuildSoundSpeed(rs, datamodels.StreamEDID(scope, FileType, LogType))
 }
 
 func readProfile(path string, at time.Time) (rs []datamodels.SoundSpeedRow, bad int, err error) {

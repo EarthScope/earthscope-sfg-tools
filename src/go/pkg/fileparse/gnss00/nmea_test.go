@@ -28,7 +28,7 @@ func writeFile(t *testing.T, t0 time.Time, sentences ...string) string {
 
 func checkSchema(t *testing.T, tbl arrow.Table, def datamodels.TableDef, rows int64) {
 	t.Helper()
-	if want, _ := datamodels.ParsedSchema(def); !tbl.Schema().Equal(want) {
+	if want, _ := def.ArrowSchema(); !tbl.Schema().Equal(want) {
 		t.Fatalf("schema = %v, want %s parsed schema %v", tbl.Schema(), def.Name, want)
 	}
 	if tbl.NumRows() != rows {
@@ -44,7 +44,7 @@ func TestSatellitesInView(t *testing.T) {
 		nmea("$GPVTG,303.995,T,303.995,M,1.651,N,3.058,K,A"), // other types ignored
 		nmea("$GPGSV,1,1,00,,,,"),                            // nothing in view: no rows
 	)
-	tbl, err := SatellitesInView(path)
+	tbl, err := SatellitesInView(path, testScope)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestDOP(t *testing.T) {
 		nmea("$GPGSA,,1,,,,,,,,,,,,,,,"), // no fix: skipped
 		nmea("$GPGSA,A,2,07,09,11,,,,,,,,,,2.0,1.0,"),
 	)
-	tbl, err := DOP(path)
+	tbl, err := DOP(path, testScope)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestCourseSpeed(t *testing.T) {
 		nmea("$GPVTG,,,,,,,,,N"),             // no fix: skipped
 		nmea("$GPVTG,10.5,T,,M,0.2,N,0.4,K"), // NMEA 2.0: no mode
 	)
-	tbl, err := CourseSpeed(path)
+	tbl, err := CourseSpeed(path, testScope)
 	if err != nil {
 		t.Fatal(err)
 	}

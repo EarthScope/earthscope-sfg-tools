@@ -33,15 +33,15 @@ func utcMicros(gps time.Time) arrow.Timestamp {
 	return arrow.Timestamp(gnsstime.GPSTimeToUTC(gps).UnixMicro())
 }
 
-// BuildINSPVA converts records from logSource to INSPVARow rows (see
-// ParsedSchema); times become UTC.
-func BuildINSPVA(records []INSPVARow, logSource string) (arrow.Table, error) {
+// BuildINSPVA converts records to inspva rows of stream edid; times become
+// UTC.
+func BuildINSPVA(records []INSPVARow, edid string) (arrow.Table, error) {
 	b, err := newBuilder(INSPVA)
 	if err != nil {
 		return nil, err
 	}
 	defer b.Release()
-	logSrc := col[*array.StringBuilder](b, LogSourceColumn)
+	edidCol := col[*array.StringBuilder](b, StreamEDIDName)
 	tm := col[*array.TimestampBuilder](b, "time")
 	var cols []*array.Float64Builder
 	for _, name := range []string{"lat", "lon", "alt", "north", "east", "up", "roll", "pitch", "heading"} {
@@ -50,7 +50,7 @@ func BuildINSPVA(records []INSPVARow, logSource string) (arrow.Table, error) {
 	insStatus := col[*array.StringBuilder](b, "ins_status")
 	timeStatus := col[*array.StringBuilder](b, "time_status")
 	for _, r := range records {
-		logSrc.Append(logSource)
+		edidCol.Append(edid)
 		tm.Append(utcMicros(r.Time))
 		for i, v := range []float64{r.Lat, r.Lon, r.Alt, r.North, r.East, r.Up, r.Roll, r.Pitch, r.Azimuth} {
 			cols[i].Append(v)
@@ -61,16 +61,16 @@ func BuildINSPVA(records []INSPVARow, logSource string) (arrow.Table, error) {
 	return b.Table()
 }
 
-// BuildINSSTDEV converts records from logSource to INSSTDEVRow rows (see
-// ParsedSchema); times become UTC. The
+// BuildINSSTDEV converts records to insstdev rows of stream edid; times
+// become UTC. The
 // cov_* columns hold the logged attitude std devs (see INSSTDEV).
-func BuildINSSTDEV(records []INSSTDEVRow, logSource string) (arrow.Table, error) {
+func BuildINSSTDEV(records []INSSTDEVRow, edid string) (arrow.Table, error) {
 	b, err := newBuilder(INSSTDEV)
 	if err != nil {
 		return nil, err
 	}
 	defer b.Release()
-	logSrc := col[*array.StringBuilder](b, LogSourceColumn)
+	edidCol := col[*array.StringBuilder](b, StreamEDIDName)
 	tm := col[*array.TimestampBuilder](b, "time")
 	var cols []*array.Float64Builder
 	for _, name := range []string{"lat_sig", "lon_sig", "alt_sig", "north_sig", "east_sig", "up_sig", "cov_rr", "cov_pp", "cov_hh"} {
@@ -80,7 +80,7 @@ func BuildINSSTDEV(records []INSSTDEVRow, logSource string) (arrow.Table, error)
 	sinceUpdate := col[*array.StringBuilder](b, "time_since_update")
 	timeStatus := col[*array.StringBuilder](b, "time_status")
 	for _, r := range records {
-		logSrc.Append(logSource)
+		edidCol.Append(edid)
 		tm.Append(utcMicros(r.Time))
 		for i, v := range []float64{r.LatSig, r.LonSig, r.AltSig, r.NorthSig, r.EastSig, r.UpSig, r.RollSig, r.PitchSig, r.AzimuthSig} {
 			cols[i].Append(v)

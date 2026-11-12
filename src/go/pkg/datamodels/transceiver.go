@@ -21,16 +21,16 @@ type TransceiverInterrogationRow struct {
 	NPL            *int32
 }
 
-// BuildTransceiverInterrogations builds transceiver_interrogations rows from
-// logSource.
-func BuildTransceiverInterrogations(rs []TransceiverInterrogationRow, logSource string) (arrow.Table, error) {
+// BuildTransceiverInterrogations builds transceiver_interrogations rows of
+// stream edid.
+func BuildTransceiverInterrogations(rs []TransceiverInterrogationRow, edid string) (arrow.Table, error) {
 	b, err := newBuilder(TransceiverInterrogations)
 	if err != nil {
 		return nil, err
 	}
 	defer b.Release()
 	var (
-		logSrc    = col[*array.StringBuilder](b, LogSourceColumn)
+		edidCol   = col[*array.StringBuilder](b, StreamEDIDName)
 		tm        = col[*array.TimestampBuilder](b, "time")
 		unit      = col[*array.StringBuilder](b, "unit")
 		event     = col[*array.Int32Builder](b, "event")
@@ -42,7 +42,7 @@ func BuildTransceiverInterrogations(rs []TransceiverInterrogationRow, logSource 
 		npl       = col[*array.Int32Builder](b, "npl")
 	)
 	for _, r := range rs {
-		logSrc.Append(logSource)
+		edidCol.Append(edid)
 		tm.Append(micros(r.Time))
 		appendOpt(unit, r.Unit)
 		appendOpt(event, r.Event)
@@ -74,15 +74,15 @@ type TransceiverRangeRow struct {
 	Doppler    *float64
 }
 
-// BuildTransceiverRanges builds transceiver_ranges rows from logSource.
-func BuildTransceiverRanges(rs []TransceiverRangeRow, logSource string) (arrow.Table, error) {
+// BuildTransceiverRanges builds transceiver_ranges rows of stream edid.
+func BuildTransceiverRanges(rs []TransceiverRangeRow, edid string) (arrow.Table, error) {
 	b, err := newBuilder(TransceiverRanges)
 	if err != nil {
 		return nil, err
 	}
 	defer b.Release()
 	var (
-		logSrc     = col[*array.StringBuilder](b, LogSourceColumn)
+		edidCol    = col[*array.StringBuilder](b, StreamEDIDName)
 		tm         = col[*array.TimestampBuilder](b, "time")
 		replyTime  = col[*array.TimestampBuilder](b, "reply_time")
 		unit       = col[*array.StringBuilder](b, "unit")
@@ -98,7 +98,7 @@ func BuildTransceiverRanges(rs []TransceiverRangeRow, logSource string) (arrow.T
 		doppler    = col[*array.Float64Builder](b, "doppler")
 	)
 	for _, r := range rs {
-		logSrc.Append(logSource)
+		edidCol.Append(edid)
 		tm.Append(micros(r.Time))
 		replyTime.Append(micros(r.ReplyTime))
 		appendOpt(unit, r.Unit)
@@ -119,16 +119,16 @@ func BuildTransceiverRanges(rs []TransceiverRangeRow, logSource string) (arrow.T
 // TransceiverSettingRow is one transceiver_settings row: one key of a
 // transceiver reply. Time is UTC.
 type TransceiverSettingRow struct {
-	LogSource string // the reply type's log source, e.g. TCVR_CONFIG
-	Time      time.Time
-	Unit      *string
-	Command   string // CS, PORT, US, FS, DIAG
-	Key       string
-	Value     string
+	EDID    string // the stream EDID of the reply type's log source, e.g. ...TCVR00.TCVR_CONFIG
+	Time    time.Time
+	Unit    *string
+	Command string // CS, PORT, US, FS, DIAG
+	Key     string
+	Value   string
 }
 
-// BuildTransceiverSettings builds transceiver_settings rows, each from its own
-// LogSource: one file's settings replies span two log sources.
+// BuildTransceiverSettings builds transceiver_settings rows, each of its own
+// stream (EDID): one file's settings replies span two log sources.
 func BuildTransceiverSettings(rs []TransceiverSettingRow) (arrow.Table, error) {
 	b, err := newBuilder(TransceiverSettings)
 	if err != nil {
@@ -136,7 +136,7 @@ func BuildTransceiverSettings(rs []TransceiverSettingRow) (arrow.Table, error) {
 	}
 	defer b.Release()
 	var (
-		logSrc  = col[*array.StringBuilder](b, LogSourceColumn)
+		edidCol = col[*array.StringBuilder](b, StreamEDIDName)
 		tm      = col[*array.TimestampBuilder](b, "time")
 		unit    = col[*array.StringBuilder](b, "unit")
 		command = col[*array.StringBuilder](b, "command")
@@ -144,7 +144,7 @@ func BuildTransceiverSettings(rs []TransceiverSettingRow) (arrow.Table, error) {
 		value   = col[*array.StringBuilder](b, "value")
 	)
 	for _, r := range rs {
-		logSrc.Append(r.LogSource)
+		edidCol.Append(r.EDID)
 		tm.Append(micros(r.Time))
 		appendOpt(unit, r.Unit)
 		command.Append(r.Command)

@@ -19,15 +19,15 @@ type GNSSSatelliteInViewRow struct {
 	SNR        *float64 // [dB-Hz]
 }
 
-// BuildGNSSSatellitesInView builds gnss_satellites_in_view rows from logSource.
-func BuildGNSSSatellitesInView(rs []GNSSSatelliteInViewRow, logSource string) (arrow.Table, error) {
+// BuildGNSSSatellitesInView builds gnss_satellites_in_view rows of stream edid.
+func BuildGNSSSatellitesInView(rs []GNSSSatelliteInViewRow, edid string) (arrow.Table, error) {
 	b, err := newBuilder(GNSSSatellitesInView)
 	if err != nil {
 		return nil, err
 	}
 	defer b.Release()
 	var (
-		logSrc     = col[*array.StringBuilder](b, LogSourceColumn)
+		edidCol    = col[*array.StringBuilder](b, StreamEDIDName)
 		tm         = col[*array.TimestampBuilder](b, "time")
 		talker     = col[*array.StringBuilder](b, "talker")
 		satsInView = col[*array.Int32Builder](b, "sats_in_view")
@@ -37,7 +37,7 @@ func BuildGNSSSatellitesInView(rs []GNSSSatelliteInViewRow, logSource string) (a
 		snr        = col[*array.Float64Builder](b, "snr")
 	)
 	for _, r := range rs {
-		logSrc.Append(logSource)
+		edidCol.Append(edid)
 		tm.Append(micros(r.Time))
 		talker.Append(r.Talker)
 		satsInView.Append(r.SatsInView)
@@ -60,15 +60,15 @@ type GNSSDOPRow struct {
 	PDOP, HDOP, VDOP *float64
 }
 
-// BuildGNSSDOP builds gnss_dop rows from logSource.
-func BuildGNSSDOP(rs []GNSSDOPRow, logSource string) (arrow.Table, error) {
+// BuildGNSSDOP builds gnss_dop rows of stream edid.
+func BuildGNSSDOP(rs []GNSSDOPRow, edid string) (arrow.Table, error) {
 	b, err := newBuilder(GNSSDOP)
 	if err != nil {
 		return nil, err
 	}
 	defer b.Release()
 	var (
-		logSrc  = col[*array.StringBuilder](b, LogSourceColumn)
+		edidCol = col[*array.StringBuilder](b, StreamEDIDName)
 		tm      = col[*array.TimestampBuilder](b, "time")
 		talker  = col[*array.StringBuilder](b, "talker")
 		mode    = col[*array.StringBuilder](b, "mode")
@@ -80,7 +80,7 @@ func BuildGNSSDOP(rs []GNSSDOPRow, logSource string) (arrow.Table, error) {
 		vdop    = col[*array.Float64Builder](b, "vdop")
 	)
 	for _, r := range rs {
-		logSrc.Append(logSource)
+		edidCol.Append(edid)
 		tm.Append(micros(r.Time))
 		talker.Append(r.Talker)
 		appendOpt(mode, r.Mode)
@@ -104,15 +104,15 @@ type GNSSCourseSpeedRow struct {
 	Mode                       *string
 }
 
-// BuildGNSSCourseSpeed builds gnss_course_speed rows from logSource.
-func BuildGNSSCourseSpeed(rs []GNSSCourseSpeedRow, logSource string) (arrow.Table, error) {
+// BuildGNSSCourseSpeed builds gnss_course_speed rows of stream edid.
+func BuildGNSSCourseSpeed(rs []GNSSCourseSpeedRow, edid string) (arrow.Table, error) {
 	b, err := newBuilder(GNSSCourseSpeed)
 	if err != nil {
 		return nil, err
 	}
 	defer b.Release()
 	var (
-		logSrc     = col[*array.StringBuilder](b, LogSourceColumn)
+		edidCol    = col[*array.StringBuilder](b, StreamEDIDName)
 		tm         = col[*array.TimestampBuilder](b, "time")
 		talker     = col[*array.StringBuilder](b, "talker")
 		courseTrue = col[*array.Float64Builder](b, "course_true")
@@ -122,7 +122,7 @@ func BuildGNSSCourseSpeed(rs []GNSSCourseSpeedRow, logSource string) (arrow.Tabl
 		mode       = col[*array.StringBuilder](b, "mode")
 	)
 	for _, r := range rs {
-		logSrc.Append(logSource)
+		edidCol.Append(edid)
 		tm.Append(micros(r.Time))
 		talker.Append(r.Talker)
 		appendOpt(courseTrue, r.CourseTrue)

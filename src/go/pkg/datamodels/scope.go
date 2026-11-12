@@ -58,7 +58,7 @@ func CheckScope(scope Scope) error {
 
 // Log sources shared across file types, named for what the rows hold rather
 // than the file they came from, so the same kind of stream has the same
-// Log_Source whichever file type it is parsed from.
+// log source whichever file type it is parsed from.
 const (
 	LogINTGRPLY   = "INTG-RPLY"  // interrogations paired with their replies: travel_times
 	LogAHRS       = "AHRS"       // attitude_ahrs
@@ -67,7 +67,7 @@ const (
 	LogINSPVAA    = "INSPVAA"    // NovAtel INS position, velocity and attitude: inspva
 )
 
-// LogSource is the Log_Source value of rows from log type logType on one
+// LogSource is the log source (the EDID's last field) of rows from log type logType on one
 // antenna (measurement source): the log type, with NovAtel's _<antenna>
 // suffix for antennas after the primary, e.g. RANGECMP5B, RANGECMP5B_1.
 func LogSource(logType string, antenna uint8) string {

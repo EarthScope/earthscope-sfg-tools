@@ -20,15 +20,15 @@ type AttitudeAHRSRow struct {
 	P, R           *float64 // pitch, roll [deg]
 }
 
-// BuildAttitudeAHRS builds attitude_ahrs rows from logSource.
-func BuildAttitudeAHRS(rs []AttitudeAHRSRow, logSource string) (arrow.Table, error) {
+// BuildAttitudeAHRS builds attitude_ahrs rows of stream edid.
+func BuildAttitudeAHRS(rs []AttitudeAHRSRow, edid string) (arrow.Table, error) {
 	b, err := newBuilder(AttitudeAHRS)
 	if err != nil {
 		return nil, err
 	}
 	defer b.Release()
 	var (
-		logSrc       = col[*array.StringBuilder](b, LogSourceColumn)
+		edidCol      = col[*array.StringBuilder](b, StreamEDIDName)
 		tm           = col[*array.TimestampBuilder](b, "time")
 		tmInstrument = col[*array.Float64Builder](b, "time_instrument")
 		startCount   = col[*array.Int32Builder](b, "time_start_count")
@@ -39,7 +39,7 @@ func BuildAttitudeAHRS(rs []AttitudeAHRSRow, logSource string) (arrow.Table, err
 		measurements = append(measurements, col[*array.Float64Builder](b, name))
 	}
 	for _, r := range rs {
-		logSrc.Append(logSource)
+		edidCol.Append(edid)
 		tm.Append(micros(r.Time))
 		tmInstrument.Append(r.TimeInstrument)
 		appendOpt(startCount, r.TimeStartCount)

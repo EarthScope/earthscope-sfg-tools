@@ -60,23 +60,23 @@ func TestBuildGNSSObs(t *testing.T) {
 		Satellites: observation.Satellites{gloZero}}
 
 	tbl, err := BuildGNSSObs("NOV770",
-		GNSSObsSource{LogSource: "RANGECMP5B", Epochs: []observation.Epoch{epoch}},
-		GNSSObsSource{LogSource: "RANGECMP5B_1", Epochs: []observation.Epoch{epoch2}},
+		GNSSObsSource{EDID: "n.s.c.NOV770.RANGECMP5B", Epochs: []observation.Epoch{epoch}},
+		GNSSObsSource{EDID: "n.s.c.NOV770.RANGECMP5B_1", Epochs: []observation.Epoch{epoch2}},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tbl.Release()
-	if want, _ := ParsedSchema(GNSSObs); !tbl.Schema().Equal(want) {
-		t.Fatalf("schema = %v, want GNSSObs parsed schema %v", tbl.Schema(), want)
+	if want, _ := GNSSObs.ArrowSchema(); !tbl.Schema().Equal(want) {
+		t.Fatalf("schema = %v, want GNSSObs schema %v", tbl.Schema(), want)
 	}
 	if n := tbl.NumRows(); n != 4 {
 		t.Fatalf("%d rows, want 4: one per (epoch, satellite, signal)", n)
 	}
 
-	logSource := column(t, tbl, "Log_Source").(*array.String)
-	if logSource.Value(0) != "RANGECMP5B" || logSource.Value(3) != "RANGECMP5B_1" {
-		t.Errorf("Log_Source = %q, %q", logSource.Value(0), logSource.Value(3))
+	edid := column(t, tbl, StreamEDIDName).(*array.String)
+	if edid.Value(0) != "n.s.c.NOV770.RANGECMP5B" || edid.Value(3) != "n.s.c.NOV770.RANGECMP5B_1" {
+		t.Errorf("stream_edid = %q, %q", edid.Value(0), edid.Value(3))
 	}
 
 	timeGPST := column(t, tbl, "time_gpst").(*array.Timestamp)
@@ -160,7 +160,7 @@ func TestBuildGNSSObsRejectsBadEpochTime(t *testing.T) {
 	} {
 		epoch := observation.Epoch{Time: tm, Satellites: observation.Satellites{sat}}
 		if tbl, err := BuildGNSSObs("NOV000",
-			GNSSObsSource{LogSource: "RANGEA", Epochs: []observation.Epoch{epoch}}); err == nil {
+			GNSSObsSource{EDID: "n.s.c.NOV000.RANGEA", Epochs: []observation.Epoch{epoch}}); err == nil {
 			tbl.Release()
 			t.Errorf("%s: want an error", name)
 		}

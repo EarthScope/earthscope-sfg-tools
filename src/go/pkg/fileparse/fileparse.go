@@ -1,12 +1,12 @@
 // Package fileparse lists the Level 0 parsers: one per (raw file type, table).
 //
 // Each subpackage parses one file type and has one function per table it
-// produces, called with the file path, e.g. novatel000.INSPVA(path). It
-// returns the table's rows from every log source in the file that feeds the
-// table, without the scope and EDID columns (see datamodels.ParsedSchema).
-// Parser.Parse calls it and then adds those columns from the scope, so the
-// returned table has the table's full schema. A file is read once per parser
-// run on it; finding the files is the caller's job.
+// produces, called with the file path and scope, e.g.
+// novatel000.INSPVA(path, scope). It returns the table's rows from every log
+// source in the file that feeds the table, with the table's full schema:
+// each row's stream_edid is datamodels.StreamEDID(scope, FileType, its log
+// source). A file is read once per parser run on it; finding the files is
+// the caller's job.
 package fileparse
 
 import (
@@ -26,10 +26,9 @@ import (
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/tcvr00"
 )
 
-// ParseFunc parses one file into the rows of one table, from every log source
-// in the file that feeds it, with Log_Source and without stream_edid (see
-// datamodels.ParsedSchema).
-type ParseFunc func(path string) (arrow.Table, error)
+// ParseFunc parses one file of scope into the rows of one table, from every
+// log source in the file that feeds it, each stamped with its stream_edid.
+type ParseFunc func(path string, scope datamodels.Scope) (arrow.Table, error)
 
 // Parser parses one raw file type into one Level 0 table.
 type Parser struct {
@@ -38,21 +37,13 @@ type Parser struct {
 	ParseFile ParseFunc
 }
 
-// Parse takes in the file path and scope, returning an arrow table of the
-// parsed rows for the Parser's table definition. It calls
-// p.ParseFile(path), then maps each row's Log_Source to its p.StreamEDID in
-// the "stream_edid" column, dropping Log_Source (see stamp).
-// The caller releases the table.
+// Parse parses the file at path, of scope, into rows with the table's
+// full schema. The caller releases the table.
 func (p Parser) Parse(path string, scope datamodels.Scope) (arrow.Table, error) {
-	parsed, err := p.ParseFile(path)
-	if err != nil {
-		return nil, err
-	}
-	defer parsed.Release()
-	return p.stamp(parsed, scope)
+	return p.ParseFile(path, scope)
 }
 
-// StreamEDID is the stream EDID of p's rows for scope whose Log_Source is
+// StreamEDID is the stream EDID of p's rows for scope whose log source is
 // logSource, e.g. INSPVAA, or RANGECMP5B_1 for NOV770's second antenna
 // (datamodels.LogSource): network.station.campaign.file_type.log_source.
 func (p Parser) StreamEDID(scope datamodels.Scope, logSource string) string {

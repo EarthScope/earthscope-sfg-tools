@@ -43,8 +43,9 @@ func appendObs(t *testing.T, cat *catalog.Catalog, scope datamodels.Scope, fileT
 	p := fileparse.Parser{
 		FileType: fileType,
 		Table:    datamodels.GNSSObs,
-		ParseFile: func(string) (arrow.Table, error) {
-			return datamodels.BuildGNSSObs(fileType, datamodels.GNSSObsSource{LogSource: logSource, Epochs: eps})
+		ParseFile: func(_ string, scope datamodels.Scope) (arrow.Table, error) {
+			edid := datamodels.StreamEDID(scope, fileType, logSource)
+			return datamodels.BuildGNSSObs(fileType, datamodels.GNSSObsSource{EDID: edid, Epochs: eps})
 		},
 	}
 	rows, err := p.Parse("", scope)
@@ -52,14 +53,19 @@ func appendObs(t *testing.T, cat *catalog.Catalog, scope datamodels.Scope, fileT
 		t.Fatal(err)
 	}
 	defer rows.Release()
-	if _, err := cat.Append(context.Background(), datamodels.GNSSObs, rows); err != nil {
+	tbl, err := cat.TableOf(datamodels.GNSSObs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tbl.Append(context.Background(), rows); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestWriteRINEX(t *testing.T) {
 	ctx := context.Background()
-	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: t.TempDir()})
+	cfg := catalog.Config{Name: catalog.Local, Warehouse: t.TempDir()}
+	cat, err := catalog.Build(ctx, cfg, datamodels.SFG.Only(datamodels.GNSSObs))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,10 +78,20 @@ func TestWriteRINEX(t *testing.T) {
 	appendObs(t, cat, scope, "NOV000", "RANGEA", epochs(t, day.Add(24*time.Hour-5*time.Minute), 15, 2.1e7))
 	appendObs(t, cat, scope, "QCPIN", "RANGEA", epochs(t, day.Add(12*time.Hour), 3, 2.3e7))
 
+	// Read as sfg level0 rinex does: a separate, read-only load.
+	read, err := catalog.Load(ctx, cfg, datamodels.SFG.Only(datamodels.GNSSObs))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer read.Close()
+	obs, err := read.TableOf(datamodels.GNSSObs)
+	if err != nil {
+		t.Fatal(err)
+	}
 	settings := rinex.NewSettings()
 	settings.MarkerName = scope.Station
 	var buf bytes.Buffer
-	n, err := cat.WriteRINEX(ctx, &buf, scope, "NOV000", "RANGEA", day.Add(13*time.Hour), settings)
+	n, err := catalog.WriteRINEX(ctx, &buf, obs, scope, "NOV000", "RANGEA", day.Add(13*time.Hour), settings)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +109,7 @@ func TestWriteRINEX(t *testing.T) {
 		t.Errorf("RINEX holds another day's or stream's epochs:\n%s", out)
 	}
 
-	if _, err := cat.WriteRINEX(ctx, &buf, scope, "NOV000", "RANGEA", day.AddDate(0, 0, 2), settings); !errors.Is(err, catalog.ErrNoObservations) {
+	if _, err := catalog.WriteRINEX(ctx, &buf, obs, scope, "NOV000", "RANGEA", day.AddDate(0, 0, 2), settings); !errors.Is(err, catalog.ErrNoObservations) {
 		t.Errorf("empty day: err = %v, want ErrNoObservations", err)
 	}
 }

@@ -17,33 +17,34 @@ import (
 // the same paths.
 func TestEscapedPartitionPathsExist(t *testing.T) {
 	ctx := context.Background()
-	cat, err := Open(ctx, Config{Name: Local, Warehouse: t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cat.Close()
 	def := datamodels.AttitudeAHRS
 	def.Name = "attitude_by_stream"
 	def.PartitionBy = []datamodels.PartitionKey{{Source: "stream_edid", Transform: iceberg.IdentityTransform{}}}
 	// Real EDIDs escape nothing; a space (escaped "+") keeps the case covered.
 	const edid = "net work.STA.2026_A_1126.AHRS00.AHRS00"
+	test := datamodels.CatalogDef{Name: "test", Databases: []datamodels.DatabaseDef{{Name: "test_l0", Tables: []datamodels.TableDef{def}}}}
+	cat, err := Build(ctx, Config{Name: Local, Warehouse: t.TempDir()}, test)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cat.Close()
+	tbl, err := cat.TableOf(def)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, n := range []int{10, 4} { // the second append replaces the first's first 4 rows
 		rows := attitudeRows(t, edid, t0, n)
-		if _, err := cat.Append(ctx, def, rows); err != nil {
+		if _, err := tbl.Append(ctx, rows); err != nil {
 			t.Fatal(err)
 		}
 		rows.Release()
 	}
-	if all, _ := count(t, cat, def, edid); all != 10 {
+	if all, _ := countTable(t, tbl, edid); all != 10 {
 		t.Errorf("%d rows, want 10", all)
 	}
 
-	tbl, err := cat.Table(ctx, def)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tasks, err := tbl.Scan().PlanFiles(ctx)
+	tasks, err := tbl.Iceberg().Scan().PlanFiles(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -47,7 +47,7 @@ func (sel Selection) Filter(def datamodels.TableDef) (iceberg.BooleanExpression,
 	case sel.LogSource != "" && sel.FileType == "":
 		return nil, errors.New("selection by log source needs its file type")
 	}
-	edid := iceberg.Reference(datamodels.StreamEDIDColumn.Name)
+	edid := iceberg.Reference(datamodels.StreamEDIDName)
 
 	streamEDID := datamodels.StreamEDID
 	if def.Level > 0 {
@@ -90,19 +90,18 @@ func hasPrefix(ref iceberg.UnboundTerm, prefix string) iceberg.BooleanExpression
 	return iceberg.NewAnd(iceberg.GreaterThanEqual(ref, prefix), iceberg.LessThan(ref, upper))
 }
 
-// Scan reads the rows sel selects from def's table, batch by batch, with
-// the columns in sel.Columns order (all, in table order, when empty). Unlike
-// Table it neither creates nor evolves the table: a table the catalog lacks
-// is an error.
-func (c *Catalog) Scan(ctx context.Context, def datamodels.TableDef, sel Selection) (*arrow.Schema, iter.Seq2[arrow.RecordBatch, error], error) {
+// Scan reads the rows sel selects from the table, at the snapshot it last
+// read or committed, batch by batch, with the columns in sel.Columns order
+// (all, in table order, when empty). The snapshot is the one the table was
+// opened at (Build or Load) or last committed; Refresh first to see other
+// writers' commits since. Open with Load to read without creating anything.
+func (t *Table) Scan(ctx context.Context, sel Selection) (*arrow.Schema, iter.Seq2[arrow.RecordBatch, error], error) {
+	def := t.def
 	filter, err := sel.Filter(def)
 	if err != nil {
 		return nil, nil, err
 	}
-	tbl, err := c.cat.LoadTable(ctx, def.Identifier())
-	if err != nil {
-		return nil, nil, fmt.Errorf("loading %s.%s: %w", def.Namespace(), def.Name, err)
-	}
+	tbl := t.tbl
 	opts := []table.ScanOption{table.WithRowFilter(filter)}
 	if len(sel.Columns) > 0 {
 		opts = append(opts, table.WithSelectedFields(sel.Columns...))

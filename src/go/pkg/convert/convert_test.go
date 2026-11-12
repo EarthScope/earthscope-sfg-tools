@@ -74,7 +74,7 @@ func warehouse(t *testing.T) string {
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
-	cat, err := catalog.Open(ctx, catalog.Config{Name: catalog.Local, Warehouse: dir})
+	cat, err := catalog.Build(ctx, catalog.Config{Name: catalog.Local, Warehouse: dir}, datamodels.SFG.Only(datamodels.AttitudeAHRS))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func warehouse(t *testing.T) string {
 		n    int
 	}{{ahrsEDID, 10}, {dfopEDID, 4}} {
 		rows := attitudeRows(t, s.edid, t0, s.n)
-		if _, err := cat.Append(ctx, datamodels.AttitudeAHRS, rows); err != nil {
+		if _, err := appendTo(ctx, cat, datamodels.AttitudeAHRS, rows); err != nil {
 			t.Fatal(err)
 		}
 		rows.Release()
@@ -362,4 +362,13 @@ func TestResultGolden(t *testing.T) {
 			t.Errorf("%s result:\n%s\nwant:\n%s", name, got, want)
 		}
 	}
+}
+
+// appendTo appends rows to def's table in its SFG database.
+func appendTo(ctx context.Context, cat *catalog.Catalog, def datamodels.TableDef, rows arrow.Table) (int64, error) {
+	tbl, err := cat.TableOf(def)
+	if err != nil {
+		return 0, err
+	}
+	return tbl.Append(ctx, rows)
 }

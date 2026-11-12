@@ -36,7 +36,7 @@ const (
 	FileType = "GNSS00"
 
 	// GGA sentences, single-antenna pseudorange fixes, give the
-	// gnss_antenna_positions rows, with Log_Source datamodels.LogGNSSPSEUDO.
+	// gnss_antenna_positions rows, with log source datamodels.LogGNSSPSEUDO.
 
 	// LogGSV is the NMEA sentence of gnss_satellites_in_view rows.
 	LogGSV = "GSV"
@@ -57,10 +57,10 @@ type sentence struct {
 }
 
 // AntennaPositions parses the GGA fixes of the GNSS00.bin file at path into
-// gnss_antenna_positions rows (see datamodels.ParsedSchema), one per distinct
+// gnss_antenna_positions rows (stamped with stream_edid for scope), one per distinct
 // fix time, in ECEF. GGA without a fix, or with a bad checksum or field, are
 // skipped and counted. The caller releases the table.
-func AntennaPositions(path string) (arrow.Table, error) {
+func AntennaPositions(path string, scope datamodels.Scope) (arrow.Table, error) {
 	sentences, badSum, err := readFile(path)
 	if err != nil {
 		return nil, err
@@ -68,50 +68,50 @@ func AntennaPositions(path string) (arrow.Table, error) {
 	rs, noFix, bad := antennaPositions(sentences)
 	slog.Debug("parsed GNSS00", "file", filepath.Base(path), "sentences", len(sentences),
 		"fixes", len(rs), "no_fix", noFix, "bad_gga", bad, "bad_checksum", badSum)
-	return datamodels.BuildGNSSAntennaPositions(rs, datamodels.LogGNSSPSEUDO)
+	return datamodels.BuildGNSSAntennaPositions(rs, datamodels.StreamEDID(scope, FileType, datamodels.LogGNSSPSEUDO))
 }
 
 // SatellitesInView parses the GSV sentences of the GNSS00.bin file at path
-// into gnss_satellites_in_view rows (see datamodels.ParsedSchema): one per
+// into gnss_satellites_in_view rows (stamped with stream_edid for scope): one per
 // satellite of each GSV group, at the packet time of the group's first
 // sentence. Satellite entries that do not parse are skipped and counted.
 // The caller releases the table.
-func SatellitesInView(path string) (arrow.Table, error) {
+func SatellitesInView(path string, scope datamodels.Scope) (arrow.Table, error) {
 	sentences, badSum, err := readFile(path)
 	if err != nil {
 		return nil, err
 	}
 	rs, bad := satellitesInView(sentences)
 	slog.Debug("parsed GNSS00 GSV", "file", filepath.Base(path), "rows", len(rs), "bad_gsv", bad, "bad_checksum", badSum)
-	return datamodels.BuildGNSSSatellitesInView(rs, LogGSV)
+	return datamodels.BuildGNSSSatellitesInView(rs, datamodels.StreamEDID(scope, FileType, LogGSV))
 }
 
 // DOP parses the GSA sentences of the GNSS00.bin file at path into gnss_dop
-// rows (see datamodels.ParsedSchema), one per sentence. GSA reporting no DOP
+// rows (stamped with stream_edid for scope), one per sentence. GSA reporting no DOP
 // (no fix) or that do not parse are skipped and counted. The caller releases
 // the table.
-func DOP(path string) (arrow.Table, error) {
+func DOP(path string, scope datamodels.Scope) (arrow.Table, error) {
 	sentences, badSum, err := readFile(path)
 	if err != nil {
 		return nil, err
 	}
 	rs, noFix, bad := dops(sentences)
 	slog.Debug("parsed GNSS00 GSA", "file", filepath.Base(path), "rows", len(rs), "no_fix", noFix, "bad_gsa", bad, "bad_checksum", badSum)
-	return datamodels.BuildGNSSDOP(rs, LogGSA)
+	return datamodels.BuildGNSSDOP(rs, datamodels.StreamEDID(scope, FileType, LogGSA))
 }
 
 // CourseSpeed parses the VTG sentences of the GNSS00.bin file at path into
-// gnss_course_speed rows (see datamodels.ParsedSchema), one per sentence. VTG
+// gnss_course_speed rows (stamped with stream_edid for scope), one per sentence. VTG
 // reporting neither course nor speed (no fix) or that do not parse are
 // skipped and counted. The caller releases the table.
-func CourseSpeed(path string) (arrow.Table, error) {
+func CourseSpeed(path string, scope datamodels.Scope) (arrow.Table, error) {
 	sentences, badSum, err := readFile(path)
 	if err != nil {
 		return nil, err
 	}
 	rs, noFix, bad := courseSpeeds(sentences)
 	slog.Debug("parsed GNSS00 VTG", "file", filepath.Base(path), "rows", len(rs), "no_fix", noFix, "bad_vtg", bad, "bad_checksum", badSum)
-	return datamodels.BuildGNSSCourseSpeed(rs, LogVTG)
+	return datamodels.BuildGNSSCourseSpeed(rs, datamodels.StreamEDID(scope, FileType, LogVTG))
 }
 
 // readFile reads the NMEA sentences of the GNSS00.bin file at path.
