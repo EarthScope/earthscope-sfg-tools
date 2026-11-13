@@ -13,6 +13,7 @@ import (
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
 )
 
 var level0Cmd = &cobra.Command{
@@ -41,7 +42,7 @@ var level0RINEXCmd = &cobra.Command{
 
 func runLevel0RINEX(cmd *cobra.Command, _ []string) error {
 	f := cmd.Flags()
-	var scope datamodels.Scope
+	var scope edid.Scope
 	scope.Network, _ = f.GetString("network")
 	scope.Station, _ = f.GetString("station")
 	scope.Campaign, _ = f.GetString("campaign")
@@ -53,7 +54,7 @@ func runLevel0RINEX(cmd *cobra.Command, _ []string) error {
 	catalogName, _ := f.GetString("catalog")
 	warehouse, _ := f.GetString("warehouse")
 
-	if err := datamodels.CheckScope(scope); err != nil {
+	if err := edid.CheckScope(scope); err != nil {
 		return err
 	}
 	day, err := time.Parse(time.DateOnly, dayStr)
@@ -73,12 +74,17 @@ func runLevel0RINEX(cmd *cobra.Command, _ []string) error {
 	}
 
 	ctx := cmd.Context()
-	cat, err := catalog.Load(ctx, catalog.Config{Name: catalogName, Warehouse: warehouse}, datamodels.SFG.Only(datamodels.GNSSObs))
+	obsRef := datamodels.GNSSA_L0.Ref(datamodels.GNSSObs)
+	cfg, err := catalog.ParseConfig(catalogName, warehouse)
+	if err != nil {
+		return fmt.Errorf("--catalog: %w", err)
+	}
+	cat, err := catalog.Load(ctx, cfg, datamodels.SFG.Only(obsRef))
 	if err != nil {
 		return err
 	}
 	defer cat.Close()
-	obs, err := cat.TableOf(datamodels.GNSSObs)
+	obs, err := cat.TableOf(obsRef)
 	if err != nil {
 		return err
 	}
@@ -99,7 +105,7 @@ func runLevel0RINEX(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	slog.Info("wrote RINEX", "file", outPath, "epochs", n,
-		"stream", datamodels.StreamEDID(scope, fileType, logSource), "day", dayStr)
+		"stream", edid.Stream(scope, fileType, logSource), "day", dayStr)
 	return nil
 }
 
@@ -107,8 +113,8 @@ func init() {
 	level0Cmd.PersistentFlags().BoolP("verbose", "v", false, "log per-file parser details")
 
 	f := level0RINEXCmd.Flags()
-	f.String("warehouse", "", "Iceberg warehouse: the directory for --catalog local (required then), else overrides the catalog's")
-	f.String("catalog", catalog.Local, "catalog: local, or a catalog of the iceberg-go configuration")
+	f.String("warehouse", "", "Iceberg warehouse: the directory for --catalog local (required then), the S3 prefix for glue, else overrides the catalog's")
+	f.String("catalog", string(catalog.Local), "catalog: local, glue, or a catalog of the iceberg-go configuration")
 	f.String("network", "", "network of the stream's scope (required)")
 	f.String("station", "", "station of the stream's scope (required)")
 	f.String("campaign", "", "campaign of the stream's scope (required)")

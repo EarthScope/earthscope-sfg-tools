@@ -27,8 +27,9 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"gitlab.com/earthscope/gnsstools/core/coordinates"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/internal/gpsa"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/rows"
 )
 
 const (
@@ -36,7 +37,7 @@ const (
 	FileType = "GNSS00"
 
 	// GGA sentences, single-antenna pseudorange fixes, give the
-	// gnss_antenna_positions rows, with log source datamodels.LogGNSSPSEUDO.
+	// gnss_antenna_positions rows, with log source edid.LogGNSSPSEUDO.
 
 	// LogGSV is the NMEA sentence of gnss_satellites_in_view rows.
 	LogGSV = "GSV"
@@ -60,7 +61,7 @@ type sentence struct {
 // gnss_antenna_positions rows (stamped with stream_edid for scope), one per distinct
 // fix time, in ECEF. GGA without a fix, or with a bad checksum or field, are
 // skipped and counted. The caller releases the table.
-func AntennaPositions(path string, scope datamodels.Scope) (arrow.Table, error) {
+func AntennaPositions(path string, scope edid.Scope) (arrow.Table, error) {
 	sentences, badSum, err := readFile(path)
 	if err != nil {
 		return nil, err
@@ -68,7 +69,7 @@ func AntennaPositions(path string, scope datamodels.Scope) (arrow.Table, error) 
 	rs, noFix, bad := antennaPositions(sentences)
 	slog.Debug("parsed GNSS00", "file", filepath.Base(path), "sentences", len(sentences),
 		"fixes", len(rs), "no_fix", noFix, "bad_gga", bad, "bad_checksum", badSum)
-	return datamodels.BuildGNSSAntennaPositions(rs, datamodels.StreamEDID(scope, FileType, datamodels.LogGNSSPSEUDO))
+	return rows.BuildGNSSAntennaPositions(rs, edid.Stream(scope, FileType, edid.LogGNSSPSEUDO))
 }
 
 // SatellitesInView parses the GSV sentences of the GNSS00.bin file at path
@@ -76,42 +77,42 @@ func AntennaPositions(path string, scope datamodels.Scope) (arrow.Table, error) 
 // satellite of each GSV group, at the packet time of the group's first
 // sentence. Satellite entries that do not parse are skipped and counted.
 // The caller releases the table.
-func SatellitesInView(path string, scope datamodels.Scope) (arrow.Table, error) {
+func SatellitesInView(path string, scope edid.Scope) (arrow.Table, error) {
 	sentences, badSum, err := readFile(path)
 	if err != nil {
 		return nil, err
 	}
 	rs, bad := satellitesInView(sentences)
 	slog.Debug("parsed GNSS00 GSV", "file", filepath.Base(path), "rows", len(rs), "bad_gsv", bad, "bad_checksum", badSum)
-	return datamodels.BuildGNSSSatellitesInView(rs, datamodels.StreamEDID(scope, FileType, LogGSV))
+	return rows.BuildGNSSSatellitesInView(rs, edid.Stream(scope, FileType, LogGSV))
 }
 
 // DOP parses the GSA sentences of the GNSS00.bin file at path into gnss_dop
 // rows (stamped with stream_edid for scope), one per sentence. GSA reporting no DOP
 // (no fix) or that do not parse are skipped and counted. The caller releases
 // the table.
-func DOP(path string, scope datamodels.Scope) (arrow.Table, error) {
+func DOP(path string, scope edid.Scope) (arrow.Table, error) {
 	sentences, badSum, err := readFile(path)
 	if err != nil {
 		return nil, err
 	}
 	rs, noFix, bad := dops(sentences)
 	slog.Debug("parsed GNSS00 GSA", "file", filepath.Base(path), "rows", len(rs), "no_fix", noFix, "bad_gsa", bad, "bad_checksum", badSum)
-	return datamodels.BuildGNSSDOP(rs, datamodels.StreamEDID(scope, FileType, LogGSA))
+	return rows.BuildGNSSDOP(rs, edid.Stream(scope, FileType, LogGSA))
 }
 
 // CourseSpeed parses the VTG sentences of the GNSS00.bin file at path into
 // gnss_course_speed rows (stamped with stream_edid for scope), one per sentence. VTG
 // reporting neither course nor speed (no fix) or that do not parse are
 // skipped and counted. The caller releases the table.
-func CourseSpeed(path string, scope datamodels.Scope) (arrow.Table, error) {
+func CourseSpeed(path string, scope edid.Scope) (arrow.Table, error) {
 	sentences, badSum, err := readFile(path)
 	if err != nil {
 		return nil, err
 	}
 	rs, noFix, bad := courseSpeeds(sentences)
 	slog.Debug("parsed GNSS00 VTG", "file", filepath.Base(path), "rows", len(rs), "no_fix", noFix, "bad_vtg", bad, "bad_checksum", badSum)
-	return datamodels.BuildGNSSCourseSpeed(rs, datamodels.StreamEDID(scope, FileType, LogVTG))
+	return rows.BuildGNSSCourseSpeed(rs, edid.Stream(scope, FileType, LogVTG))
 }
 
 // readFile reads the NMEA sentences of the GNSS00.bin file at path.
@@ -181,7 +182,7 @@ func talkerType(fields []string) string {
 
 // antennaPositions is one row per GGA fix time. noFix counts GGA reporting
 // quality 0 or no position; bad counts GGA that do not parse.
-func antennaPositions(sentences []sentence) (rs []datamodels.GNSSAntennaPositionRow, noFix, bad int) {
+func antennaPositions(sentences []sentence) (rs []rows.GNSSAntennaPositionRow, noFix, bad int) {
 	var (
 		lastGSA *sentence
 		seen    = map[time.Time]bool{}
@@ -217,17 +218,17 @@ var errNoFix = errors.New("GGA without a fix")
 // The height above the ellipsoid is alt + sep. The date, which GGA does not
 // carry, is the packet's, moved a day either way if that brings the fix
 // closer to the packet time (fixes either side of midnight).
-func gga(s *sentence) (datamodels.GNSSAntennaPositionRow, error) {
+func gga(s *sentence) (rows.GNSSAntennaPositionRow, error) {
 	f := s.fields
 	if len(f) < 12 {
-		return datamodels.GNSSAntennaPositionRow{}, fmt.Errorf("GGA has %d fields", len(f))
+		return rows.GNSSAntennaPositionRow{}, fmt.Errorf("GGA has %d fields", len(f))
 	}
 	q, err := strconv.Atoi(f[6])
 	if err != nil || q < 0 || q > 9 {
-		return datamodels.GNSSAntennaPositionRow{}, fmt.Errorf("GGA quality %q", f[6])
+		return rows.GNSSAntennaPositionRow{}, fmt.Errorf("GGA quality %q", f[6])
 	}
 	if q == 0 || f[2] == "" || f[4] == "" {
-		return datamodels.GNSSAntennaPositionRow{}, errNoFix
+		return rows.GNSSAntennaPositionRow{}, errNoFix
 	}
 	t, err1 := fixTime(f[1], s.at)
 	lat, err2 := degrees(f[2], f[3], "N", "S", 2)
@@ -235,16 +236,16 @@ func gga(s *sentence) (datamodels.GNSSAntennaPositionRow, error) {
 	alt, err4 := strconv.ParseFloat(f[9], 64)
 	sep, err5 := strconv.ParseFloat(f[11], 64)
 	if err := errors.Join(err1, err2, err3, err4, err5); err != nil {
-		return datamodels.GNSSAntennaPositionRow{}, err
+		return rows.GNSSAntennaPositionRow{}, err
 	}
 	hae := alt + sep
 	if math.Abs(lat) > 90 || math.Abs(lon) > 180 || math.Abs(hae) > 1000 {
-		return datamodels.GNSSAntennaPositionRow{}, fmt.Errorf("GGA out of range: lat %v lon %v hae %v", lat, lon, hae)
+		return rows.GNSSAntennaPositionRow{}, fmt.Errorf("GGA out of range: lat %v lon %v hae %v", lat, lon, hae)
 	}
 	ecef := coordinates.GeodeticToECEF(coordinates.GeodeticCoord{
 		Latitude: lat * math.Pi / 180, Longitude: lon * math.Pi / 180, Height: hae,
 	})
-	r := datamodels.GNSSAntennaPositionRow{
+	r := rows.GNSSAntennaPositionRow{
 		Time: t,
 		X:    ecef[0], Y: ecef[1], Z: ecef[2],
 		Q: int32(q),

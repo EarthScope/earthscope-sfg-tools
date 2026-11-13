@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/rows"
 )
 
 // parseFloats parses fields[from:from+len(dst)] into dst.
@@ -23,24 +23,24 @@ func parseFloats(log string, fields []string, from int, dst ...*float64) error {
 
 // ParseINSPVA decodes an INSPVAA data section:
 // week,seconds,lat,lon,height,north,east,up,roll,pitch,azimuth,status
-func ParseINSPVA(data string, t time.Time) (datamodels.INSPVARow, error) {
+func ParseINSPVA(data string, t time.Time) (rows.INSPVARow, error) {
 	f := strings.Split(data, ",")
 	if len(f) < 12 {
-		return datamodels.INSPVARow{}, fmt.Errorf("INSPVAA: %d fields, want 12", len(f))
+		return rows.INSPVARow{}, fmt.Errorf("INSPVAA: %d fields, want 12", len(f))
 	}
-	r := datamodels.INSPVARow{Time: t, INSStatus: nonEmpty(strings.TrimSpace(f[11]))}
+	r := rows.INSPVARow{Time: t, INSStatus: nonEmpty(strings.TrimSpace(f[11]))}
 	err := parseFloats("INSPVAA", f, 2, &r.Lat, &r.Lon, &r.Alt, &r.North, &r.East, &r.Up, &r.Roll, &r.Pitch, &r.Azimuth)
 	return r, err
 }
 
 // ParseINSSTDEV decodes an INSSTDEVA data section:
 // lat_sig,lon_sig,height_sig,north_sig,east_sig,up_sig,roll_sig,pitch_sig,azimuth_sig,ext_sol_stat,time_since_update,...
-func ParseINSSTDEV(data string, t time.Time) (datamodels.INSSTDEVRow, error) {
+func ParseINSSTDEV(data string, t time.Time) (rows.INSSTDEVRow, error) {
 	f := strings.Split(data, ",")
 	if len(f) < 9 {
-		return datamodels.INSSTDEVRow{}, fmt.Errorf("INSSTDEVA: %d fields, want at least 9", len(f))
+		return rows.INSSTDEVRow{}, fmt.Errorf("INSSTDEVA: %d fields, want at least 9", len(f))
 	}
-	r := datamodels.INSSTDEVRow{Time: t}
+	r := rows.INSSTDEVRow{Time: t}
 	if err := parseFloats("INSSTDEVA", f, 0, &r.LatSig, &r.LonSig, &r.AltSig, &r.NorthSig, &r.EastSig, &r.UpSig,
 		&r.RollSig, &r.PitchSig, &r.AzimuthSig); err != nil {
 		return r, err

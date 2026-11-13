@@ -129,8 +129,8 @@ func readScope(f *pflag.FlagSet, s *convert.Spec) error {
 func init() {
 	for _, c := range []*cobra.Command{icebergIngestCmd, icebergExportCmd} {
 		f := c.Flags()
-		f.String("catalog", "", "catalog: local, or a catalog of the iceberg-go configuration (default: its default-catalog)")
-		f.String("warehouse", "", "warehouse: overrides the catalog's configured one; a directory for local")
+		f.String("catalog", "", "catalog: local, glue, or a catalog of the iceberg-go configuration (default: its default-catalog)")
+		f.String("warehouse", "", "warehouse: a directory for local, an S3 prefix for glue (s3://bucket/prefix), else overrides the catalog's configured one")
 		f.String("scope", "", "NET/STA/CAMP (ingest), NET[/STA[/CAMP]] (export)")
 		f.StringSlice("source-type", nil, "file types (ingest: limits the types read), or for export one file type or product")
 		f.StringSlice("table", nil, "tables: name or namespace.name, comma-separated (ingest default: every table the files feed)")

@@ -36,8 +36,9 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/internal/gpsa"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/rows"
 )
 
 const (
@@ -72,7 +73,7 @@ type message struct {
 // the targets and settings of the IR and IT exchange before it. Triggers
 // with no known targets are skipped and counted. The caller releases the
 // table.
-func Interrogations(path string, scope datamodels.Scope) (arrow.Table, error) {
+func Interrogations(path string, scope edid.Scope) (arrow.Table, error) {
 	msgs, corrupt, err := readFile(path)
 	if err != nil {
 		return nil, err
@@ -80,7 +81,7 @@ func Interrogations(path string, scope datamodels.Scope) (arrow.Table, error) {
 	rs, noTargets := interrogations(msgs)
 	slog.Debug("parsed TCVR00 interrogations", "file", filepath.Base(path), "rows", len(rs),
 		"no_targets", noTargets, "corrupt_packets", corrupt)
-	return datamodels.BuildTransceiverInterrogations(rs, datamodels.StreamEDID(scope, FileType, LogInterrogate))
+	return rows.BuildTransceiverInterrogations(rs, edid.Stream(scope, FileType, LogInterrogate))
 }
 
 // Ranges parses the BR results of the TCVR00.bin file at path into
@@ -88,7 +89,7 @@ func Interrogations(path string, scope datamodels.Scope) (arrow.Table, error) {
 // timed by the trigger they answer. Results with no trigger before them, and
 // targets that do not parse, are skipped and counted. The caller releases the
 // table.
-func Ranges(path string, scope datamodels.Scope) (arrow.Table, error) {
+func Ranges(path string, scope edid.Scope) (arrow.Table, error) {
 	msgs, corrupt, err := readFile(path)
 	if err != nil {
 		return nil, err
@@ -96,21 +97,21 @@ func Ranges(path string, scope datamodels.Scope) (arrow.Table, error) {
 	rs, noTrigger, bad := ranges(msgs)
 	slog.Debug("parsed TCVR00 ranges", "file", filepath.Base(path), "rows", len(rs),
 		"no_trigger", noTrigger, "bad_targets", bad, "corrupt_packets", corrupt)
-	return datamodels.BuildTransceiverRanges(rs, datamodels.StreamEDID(scope, FileType, LogRangeResult))
+	return rows.BuildTransceiverRanges(rs, edid.Stream(scope, FileType, LogRangeResult))
 }
 
 // Settings parses the settings replies of the TCVR00.bin file at path into
 // transceiver_settings rows (stamped with stream_edid for scope), one per key: the
 // CS and PORT replies with log source LogConfig, the US, FS and DIAG replies
 // with LogInfo. The caller releases the table.
-func Settings(path string, scope datamodels.Scope) (arrow.Table, error) {
+func Settings(path string, scope edid.Scope) (arrow.Table, error) {
 	msgs, corrupt, err := readFile(path)
 	if err != nil {
 		return nil, err
 	}
 	rs := settings(msgs, scope)
 	slog.Debug("parsed TCVR00 settings", "file", filepath.Base(path), "rows", len(rs), "corrupt_packets", corrupt)
-	return datamodels.BuildTransceiverSettings(rs)
+	return rows.BuildTransceiverSettings(rs)
 }
 
 // readFile reads the messages of the TCVR00.bin file at path.
@@ -245,16 +246,16 @@ func optString(v string) *string {
 // interrogations is one row per trigger (<TRG), carrying the targets of the
 // last <IR request and the settings of the last >IR and >IT replies, all
 // cleared by the next <IR. noTargets counts triggers with no known targets.
-func interrogations(msgs []message) (rs []datamodels.TransceiverInterrogationRow, noTargets int) {
+func interrogations(msgs []message) (rs []rows.TransceiverInterrogationRow, noTargets int) {
 	var (
-		cur      datamodels.TransceiverInterrogationRow
+		cur      rows.TransceiverInterrogationRow
 		targets  []string
 		settings []string
 	)
 	for _, m := range msgs {
 		switch {
 		case !m.reply && m.command == "IR":
-			cur, targets, settings = datamodels.TransceiverInterrogationRow{}, nil, nil
+			cur, targets, settings = rows.TransceiverInterrogationRow{}, nil, nil
 			for _, t := range strings.Split(m.body, ",") {
 				if t != "" {
 					targets = append(targets, t)
@@ -315,7 +316,7 @@ func interrogations(msgs []message) (rs []datamodels.TransceiverInterrogationRow
 // ranges is one row per transponder of each >BR result, timed by the <TRG
 // before it. noTrigger counts results with no trigger since the previous
 // result; bad counts target entries that do not parse.
-func ranges(msgs []message) (rs []datamodels.TransceiverRangeRow, noTrigger, bad int) {
+func ranges(msgs []message) (rs []rows.TransceiverRangeRow, noTrigger, bad int) {
 	var trigger *time.Time
 	for _, m := range msgs {
 		switch {
@@ -354,17 +355,17 @@ func ranges(msgs []message) (rs []datamodels.TransceiverRangeRow, noTrigger, bad
 }
 
 // rangeTarget parses one BR target, IR5209;R3464032[XC93,SNR25,DBV-20,TEL;NONE,DOP0.00].
-func rangeTarget(item string) (datamodels.TransceiverRangeRow, bool) {
+func rangeTarget(item string) (rows.TransceiverRangeRow, bool) {
 	addr, rest, _ := strings.Cut(item, ";")
 	open, closing := strings.IndexByte(rest, '['), strings.LastIndexByte(rest, ']')
 	if addr == "" || !strings.HasPrefix(rest, "R") || open < 0 || closing < open {
-		return datamodels.TransceiverRangeRow{}, false
+		return rows.TransceiverRangeRow{}, false
 	}
 	us, err := strconv.ParseInt(rest[1:open], 10, 64)
 	if err != nil || us < 0 {
-		return datamodels.TransceiverRangeRow{}, false
+		return rows.TransceiverRangeRow{}, false
 	}
-	r := datamodels.TransceiverRangeRow{MTID: addr, Detected: us != 0}
+	r := rows.TransceiverRangeRow{MTID: addr, Detected: us != 0}
 	if us != 0 {
 		s := float64(us) / 1e6
 		r.TravelTime = &s
@@ -392,7 +393,7 @@ func rangeTarget(item string) (datamodels.TransceiverRangeRow, bool) {
 
 // settings is one row per key of each settings reply, in the stream of the
 // reply type's log source for scope.
-func settings(msgs []message, scope datamodels.Scope) (rs []datamodels.TransceiverSettingRow) {
+func settings(msgs []message, scope edid.Scope) (rs []rows.TransceiverSettingRow) {
 	for _, m := range msgs {
 		logSource, ok := settingsLogSource[m.command]
 		if !m.reply || !ok {
@@ -404,7 +405,7 @@ func settings(msgs []message, scope datamodels.Scope) (rs []datamodels.Transceiv
 			if k == "" {
 				continue
 			}
-			rs = append(rs, datamodels.TransceiverSettingRow{EDID: datamodels.StreamEDID(scope, FileType, logSource), Time: m.at, Unit: unit, Command: m.command, Key: k, Value: v})
+			rs = append(rs, rows.TransceiverSettingRow{EDID: edid.Stream(scope, FileType, logSource), Time: m.at, Unit: unit, Command: m.command, Key: k, Value: v})
 		}
 	}
 	return rs

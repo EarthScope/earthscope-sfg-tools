@@ -20,7 +20,8 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/rows"
 )
 
 const (
@@ -52,7 +53,7 @@ func ProfileTime(path string) (time.Time, error) {
 // stream_edid for scope). Lines that are not two numbers, or whose depth
 // is above the surface, are skipped and counted. The caller releases the
 // table.
-func SoundSpeed(path string, scope datamodels.Scope) (arrow.Table, error) {
+func SoundSpeed(path string, scope edid.Scope) (arrow.Table, error) {
 	at, err := ProfileTime(path)
 	if err != nil {
 		return nil, err
@@ -63,10 +64,10 @@ func SoundSpeed(path string, scope datamodels.Scope) (arrow.Table, error) {
 	}
 	slog.Debug("parsed CTD", "file", filepath.Base(path), "rows", len(rs), "bad_lines", bad,
 		"time", at.Format(time.DateOnly))
-	return datamodels.BuildSoundSpeed(rs, datamodels.StreamEDID(scope, FileType, LogType))
+	return rows.BuildSoundSpeed(rs, edid.Stream(scope, FileType, LogType))
 }
 
-func readProfile(path string, at time.Time) (rs []datamodels.SoundSpeedRow, bad int, err error) {
+func readProfile(path string, at time.Time) (rs []rows.SoundSpeedRow, bad int, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, 0, err
@@ -94,7 +95,7 @@ func readProfile(path string, at time.Time) (rs []datamodels.SoundSpeedRow, bad 
 		if depth == 0 {
 			depth = 0 // the surface line flips to -0
 		}
-		rs = append(rs, datamodels.SoundSpeedRow{Time: at, Depth: depth, Speed: s})
+		rs = append(rs, rows.SoundSpeedRow{Time: at, Depth: depth, Speed: s})
 	}
 	return rs, bad, sc.Err()
 }

@@ -1,0 +1,94 @@
+package rows
+
+import (
+	"time"
+
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"gitlab.com/earthscope/gnsstools/core/gnss/gnsstime"
+)
+
+// INSPVARow is one INSPVAA log. Time is the log header time (GPS time scale).
+type INSPVARow struct {
+	Time                 time.Time
+	Lat, Lon, Alt        float64 // [deg], [deg], [m]
+	North, East, Up      float64 // [m/s]
+	Roll, Pitch, Azimuth float64 // [deg]
+	INSStatus            *string // e.g. INS_SOLUTION_GOOD
+	TimeStatus           *string // log header time status, e.g. FINESTEERING
+}
+
+// INSSTDEVRow is one INSSTDEVA log. Time is the log header time (GPS time scale).
+type INSSTDEVRow struct {
+	Time                          time.Time
+	LatSig, LonSig, AltSig        float64 // [m]
+	NorthSig, EastSig, UpSig      float64 // [m/s]
+	RollSig, PitchSig, AzimuthSig float64 // [deg]
+	ExtSolStat, TimeSinceUpdate   *string
+	TimeStatus                    *string // log header time status, e.g. FINESTEERING
+}
+
+// utcMicros is the GPS-scale time gps as a UTC microsecond timestamp.
+func utcMicros(gps time.Time) arrow.Timestamp {
+	return arrow.Timestamp(gnsstime.GPSTimeToUTC(gps).UnixMicro())
+}
+
+// BuildINSPVA converts records to inspva rows of stream edid; times become
+// UTC.
+func BuildINSPVA(records []INSPVARow, edid string) (arrow.Table, error) {
+	b, err := newBuilder(datamodels.INSPVA)
+	if err != nil {
+		return nil, err
+	}
+	defer b.Release()
+	edidCol := col[*array.StringBuilder](b, datamodels.StreamEDIDName)
+	tm := col[*array.TimestampBuilder](b, "time")
+	var cols []*array.Float64Builder
+	for _, name := range []string{"lat", "lon", "alt", "north", "east", "up", "roll", "pitch", "heading"} {
+		cols = append(cols, col[*array.Float64Builder](b, name))
+	}
+	insStatus := col[*array.StringBuilder](b, "ins_status")
+	timeStatus := col[*array.StringBuilder](b, "time_status")
+	for _, r := range records {
+		edidCol.Append(edid)
+		tm.Append(utcMicros(r.Time))
+		for i, v := range []float64{r.Lat, r.Lon, r.Alt, r.North, r.East, r.Up, r.Roll, r.Pitch, r.Azimuth} {
+			cols[i].Append(v)
+		}
+		appendOpt(insStatus, r.INSStatus)
+		appendOpt(timeStatus, r.TimeStatus)
+	}
+	return b.Table()
+}
+
+// BuildINSSTDEV converts records to insstdev rows of stream edid; times
+// become UTC. The
+// cov_* columns hold the logged attitude std devs (see INSSTDEV).
+func BuildINSSTDEV(records []INSSTDEVRow, edid string) (arrow.Table, error) {
+	b, err := newBuilder(datamodels.INSSTDEV)
+	if err != nil {
+		return nil, err
+	}
+	defer b.Release()
+	edidCol := col[*array.StringBuilder](b, datamodels.StreamEDIDName)
+	tm := col[*array.TimestampBuilder](b, "time")
+	var cols []*array.Float64Builder
+	for _, name := range []string{"lat_sig", "lon_sig", "alt_sig", "north_sig", "east_sig", "up_sig", "cov_rr", "cov_pp", "cov_hh"} {
+		cols = append(cols, col[*array.Float64Builder](b, name))
+	}
+	extSolStat := col[*array.StringBuilder](b, "ext_sol_stat")
+	sinceUpdate := col[*array.StringBuilder](b, "time_since_update")
+	timeStatus := col[*array.StringBuilder](b, "time_status")
+	for _, r := range records {
+		edidCol.Append(edid)
+		tm.Append(utcMicros(r.Time))
+		for i, v := range []float64{r.LatSig, r.LonSig, r.AltSig, r.NorthSig, r.EastSig, r.UpSig, r.RollSig, r.PitchSig, r.AzimuthSig} {
+			cols[i].Append(v)
+		}
+		appendOpt(extSolStat, r.ExtSolStat)
+		appendOpt(sinceUpdate, r.TimeSinceUpdate)
+		appendOpt(timeStatus, r.TimeStatus)
+	}
+	return b.Table()
+}

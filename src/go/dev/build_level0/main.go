@@ -22,6 +22,7 @@ import (
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse"
 )
 
@@ -45,7 +46,7 @@ func run(ctx context.Context) error {
 	const rawFile = "/Volumes/DunbarSSD/Project/SeafloorGeodesy/SFGMain/cascadia-gorda/GCC1/2025_A_1126/raw/341517_001_20250821_205746_00062_NOV000.bin"
 
 	// testScope is the network, station and campaign the rows belong to.
-	var testScope = datamodels.Scope{Network: "cascadia-gorda", Station: "GCC1", Campaign: "2025_A_1126"}
+	var testScope = edid.Scope{Network: "cascadia-gorda", Station: "GCC1", Campaign: "2025_A_1126"}
 
 	if rawFile == "" {
 		return errors.New("set rawFile in main.go to the NOV000 test file")
@@ -61,8 +62,8 @@ func run(ctx context.Context) error {
 	}
 	log.Printf("warehouse: %s", warehouse)
 
-	// The same definition builds Glue instead with catalog.Config{Name: "glue"}.
-	cat, err := catalog.Build(ctx, catalog.Config{Name: catalog.Local, Warehouse: warehouse}, level0)
+	// The same definition builds Glue instead with catalog.GlueConfig("s3://bucket/prefix").
+	cat, err := catalog.Build(ctx, catalog.LocalConfig(warehouse), level0)
 	if err != nil {
 		return fmt.Errorf("building catalog: %w", err)
 	}

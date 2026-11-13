@@ -31,6 +31,7 @@ flowchart LR
     transceiver_ranges[(transceiver_ranges)]
     transceiver_settings[(transceiver_settings)]
     sound_speed[(sound_speed)]
+    community_standard[(community_standard)]
 
     %% File type -> table
     NOV000 --> inspva
@@ -39,6 +40,7 @@ flowchart LR
     NOV770 --> gnss_observations
     DFOP00 --> travel_times
     DFOP00 --> inspva
+    DFOP00 --> community_standard
     QCPIN --> travel_times
     QCPIN --> attitude_ahrs
     QCPIN --> gnss_antenna_positions
@@ -65,6 +67,7 @@ flowchart LR
     gnss_observations --> QCPIN_RANGEA([QCPIN · RANGEA])
     travel_times --> DFOP00_INTG_RPLY([DFOP00 · INTG-RPLY])
     inspva --> DFOP00_INSPVAA([DFOP00 · INSPVAA])
+    community_standard --> DFOP00_SHOTS([DFOP00 · INTG-RPLY])
     travel_times --> QCPIN_INTG_RPLY([QCPIN · INTG-RPLY])
     attitude_ahrs --> QCPIN_AHRS([QCPIN · AHRS])
     gnss_antenna_positions --> QCPIN_GNSSINS([QCPIN · GNSSINS])

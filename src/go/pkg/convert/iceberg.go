@@ -13,13 +13,14 @@ import (
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
 )
 
 // icebergSource reads the selected rows of each table from a catalog.
 type icebergSource struct {
-	cfg  catalog.Config
-	defs []datamodels.TableDef
-	sel  catalog.Selection
+	cfg    catalog.Config
+	tables []datamodels.TableRef
+	sel    catalog.Selection
 	// byStream groups rows by stream and time for an Iceberg sink (see
 	// streamGroups) rather than by scan batch.
 	byStream bool
@@ -27,11 +28,12 @@ type icebergSource struct {
 
 // newIcebergSource checks spec's Iceberg source values.
 func newIcebergSource(spec Spec) (*icebergSource, error) {
-	if err := catalog.Check(spec.SourceCatalog); err != nil {
-		return nil, usagef("--source-catalog: %w", err)
-	}
 	if len(spec.SourceURIs) != 1 {
 		return nil, usagef("--source %s takes one --source-uri", SourceIceberg)
+	}
+	cfg, err := catalog.ParseConfig(spec.SourceCatalog, spec.SourceURIs[0])
+	if err != nil {
+		return nil, usagef("--source-catalog: %w", err)
 	}
 	if len(spec.Tables) == 0 {
 		return nil, usagef("--table is required for --source %s", SourceIceberg)
@@ -40,7 +42,7 @@ func newIcebergSource(spec Spec) (*icebergSource, error) {
 		return nil, usagef("--source-type: --source %s takes one file type or product", SourceIceberg)
 	}
 	s := &icebergSource{
-		cfg: catalog.Config{Name: spec.SourceCatalog, Warehouse: spec.SourceURIs[0]},
+		cfg: cfg,
 		sel: catalog.Selection{Scope: spec.Scope, LogSource: spec.LogSource, Start: spec.Start, End: spec.End, Columns: spec.Columns},
 	}
 	if len(spec.SourceTypes) == 1 {
@@ -50,10 +52,11 @@ func newIcebergSource(spec Spec) (*icebergSource, error) {
 		return nil, usagef("--start %s is not before --end %s", spec.Start.Format(time.RFC3339), spec.End.Format(time.RFC3339))
 	}
 	for _, name := range spec.Tables {
-		def, err := datamodels.TableByName(name)
+		ref, err := datamodels.SFG.Find(name)
 		if err != nil {
 			return nil, usagef("--table: %w", err)
 		}
+		def := ref.Def
 		if _, err := s.sel.Filter(def); err != nil {
 			return nil, usagef("%s: %w", def.Name, err)
 		}
@@ -66,26 +69,26 @@ func newIcebergSource(spec Spec) (*icebergSource, error) {
 				return nil, usagef("--columns: %s has no column %q", def.Name, col)
 			}
 		}
-		s.defs = append(s.defs, def)
+		s.tables = append(s.tables, ref)
 	}
 	return s, nil
 }
 
 func (s *icebergSource) Read(ctx context.Context, write func(Rows)) error {
-	cat, err := catalog.Load(ctx, s.cfg, datamodels.SFG.Only(s.defs...))
+	cat, err := catalog.Load(ctx, s.cfg, datamodels.SFG.Only(s.tables...))
 	if err != nil {
 		return err
 	}
 	defer cat.Close()
-	for _, def := range s.defs {
-		tbl, err := cat.TableOf(def)
+	for _, ref := range s.tables {
+		tbl, err := cat.TableOf(ref)
 		if err != nil {
-			write(Rows{Def: def, Err: err})
+			write(Rows{Table: ref, Err: err})
 			continue
 		}
 		if s.byStream {
-			schema, groups, err := s.streamGroups(ctx, tbl)
-			write(Rows{Def: def, Schema: schema, Groups: groups, Err: err})
+			schema, groups, err := s.streamGroups(ctx, ref, tbl)
+			write(Rows{Table: ref, Schema: schema, Groups: groups, Err: err})
 			continue
 		}
 		schema, batches, err := tbl.Scan(ctx, s.sel)
@@ -105,7 +108,7 @@ func (s *icebergSource) Read(ctx context.Context, write func(Rows)) error {
 				}
 			}
 		}
-		write(Rows{Def: def, Schema: schema, Groups: groups, Err: err})
+		write(Rows{Table: ref, Schema: schema, Groups: groups, Err: err})
 	}
 	return nil
 }
@@ -113,12 +116,12 @@ func (s *icebergSource) Read(ctx context.Context, write func(Rows)) error {
 // copyChunk is the time span of one group when copying between catalogs.
 const copyChunk = time.Hour
 
-// streamGroups yields the selected rows of def's table one stream at a
+// streamGroups yields the selected rows of ref's table (src) one stream at a
 // time, in time order, as one group per stream per copyChunk of time. An
 // Iceberg sink replaces each group's stream over the group's time span, so
 // the groups of one stream must not overlap in time: chunks are
 // [t, t+copyChunk), and no time is split across two groups.
-func (s *icebergSource) streamGroups(ctx context.Context, src *catalog.Table) (*arrow.Schema, iter.Seq2[Group, error], error) {
+func (s *icebergSource) streamGroups(ctx context.Context, ref datamodels.TableRef, src *catalog.Table) (*arrow.Schema, iter.Seq2[Group, error], error) {
 	def := src.Def()
 	// The streams and their time spans, from two columns.
 	spanSel := s.sel
@@ -127,7 +130,7 @@ func (s *icebergSource) streamGroups(ctx context.Context, src *catalog.Table) (*
 	if err != nil {
 		return nil, nil, err
 	}
-	spans := newStreamTally(def, spanSchema)
+	spans := newStreamTally(ref, spanSchema)
 	for rec, err := range batches {
 		if err != nil {
 			return nil, nil, err
@@ -141,13 +144,13 @@ func (s *icebergSource) streamGroups(ctx context.Context, src *catalog.Table) (*
 	}
 	groups := func(yield func(Group, error) bool) {
 		for _, st := range spans.streams() {
-			parts, ok := datamodels.SplitEDID(st.EDID)
+			parts, ok := edid.Split(st.EDID)
 			if !ok {
 				yield(Group{}, fmt.Errorf("stream_edid %q: want network.station.campaign.type.source", st.EDID))
 				return
 			}
 			sel := s.sel
-			sel.Scope = datamodels.Scope{Network: parts[0], Station: parts[1], Campaign: parts[2]}
+			sel.Scope = edid.Scope{Network: parts[0], Station: parts[1], Campaign: parts[2]}
 			sel.FileType, sel.LogSource = parts[3], parts[4]
 			for t := st.Start.Truncate(copyChunk); !t.After(st.End); t = t.Add(copyChunk) {
 				sel.Start, sel.End = t, t.Add(copyChunk)
@@ -203,11 +206,11 @@ func scanTable(ctx context.Context, src *catalog.Table, sel catalog.Selection) (
 // replacing only its own streams' windows (catalog.Batch.AppendParts); a
 // group overlapping one already merged, or rows past snapshotRows, start a
 // new snapshot. Snapshots are committed perCommit at a time (0: all of a
-// table's at once). The first Write builds the tables to write (defs):
+// table's at once). The first Write builds the tables to write:
 // missing databases and tables are created; older schemas are evolved.
 type icebergSink struct {
 	cfg         catalog.Config
-	defs        []datamodels.TableDef // the tables it writes, built on the first Write
+	tables      []datamodels.TableRef // the tables it writes, built on the first Write
 	props       map[string]string     // added to every snapshot's summary
 	perCommit   int
 	perSnapshot int
@@ -285,18 +288,18 @@ func groupWindows(def datamodels.TableDef, g *Group) (map[string]catalog.Window,
 
 func (s *icebergSink) Write(ctx context.Context, rows Rows) ([]Output, error) {
 	if s.cat == nil && s.openErr == nil {
-		s.cat, s.openErr = catalog.Build(ctx, s.cfg, datamodels.SFG.Only(s.defs...))
+		s.cat, s.openErr = catalog.Build(ctx, s.cfg, datamodels.SFG.Only(s.tables...))
 	}
 	if s.openErr != nil {
 		return nil, s.openErr
 	}
 	// Build made the table, so it exists even if no group has rows.
-	tbl, err := s.cat.TableOf(rows.Def)
+	tbl, err := s.cat.TableOf(rows.Table)
 	if err != nil {
 		return nil, err
 	}
 	batch := tbl.NewBatch()
-	name := datamodels.QualifiedName(rows.Def)
+	name := rows.Table.String()
 	var n int64
 	var errs []error
 	var sources []string // the staged groups' source files
@@ -355,7 +358,7 @@ func (s *icebergSink) Write(ctx context.Context, rows Rows) ([]Output, error) {
 			errs = append(errs, err)
 			break
 		}
-		windows, err := groupWindows(rows.Def, &g)
+		windows, err := groupWindows(rows.Table.Def, &g)
 		if err != nil || g.Rows.NumRows() == 0 {
 			if err != nil {
 				if g.Source != "" {

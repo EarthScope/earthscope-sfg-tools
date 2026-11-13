@@ -13,13 +13,14 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/internal/gpsa"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/internal/xsens"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/rows"
 )
 
 // FileType names the file type in stream EDIDs. Its rows' log source is
-// datamodels.LogAHRS.
+// edid.LogAHRS.
 const FileType = "AHRS00"
 
 // Stats summarises a parse.
@@ -55,9 +56,9 @@ func ptr(v float64) *float64 { return &v }
 
 // Parse reads an AHRS00.bin stream. Each XSENS message takes the time of
 // the GPSA packet holding its first byte.
-func Parse(r io.Reader) ([]datamodels.AttitudeAHRSRow, Stats, error) {
+func Parse(r io.Reader) ([]rows.AttitudeAHRSRow, Stats, error) {
 	var (
-		out     []datamodels.AttitudeAHRSRow
+		out     []rows.AttitudeAHRSRow
 		stats   Stats
 		dec     xsens.Decoder
 		starts  []packetStart // packets whose bytes are still buffered
@@ -98,8 +99,8 @@ func Parse(r io.Reader) ([]datamodels.AttitudeAHRSRow, Stats, error) {
 
 // toAttitude is the attitude_ahrs row of XSENS message m, timed by its GPSA
 // packet p. Measurements the message did not carry are nil.
-func toAttitude(p gpsa.Packet, m xsens.MTData2) datamodels.AttitudeAHRSRow {
-	a := datamodels.AttitudeAHRSRow{
+func toAttitude(p gpsa.Packet, m xsens.MTData2) rows.AttitudeAHRSRow {
+	a := rows.AttitudeAHRSRow{
 		Time:           time.UnixMicro(int64(p.CommonTime)).UTC(),
 		TimeInstrument: float64(p.InstrumentTime) / 1e6,
 	}
@@ -115,7 +116,7 @@ func toAttitude(p gpsa.Packet, m xsens.MTData2) datamodels.AttitudeAHRSRow {
 	return a
 }
 
-func readFile(path string) ([]datamodels.AttitudeAHRSRow, Stats, error) {
+func readFile(path string) ([]rows.AttitudeAHRSRow, Stats, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, Stats{}, err
@@ -130,12 +131,12 @@ func readFile(path string) ([]datamodels.AttitudeAHRSRow, Stats, error) {
 
 // AttitudeAHRS parses the AHRS00.bin file at path into attitude_ahrs rows
 // (stamped with stream_edid for scope). The caller releases the table.
-func AttitudeAHRS(path string, scope datamodels.Scope) (arrow.Table, error) {
+func AttitudeAHRS(path string, scope edid.Scope) (arrow.Table, error) {
 	rs, stats, err := readFile(path)
 	if err != nil {
 		return nil, err
 	}
 	slog.Debug("parsed AHRS00", "file", filepath.Base(path), "rows", len(rs),
 		"packets", stats.Packets, "corrupt_packets", stats.CorruptPackets, "bad_messages", stats.BadMessages)
-	return datamodels.BuildAttitudeAHRS(rs, datamodels.StreamEDID(scope, FileType, datamodels.LogAHRS))
+	return rows.BuildAttitudeAHRS(rs, edid.Stream(scope, FileType, edid.LogAHRS))
 }

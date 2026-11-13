@@ -40,7 +40,10 @@ func runIcebergBuild(cmd *cobra.Command, _ []string) error {
 			def.Databases = append(def.Databases, db)
 		}
 	}
-	cfg := catalog.Config{Name: name, Warehouse: warehouse}
+	cfg, err := catalog.ParseConfig(name, warehouse)
+	if err != nil {
+		return fmt.Errorf("--catalog: %w", err)
+	}
 	cat, err := catalog.Build(cmd.Context(), cfg, def)
 	if err != nil {
 		return err
@@ -54,8 +57,8 @@ func runIcebergBuild(cmd *cobra.Command, _ []string) error {
 
 func init() {
 	f := icebergBuildCmd.Flags()
-	f.String("catalog", "", "catalog: local, or a catalog of the iceberg-go configuration (default: its default-catalog)")
-	f.String("warehouse", "", "warehouse: overrides the catalog's configured one; a directory for local")
+	f.String("catalog", "", "catalog: local, glue, or a catalog of the iceberg-go configuration (default: its default-catalog)")
+	f.String("warehouse", "", "warehouse: a directory for local, an S3 prefix for glue (s3://bucket/prefix), else overrides the catalog's configured one")
 	f.StringSlice("database", nil, "databases to build, comma-separated (default: all of gnssa_l0, gnssa_l1, gnssa_l2)")
 	icebergCmd.AddCommand(icebergBuildCmd)
 }

@@ -18,6 +18,7 @@ import (
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse"
 )
 
@@ -45,13 +46,13 @@ var Patterns = map[string]string{
 type rawSource struct {
 	uris      []string
 	types     []string
-	defs      []datamodels.TableDef // the tables to read, in Level0Tables order
-	scope     datamodels.Scope
+	tables    []datamodels.TableRef // the gnssa_l0 tables to read, in declaration order
+	scope     edid.Scope
 	logSource string
 	maxFiles  int
 	workers   int
 
-	byName  bool     // tell named files' types by name (Spec.TypesFromNames)
+	byName  bool // tell named files' types by name (Spec.TypesFromNames)
 	inputs  []Input
 	skipped []string            // named files no type's pattern matches
 	failed  map[string][]string // path -> "table: error" of each failed parse
@@ -102,23 +103,26 @@ func newRawSource(spec Spec) (*rawSource, error) {
 		}
 	}
 	if len(spec.Tables) == 0 {
-		for _, def := range datamodels.Level0Tables {
-			if produced[def.Name] {
-				s.defs = append(s.defs, def)
+		for _, ref := range datamodels.GNSSA_L0.Refs() {
+			if produced[ref.Def.Name] {
+				s.tables = append(s.tables, ref)
 			}
 		}
 		return s, nil
 	}
 	for _, name := range spec.Tables {
-		def, err := datamodels.TableByName(name)
-		if err != nil {
-			return nil, usagef("--table: %w", err)
+		// Parsers write gnssa_l0, so a bare name is its table there.
+		def, ok := datamodels.GNSSA_L0.Table(strings.TrimPrefix(name, datamodels.GNSSA_L0.Name+"."))
+		if !ok {
+			if _, err := datamodels.SFG.Find(name); err != nil && !strings.Contains(name, ".") {
+				return nil, usagef("--table: %w", err)
+			}
 		}
-		if def.Level != 0 || !produced[def.Name] {
+		if !ok || !produced[def.Name] {
 			return nil, usagef("--table %s: not produced by --source-type %s", name, strings.Join(s.types, ","))
 		}
-		if !slices.ContainsFunc(s.defs, func(d datamodels.TableDef) bool { return d.Name == def.Name }) {
-			s.defs = append(s.defs, def)
+		if !slices.ContainsFunc(s.tables, func(r datamodels.TableRef) bool { return r.Def.Name == def.Name }) {
+			s.tables = append(s.tables, datamodels.GNSSA_L0.Ref(def))
 		}
 	}
 	return s, nil
@@ -224,10 +228,11 @@ func (s *rawSource) Read(ctx context.Context, write func(Rows)) error {
 	for _, path := range s.skipped {
 		s.inputs = append(s.inputs, Input{Path: path, Status: "skipped", Error: "no file type's name pattern matches"})
 	}
-	for _, def := range s.defs {
+	for _, ref := range s.tables {
+		def := ref.Def
 		schema, err := def.ArrowSchema()
 		if err != nil {
-			write(Rows{Def: def, Err: err})
+			write(Rows{Table: ref, Err: err})
 			continue
 		}
 		var parsers []fileparse.Parser
@@ -241,7 +246,7 @@ func (s *rawSource) Read(ctx context.Context, write func(Rows)) error {
 		if len(parsers) == 0 {
 			continue // no files of the types that feed it
 		}
-		write(Rows{Def: def, Schema: schema, Groups: s.groups(ctx, parsers, files)})
+		write(Rows{Table: ref, Schema: schema, Groups: s.groups(ctx, parsers, files)})
 	}
 	// A file that failed for any table is a failed input.
 	for i, in := range s.inputs {
@@ -266,7 +271,7 @@ type parsed struct {
 }
 
 // run parses the job's file, keeps only j.keep's rows if set, and hashes it.
-func (j parseJob) run(scope datamodels.Scope) parsed {
+func (j parseJob) run(scope edid.Scope) parsed {
 	tbl, err := j.p.Parse(j.path, scope)
 	if err == nil && j.keep != "" {
 		tbl, err = filterTable(tbl, j.keep)

@@ -10,6 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
 )
 
 // ResultSchema is the version of the Result document. Fields are only ever
@@ -154,13 +155,13 @@ func (c *Conversion) result() *Result {
 		Outputs: []Output{},
 		Errors:  []Error{},
 	}
-	for _, def := range c.defs {
-		res.Source.Tables = append(res.Source.Tables, datamodels.QualifiedName(def))
+	for _, ref := range c.tables {
+		res.Source.Tables = append(res.Source.Tables, ref.String())
 	}
 	return res
 }
 
-func scopeString(s datamodels.Scope) string {
+func scopeString(s edid.Scope) string {
 	out := s.Network
 	for _, p := range []string{s.Station, s.Campaign} {
 		if p != "" {
@@ -186,8 +187,9 @@ type streamTally struct {
 	byEDID     map[string]*Stream
 }
 
-func newStreamTally(def datamodels.TableDef, schema *arrow.Schema) *streamTally {
-	t := &streamTally{table: datamodels.QualifiedName(def), edid: -1, time: -1, byEDID: map[string]*Stream{}}
+func newStreamTally(ref datamodels.TableRef, schema *arrow.Schema) *streamTally {
+	def := ref.Def
+	t := &streamTally{table: ref.String(), edid: -1, time: -1, byEDID: map[string]*Stream{}}
 	if schema == nil {
 		return t
 	}

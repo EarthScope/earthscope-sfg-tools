@@ -25,7 +25,7 @@ func TestConvertExitCodes(t *testing.T) {
 	// A warehouse holding an empty attitude_ahrs table and no inspva.
 	wh := filepath.Join(dir, "warehouse")
 	ctx := context.Background()
-	cat, err := catalog.Build(ctx, catalog.Config{Name: catalog.Local, Warehouse: wh}, datamodels.SFG.Only(datamodels.AttitudeAHRS))
+	cat, err := catalog.Build(ctx, catalog.LocalConfig(wh), datamodels.SFG.Only(datamodels.GNSSA_L0.Ref(datamodels.AttitudeAHRS)))
 	if err != nil {
 		t.Fatal(err)
 	}

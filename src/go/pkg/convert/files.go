@@ -16,8 +16,6 @@ import (
 	"github.com/apache/arrow-go/v18/parquet"
 	"github.com/apache/arrow-go/v18/parquet/compress"
 	"github.com/apache/arrow-go/v18/parquet/pqarrow"
-
-	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 )
 
 // Table formats of a files sink.
@@ -35,8 +33,8 @@ func (s *filesSink) Write(ctx context.Context, rows Rows) ([]Output, error) {
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
 		return nil, err
 	}
-	path := filepath.Join(s.dir, rows.Def.Name+"."+s.format)
-	tmp, err := os.CreateTemp(s.dir, "."+rows.Def.Name+".*.tmp")
+	path := filepath.Join(s.dir, rows.Table.Def.Name+"."+s.format)
+	tmp, err := os.CreateTemp(s.dir, "."+rows.Table.Def.Name+".*.tmp")
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +56,7 @@ func (s *filesSink) Write(ctx context.Context, rows Rows) ([]Output, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []Output{{Kind: "file", Path: path, Table: datamodels.QualifiedName(rows.Def), Rows: n, Bytes: info.Size()}}, nil
+	return []Output{{Kind: "file", Path: path, Table: rows.Table.String(), Rows: n, Bytes: info.Size()}}, nil
 }
 
 // Close does nothing: Write closes each file.

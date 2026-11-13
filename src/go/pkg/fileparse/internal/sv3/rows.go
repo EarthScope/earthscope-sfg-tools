@@ -10,15 +10,23 @@ import (
 	"gitlab.com/earthscope/gnsstools/core/coordinates"
 	"gitlab.com/earthscope/gnsstools/core/gnss/gnsstime"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/internal/novatel"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/rows"
 )
 
-// TravelTimes pairs each range event with the most recent preceding
-// interrogation; a zero range (no reply detected) yields no row.
-func TravelTimes(events []Event) []datamodels.TWTTRow {
+// A pair is a range event (a transponder reply) and the most recent
+// interrogation (ping) before it, with both times in UNIX microseconds.
+type pair struct {
+	ping, reply *Event
+	sent, recv  int64
+}
+
+// pairs pairs each range event with the most recent preceding
+// interrogation. A zero range (no reply detected), a reply with no ping
+// before it, and unreadable times are skipped and counted in the log.
+func pairs(events []Event) []pair {
 	var (
-		out                       []datamodels.TWTTRow
+		out                       []pair
 		ping                      *Event
 		noPing, noReply, badTimes int
 	)
@@ -43,27 +51,116 @@ func TravelTimes(events []Event) []datamodels.TWTTRow {
 			badTimes++
 			continue
 		}
-		snr, tat := float64(e.Range.Diag.SNR), e.Range.TAT/1000
-		out = append(out, datamodels.TWTTRow{
-			MTID:       e.Range.CN,
-			TTransmit:  time.UnixMicro(sent).UTC(),
-			TReceive:   time.UnixMicro(recv).UTC(),
-			TravelTime: e.Range.Range,
-			DBV:        float32(e.Range.Diag.DBV),
-			Acc:        int32(math.Round(float64(e.Range.Diag.XC))),
+		out = append(out, pair{ping: ping, reply: e, sent: sent, recv: recv})
+	}
+	slog.Debug("SV3 ping/reply pairs", "pairs", len(out), "no_interrogation", noPing, "no_reply", noReply, "bad_times", badTimes)
+	return out
+}
+
+// TravelTimes is one travel_times row per ping/reply pair (see pairs), with
+// the raw range as logged.
+func TravelTimes(events []Event) []rows.TWTTRow {
+	var out []rows.TWTTRow
+	for _, p := range pairs(events) {
+		r := p.reply.Range
+		snr, tat := float64(r.Diag.SNR), r.TAT/1000
+		out = append(out, rows.TWTTRow{
+			MTID:       r.CN,
+			TTransmit:  time.UnixMicro(p.sent).UTC(),
+			TReceive:   time.UnixMicro(p.recv).UTC(),
+			TravelTime: r.Range,
+			DBV:        float32(r.Diag.DBV),
+			Acc:        int32(math.Round(float64(r.Diag.XC))),
 			ASNR:       &snr,
 			TAT:        &tat,
 		})
 	}
-	slog.Debug("SV3 travel times", "no_interrogation", noPing, "no_reply", noReply, "bad_times", badTimes)
+	return out
+}
+
+// TriggerDelay is the SV3 hardware trigger delay [s], part of every logged
+// range (Python TRIGGER_DELAY_SV3).
+const TriggerDelay = 0.13
+
+// Shot pairing rules, as the Python shot builder's (SV3PairingRules): a
+// reply more than maxRoundTrip after its ping, or whose logged time is not
+// its ping's plus the range less TriggerDelay (within returnTolerance), is
+// not that ping's reply.
+const (
+	maxRoundTrip    = 15 * time.Second
+	returnTolerance = time.Microsecond
+)
+
+// Shots is one community_standard row per ping/reply pair (see pairs) that
+// passes the shot pairing rules. The travel time is corrected: range - TAT -
+// TriggerDelay. The antenna position and std devs at each end come from
+// that event's GNSS block, in ECEF (as gnss_antenna_positions); a pair
+// without a usable GNSS block at either end is no shot, as in the Python
+// builder. The attitude comes from the NOV_INS block, and is null where it
+// was not logged (2024 DFOP00 files), where the Python builder drops the
+// shot. Transducer positions stay null: they need lever arms.
+func Shots(events []Event) []rows.CommunityStandardRow {
+	var (
+		out                       []rows.CommunityStandardRow
+		tooLong, mismatch, noGNSS int
+	)
+	for _, p := range pairs(events) {
+		r := p.reply.Range
+		rtt := time.Duration(p.recv-p.sent) * time.Microsecond
+		if rtt < 0 || rtt > maxRoundTrip {
+			tooLong++
+			continue
+		}
+		want := time.Duration(math.Round((r.Range-TriggerDelay)*1e6)) * time.Microsecond
+		if d := rtt - want; d > returnTolerance || d < -returnTolerance {
+			mismatch++
+			continue
+		}
+		ping, reply := antennaEpoch(p.ping), antennaEpoch(p.reply)
+		if ping.X == nil || reply.X == nil {
+			noGNSS++
+			continue
+		}
+		snr, acc, dbv := float64(r.Diag.SNR), int32(math.Round(float64(r.Diag.XC))), float32(r.Diag.DBV)
+		out = append(out, rows.CommunityStandardRow{
+			MTID:       r.CN,
+			TravelTime: r.Range - r.TAT/1000 - TriggerDelay,
+			TTransmit:  time.UnixMicro(p.sent).UTC(),
+			TReceive:   time.UnixMicro(p.recv).UTC(),
+			ASNR:       &snr,
+			Acc:        &acc,
+			DBV:        &dbv,
+			Transmit:   ping,
+			Receive:    reply,
+		})
+	}
+	slog.Debug("SV3 shots", "shots", len(out), "round_trip_too_long", tooLong, "return_time_mismatch", mismatch,
+		"no_gnss_position", noGNSS)
+	return out
+}
+
+// antennaEpoch is e's antenna state: the GNSS block's position and std devs
+// in ECEF, and the NOV_INS attitude. Missing or bad blocks leave nils.
+func antennaEpoch(e *Event) rows.AntennaEpoch {
+	var out rows.AntennaEpoch
+	if g, err := e.GNSS(); err == nil && g != nil {
+		if pos, err := antennaPosition(g); err == nil {
+			out.X, out.Y, out.Z = &pos.X, &pos.Y, &pos.Z
+			out.SigX, out.SigY, out.SigZ = pos.SigX, pos.SigY, pos.SigZ
+		}
+	}
+	if ins, err := e.INS(); err == nil && ins != nil {
+		h, pt, r := ins.H, ins.P, ins.R
+		out.Heading, out.Pitch, out.Roll = &h, &pt, &r
+	}
 	return out
 }
 
 // Attitudes is one attitude_ahrs row per distinct AHRS block (consecutive
 // events usually repeat the same block).
-func Attitudes(events []Event) []datamodels.AttitudeAHRSRow {
+func Attitudes(events []Event) []rows.AttitudeAHRSRow {
 	var (
-		out  []datamodels.AttitudeAHRSRow
+		out  []rows.AttitudeAHRSRow
 		last json.Number
 		bad  int
 	)
@@ -82,7 +179,7 @@ func Attitudes(events []Event) []datamodels.AttitudeAHRSRow {
 			continue
 		}
 		last = a.Time.Common
-		r := datamodels.AttitudeAHRSRow{
+		r := rows.AttitudeAHRSRow{
 			Time:           time.UnixMicro(t).UTC(),
 			TimeInstrument: a.Time.Instrument,
 			TimeStartCount: a.Time.StartCount,
@@ -103,9 +200,9 @@ func Attitudes(events []Event) []datamodels.AttitudeAHRSRow {
 // INSPVA is one inspva row per distinct NOV_INS block, keyed by its GPS time
 // (events repeat the current block). Blocks with no time fix (time status
 // UNKNOWN) are skipped.
-func INSPVA(events []Event) []datamodels.INSPVARow {
+func INSPVA(events []Event) []rows.INSPVARow {
 	var (
-		out            []datamodels.INSPVARow
+		out            []rows.INSPVARow
 		last           float64
 		bad, unknownTS int
 	)
@@ -124,7 +221,7 @@ func INSPVA(events []Event) []datamodels.INSPVARow {
 			continue
 		}
 		ins, ts := novatel.INSStatusName(b.SolutionType), novatel.TimeStatusName(b.TimeStatus)
-		out = append(out, datamodels.INSPVARow{
+		out = append(out, rows.INSPVARow{
 			Time: gnsstime.GPSEpoch().Add(time.Duration(math.Round(b.GPST*1e6)) * time.Microsecond),
 			Lat:  b.Latitude, Lon: b.Longitude, Alt: b.HAE,
 			North: b.VX, East: b.VY, Up: b.VZ,
@@ -142,9 +239,9 @@ func INSPVA(events []Event) []datamodels.INSPVARow {
 // keyed by its fix time (events repeat the current block); the first block
 // seen for a time wins. Blocks without a usable position, time or fix
 // quality are skipped and counted.
-func AntennaPositions(events []Event) []datamodels.GNSSAntennaPositionRow {
+func AntennaPositions(events []Event) []rows.GNSSAntennaPositionRow {
 	var (
-		out  []datamodels.GNSSAntennaPositionRow
+		out  []rows.GNSSAntennaPositionRow
 		seen = map[json.Number]bool{}
 		bad  int
 	)
@@ -175,21 +272,21 @@ func AntennaPositions(events []Event) []datamodels.GNSSAntennaPositionRow {
 // longitude and hae, and the ENU std devs rotated to ECEF std devs
 // (correlations dropped). A negative std dev is Sonardyne's -1.0 "not
 // available" sentinel and nulls all three sigmas.
-func antennaPosition(g *GNSSBlock) (datamodels.GNSSAntennaPositionRow, error) {
+func antennaPosition(g *GNSSBlock) (rows.GNSSAntennaPositionRow, error) {
 	if g.Latitude == nil || g.Longitude == nil || g.HAE == nil {
-		return datamodels.GNSSAntennaPositionRow{}, fmt.Errorf("GNSS block without a position")
+		return rows.GNSSAntennaPositionRow{}, fmt.Errorf("GNSS block without a position")
 	}
 	lat, lon, hae := *g.Latitude, *g.Longitude, *g.HAE
 	if math.Abs(lat) > 90 || math.Abs(lon) > 180 || math.Abs(hae) > 1000 || g.Q < 0 || g.Q > 9 {
-		return datamodels.GNSSAntennaPositionRow{}, fmt.Errorf("GNSS block out of range: lat %v lon %v hae %v q %d", lat, lon, hae, g.Q)
+		return rows.GNSSAntennaPositionRow{}, fmt.Errorf("GNSS block out of range: lat %v lon %v hae %v q %d", lat, lon, hae, g.Q)
 	}
 	t, err := UnixMicros(g.Time.Common)
 	if err != nil {
-		return datamodels.GNSSAntennaPositionRow{}, err
+		return rows.GNSSAntennaPositionRow{}, err
 	}
 	geo := coordinates.GeodeticCoord{Latitude: lat * math.Pi / 180, Longitude: lon * math.Pi / 180, Height: hae}
 	ecef := coordinates.GeodeticToECEF(geo)
-	r := datamodels.GNSSAntennaPositionRow{
+	r := rows.GNSSAntennaPositionRow{
 		Time: time.UnixMicro(t).UTC(),
 		X:    ecef[0], Y: ecef[1], Z: ecef[2],
 		Q: g.Q,

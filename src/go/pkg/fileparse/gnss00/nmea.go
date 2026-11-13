@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/rows"
 )
 
 // talker is a sentence's talker, e.g. "GP" for $GPGSV.
@@ -42,7 +42,7 @@ func optString(v string) *string {
 // their group's first sentence (num 1); a group whose first sentence is
 // missing takes its own sentence's time. bad counts sentences and satellite
 // entries that do not parse.
-func satellitesInView(sentences []sentence) (rs []datamodels.GNSSSatelliteInViewRow, bad int) {
+func satellitesInView(sentences []sentence) (rs []rows.GNSSSatelliteInViewRow, bad int) {
 	var groupTime time.Time
 	for i := range sentences {
 		s := &sentences[i]
@@ -78,7 +78,7 @@ func satellitesInView(sentences []sentence) (rs []datamodels.GNSSSatelliteInView
 				bad++
 				continue
 			}
-			rs = append(rs, datamodels.GNSSSatelliteInViewRow{
+			rs = append(rs, rows.GNSSSatelliteInViewRow{
 				Time: at, Talker: tk, SatsInView: int32(inView), PRN: int32(prn),
 				Elevation: el, Azimuth: az, SNR: snr,
 			})
@@ -90,7 +90,7 @@ func satellitesInView(sentences []sentence) (rs []datamodels.GNSSSatelliteInView
 // dops is one row per GSA sentence:
 // $GPGSA,mode,fix,sv1..sv12,pdop,hdop,vdop. noFix counts GSA with no DOP;
 // bad counts GSA that do not parse.
-func dops(sentences []sentence) (rs []datamodels.GNSSDOPRow, noFix, bad int) {
+func dops(sentences []sentence) (rs []rows.GNSSDOPRow, noFix, bad int) {
 	for i := range sentences {
 		s := &sentences[i]
 		f := s.fields
@@ -119,7 +119,7 @@ func dops(sentences []sentence) (rs []datamodels.GNSSDOPRow, noFix, bad int) {
 				used = append(used, strings.TrimLeft(sv, "0"))
 			}
 		}
-		rs = append(rs, datamodels.GNSSDOPRow{
+		rs = append(rs, rows.GNSSDOPRow{
 			Time: s.at, Talker: talker(f), Mode: optString(f[1]), FixType: int32(fix),
 			SatellitesUsed: strings.Join(used, ","), NumberUsed: int32(len(used)),
 			PDOP: pdop, HDOP: hdop, VDOP: vdop,
@@ -131,7 +131,7 @@ func dops(sentences []sentence) (rs []datamodels.GNSSDOPRow, noFix, bad int) {
 // courseSpeeds is one row per VTG sentence:
 // $GPVTG,course,T,course,M,speed,N,speed,K[,mode]. noFix counts VTG with
 // neither course nor speed; bad counts VTG that do not parse.
-func courseSpeeds(sentences []sentence) (rs []datamodels.GNSSCourseSpeedRow, noFix, bad int) {
+func courseSpeeds(sentences []sentence) (rs []rows.GNSSCourseSpeedRow, noFix, bad int) {
 	for i := range sentences {
 		s := &sentences[i]
 		f := s.fields
@@ -158,7 +158,7 @@ func courseSpeeds(sentences []sentence) (rs []datamodels.GNSSCourseSpeedRow, noF
 		if len(f) > 9 {
 			mode = optString(f[9])
 		}
-		rs = append(rs, datamodels.GNSSCourseSpeedRow{
+		rs = append(rs, rows.GNSSCourseSpeedRow{
 			Time: s.at, Talker: talker(f), CourseTrue: cTrue, CourseMagnetic: cMag,
 			SpeedKnots: knots, SpeedKmh: kmh, Mode: mode,
 		})

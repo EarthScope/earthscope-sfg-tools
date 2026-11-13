@@ -18,7 +18,8 @@ import (
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 	"gitlab.com/earthscope/gnsstools/geodata/gnssiceberg"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/rows"
 )
 
 // FileType names the file type in errors and stream EDIDs.
@@ -42,12 +43,12 @@ const readerSize = 64 << 10
 
 // GNSSObs parses the RANGECMPB and RANGECMP5B logs of the NOV770 file at path
 // into GNSSObs rows (stamped with stream_edid for scope), in one pass. Each log type
-// and antenna gets its own log source (datamodels.LogSource), and so its own
+// and antenna gets its own log source (edid.LogSource), and so its own
 // stream EDID: RANGECMP5B, RANGECMP5B_1. Messages whose time status is
 // UNKNOWN or whose week is 0 (no time fix), or whose epoch time fails
 // gnssiceberg.ValidateEpoch, are skipped.
 // The caller releases the table.
-func GNSSObs(path string, scope datamodels.Scope) (arrow.Table, error) {
+func GNSSObs(path string, scope edid.Scope) (arrow.Table, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -91,18 +92,18 @@ func GNSSObs(path string, scope datamodels.Scope) (arrow.Table, error) {
 			slog.Debug("bad NovAtel epoch time", "file", filepath.Base(path), "id", msg.MessageID, "error", err)
 			continue
 		}
-		src := datamodels.LogSource(logType, msg.MeasurementSource())
+		src := edid.LogSource(logType, msg.MeasurementSource())
 		bySource[src] = append(bySource[src], epoch)
 	}
 
 	names := slices.Sorted(maps.Keys(bySource))
-	sources := make([]datamodels.GNSSObsSource, len(names))
+	sources := make([]rows.GNSSObsSource, len(names))
 	for i, name := range names {
-		sources[i] = datamodels.GNSSObsSource{EDID: datamodels.StreamEDID(scope, FileType, name), Epochs: bySource[name]}
+		sources[i] = rows.GNSSObsSource{EDID: edid.Stream(scope, FileType, name), Epochs: bySource[name]}
 		slog.Debug("parsed NOV770", "file", filepath.Base(path), "log_source", name, "epochs", len(bySource[name]))
 	}
 	slog.Debug("parsed NOV770", "file", filepath.Base(path), "failed", failed, "unknown_time", skipped, "bad_time", badTime)
-	return datamodels.BuildGNSSObs(FileType, sources...)
+	return rows.BuildGNSSObs(FileType, sources...)
 }
 
 func decode(msg *novatelbinary.Message) (observation.Epoch, error) {

@@ -17,9 +17,10 @@ import (
 	novatelascii "gitlab.com/earthscope/gnsstools/codecs/novatel/novatel_ascii"
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/internal/novatel"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/internal/sv3"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/rows"
 )
 
 // FileType names the file type in stream EDIDs.
@@ -27,47 +28,47 @@ const FileType = "QCPIN"
 
 // LogRANGEA is the log type of the NOV_RANGE blocks, and the log source of
 // their GNSSObs rows. The events' rows use the shared log sources
-// datamodels.LogINTGRPLY, LogAHRS and LogGNSSINS.
+// edid.LogINTGRPLY, LogAHRS and LogGNSSINS.
 const LogRANGEA = "RANGEA"
 
 // TWTT parses the QCPIN file at path into travel_times rows (stamped with
 // stream_edid for scope): each reply paired with the ping, a zero range
 // (no reply detected) yielding no row. The caller releases the table.
-func TWTT(path string, scope datamodels.Scope) (arrow.Table, error) {
+func TWTT(path string, scope edid.Scope) (arrow.Table, error) {
 	events, err := readEvents(path)
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildTWTT(sv3.TravelTimes(events), datamodels.StreamEDID(scope, FileType, datamodels.LogINTGRPLY))
+	return rows.BuildTWTT(sv3.TravelTimes(events), edid.Stream(scope, FileType, edid.LogINTGRPLY))
 }
 
 // AttitudeAHRS parses the QCPIN file at path into attitude_ahrs rows (stamped with
 // stream_edid for scope), one per distinct AHRS block. The caller
 // releases the table.
-func AttitudeAHRS(path string, scope datamodels.Scope) (arrow.Table, error) {
+func AttitudeAHRS(path string, scope edid.Scope) (arrow.Table, error) {
 	events, err := readEvents(path)
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildAttitudeAHRS(sv3.Attitudes(events), datamodels.StreamEDID(scope, FileType, datamodels.LogAHRS))
+	return rows.BuildAttitudeAHRS(sv3.Attitudes(events), edid.Stream(scope, FileType, edid.LogAHRS))
 }
 
 // AntennaPositions parses the QCPIN file at path into gnss_antenna_positions
 // rows (stamped with stream_edid for scope), one per distinct GNSS block, in ECEF.
 // The caller releases the table.
-func AntennaPositions(path string, scope datamodels.Scope) (arrow.Table, error) {
+func AntennaPositions(path string, scope edid.Scope) (arrow.Table, error) {
 	events, err := readEvents(path)
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildGNSSAntennaPositions(sv3.AntennaPositions(events), datamodels.StreamEDID(scope, FileType, datamodels.LogGNSSINS))
+	return rows.BuildGNSSAntennaPositions(sv3.AntennaPositions(events), edid.Stream(scope, FileType, edid.LogGNSSINS))
 }
 
 // GNSSObs parses the RANGEA logs in the QCPIN file's NOV_RANGE blocks into
 // GNSSObs rows (stamped with stream_edid for scope), one epoch per distinct log
 // time. Logs whose time status is UNKNOWN, or whose epoch time fails
 // gnssiceberg.ValidateEpoch, are skipped. The caller releases the table.
-func GNSSObs(path string, scope datamodels.Scope) (arrow.Table, error) {
+func GNSSObs(path string, scope edid.Scope) (arrow.Table, error) {
 	events, err := readEvents(path)
 	if err != nil {
 		return nil, err
@@ -108,7 +109,7 @@ func GNSSObs(path string, scope datamodels.Scope) (arrow.Table, error) {
 	}
 	slog.Debug("parsed QCPIN RANGEA", "file", filepath.Base(path), "epochs", len(epochs),
 		"failed", failed, "unknown_time", skipped, "bad_time", badTime)
-	return datamodels.BuildGNSSObs(FileType, datamodels.GNSSObsSource{EDID: datamodels.StreamEDID(scope, FileType, LogRANGEA), Epochs: epochs})
+	return rows.BuildGNSSObs(FileType, rows.GNSSObsSource{EDID: edid.Stream(scope, FileType, LogRANGEA), Epochs: epochs})
 }
 
 // rangeLog decodes raw, a NOV_RANGE block's log, as a RANGEA long message.

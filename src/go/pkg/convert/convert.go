@@ -21,6 +21,7 @@ import (
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
 )
 
 // Source and sink kinds.
@@ -34,13 +35,13 @@ const (
 type Spec struct {
 	Source        string   // SourceIceberg or SourceRaw
 	SourceURIs    []string // the warehouse: a directory (catalog.Local) or overriding the catalog's; or raw files: files, globs or directories
-	SourceCatalog string   // catalog.Local or a catalog of the iceberg-go configuration
+	SourceCatalog string   // "local", "glue" or a catalog of the iceberg-go configuration (see catalog.ParseConfig)
 	Sink          string   // SinkFiles or SinkIceberg
 	SinkURI       string   // a local directory; or the sink warehouse: a directory (catalog.Local) or overriding the catalog's
-	SinkCatalog   string   // catalog.Local or a catalog of the iceberg-go configuration
+	SinkCatalog   string   // "local", "glue" or a catalog of the iceberg-go configuration (see catalog.ParseConfig)
 	TableFormat   string   // FormatParquet, FormatCSV or FormatArrow
 
-	Scope       datamodels.Scope
+	Scope       edid.Scope
 	Tables      []string // bare or namespace-qualified table names
 	SourceTypes []string // raw file types; for Iceberg, one file type, or product for Level 1/2 tables
 	LogSource   string   // log source, or product input for Level 1/2 tables
@@ -143,15 +144,15 @@ func CheckFlags(source, sink string, given []string) error {
 }
 
 // ParseScope parses NET, NET/STA or NET/STA/CAMP.
-func ParseScope(s string) (datamodels.Scope, error) {
+func ParseScope(s string) (edid.Scope, error) {
 	parts := strings.Split(s, "/")
 	if len(parts) > 3 || slices.Contains(parts, "") {
-		return datamodels.Scope{}, usagef("--scope %q: want NET, NET/STA or NET/STA/CAMP", s)
+		return edid.Scope{}, usagef("--scope %q: want NET, NET/STA or NET/STA/CAMP", s)
 	}
 	parts = append(parts, "", "")
-	sc := datamodels.Scope{Network: parts[0], Station: parts[1], Campaign: parts[2]}
-	if err := datamodels.CheckScope(sc); err != nil {
-		return datamodels.Scope{}, usagef("--scope: %w", err)
+	sc := edid.Scope{Network: parts[0], Station: parts[1], Campaign: parts[2]}
+	if err := edid.CheckScope(sc); err != nil {
+		return edid.Scope{}, usagef("--scope: %w", err)
 	}
 	return sc, nil
 }
@@ -159,14 +160,14 @@ func ParseScope(s string) (datamodels.Scope, error) {
 // Conversion is a checked Spec, ready to run.
 type Conversion struct {
 	spec   Spec
-	defs   []datamodels.TableDef // the tables the source reads
+	tables []datamodels.TableRef // the tables the source reads
 	source Source
 	sink   Sink
 }
 
 // New checks spec's values and builds its source and sink. An Iceberg
 // source or sink without a URI takes its catalog's configured warehouse
-// (see catalog.Warehouse). Every error is a *UsageError.
+// (see catalog.Config.DefaultWarehouse). Every error is a *UsageError.
 func New(spec Spec) (*Conversion, error) {
 	if _, ok := sources[spec.Source]; !ok {
 		return nil, usagef("--source %q: want one of %s", spec.Source, kinds(sources))
@@ -175,12 +176,12 @@ func New(spec Spec) (*Conversion, error) {
 		return nil, usagef("--sink %q: want one of %s", spec.Sink, kinds(sinks))
 	}
 	if spec.Source == SourceIceberg && len(spec.SourceURIs) == 0 {
-		if wh := catalog.Warehouse(spec.SourceCatalog); wh != "" {
+		if wh := defaultWarehouse(spec.SourceCatalog); wh != "" {
 			spec.SourceURIs = []string{wh}
 		}
 	}
 	if spec.Sink == SinkIceberg && spec.SinkURI == "" {
-		spec.SinkURI = catalog.Warehouse(spec.SinkCatalog)
+		spec.SinkURI = defaultWarehouse(spec.SinkCatalog)
 	}
 	if len(spec.SourceURIs) == 0 || slices.Contains(spec.SourceURIs, "") {
 		return nil, usagef("--source-uri is required: %s", uriHint(spec.Source, spec.SourceCatalog, "source"))
@@ -199,23 +200,23 @@ func New(spec Spec) (*Conversion, error) {
 		if err != nil {
 			return nil, err
 		}
-		c.source, c.defs = src, src.defs
+		c.source, c.tables = src, src.tables
 	case SourceRaw:
 		src, err := newRawSource(spec)
 		if err != nil {
 			return nil, err
 		}
-		c.source, c.defs = src, src.defs
+		c.source, c.tables = src, src.tables
 	}
 
 	switch spec.Sink {
 	case SinkFiles:
 		// Files are named after each table's bare name.
-		for i, def := range c.defs {
-			for _, prev := range c.defs[:i] {
-				if prev.Name == def.Name {
+		for i, ref := range c.tables {
+			for _, prev := range c.tables[:i] {
+				if prev.Def.Name == ref.Def.Name {
 					return nil, usagef("--table: %s and %s would both write %s files",
-						datamodels.QualifiedName(prev), datamodels.QualifiedName(def), def.Name)
+						prev, ref, ref.Def.Name)
 				}
 			}
 		}
@@ -224,7 +225,8 @@ func New(spec Spec) (*Conversion, error) {
 		}
 		c.sink = &filesSink{dir: spec.SinkURI, format: spec.TableFormat}
 	case SinkIceberg:
-		if err := catalog.Check(spec.SinkCatalog); err != nil {
+		sinkCfg, err := catalog.ParseConfig(spec.SinkCatalog, spec.SinkURI)
+		if err != nil {
 			return nil, usagef("--sink-catalog: %w", err)
 		}
 		var props map[string]string
@@ -244,7 +246,7 @@ func New(spec Spec) (*Conversion, error) {
 		if spec.FilesPerSnapshot < 0 {
 			return nil, usagef("--files-per-snapshot %d: want 0 or more", spec.FilesPerSnapshot)
 		}
-		c.sink = &icebergSink{cfg: catalog.Config{Name: spec.SinkCatalog, Warehouse: spec.SinkURI}, defs: c.defs,
+		c.sink = &icebergSink{cfg: sinkCfg, tables: c.tables,
 			props: props, perCommit: spec.FilesPerCommit, perSnapshot: max(spec.FilesPerSnapshot, 1)}
 	}
 	return c, nil
@@ -256,6 +258,14 @@ const (
 	PropCopySelection = "sfg.copy-selection" // the --scope, --source-type, --log-source, --start and --end used
 )
 
+// defaultWarehouse is the warehouse the iceberg-go configuration gives the
+// --catalog name, or "". An invalid name is reported when the endpoint's
+// Config is parsed.
+func defaultWarehouse(name string) string {
+	cfg, _ := catalog.ParseConfig(name, "")
+	return cfg.DefaultWarehouse()
+}
+
 // sameWarehouse reports whether two warehouse URIs name the same place.
 // uriHint says why an endpoint of kind needs its URI.
 func uriHint(kind, cat, side string) string {
@@ -264,8 +274,10 @@ func uriHint(kind, cat, side string) string {
 		return "the raw files, globs or directories"
 	case kind == SinkFiles:
 		return "the output directory"
-	case cat == catalog.Local:
+	case cat == string(catalog.Local):
 		return "the local warehouse directory"
+	case cat == string(catalog.Glue):
+		return "the S3 warehouse, e.g. s3://bucket/prefix"
 	default:
 		return fmt.Sprintf("--%s-catalog %q has no warehouse in the iceberg-go configuration", side, cat)
 	}
@@ -305,7 +317,7 @@ func selectionString(spec Spec) string {
 // Rows is one table's rows from a source: its schema, then its groups.
 // A table the source couldn't read has Err set and no groups.
 type Rows struct {
-	Def    datamodels.TableDef
+	Table  datamodels.TableRef
 	Schema *arrow.Schema
 	Groups iter.Seq2[Group, error]
 	Err    error
@@ -348,12 +360,12 @@ func (c *Conversion) Run(ctx context.Context) (*Result, error) {
 		}
 	}()
 	err := c.source.Read(ctx, func(rows Rows) {
-		name := datamodels.QualifiedName(rows.Def)
+		name := rows.Table.String()
 		if rows.Err != nil {
 			res.addError("read", name, rows.Err)
 			return
 		}
-		tally := newStreamTally(rows.Def, rows.Schema)
+		tally := newStreamTally(rows.Table, rows.Schema)
 		rows.Groups = tally.wrap(rows.Groups)
 		outs, err := c.sink.Write(ctx, rows)
 		res.Streams = append(res.Streams, tally.streams()...)

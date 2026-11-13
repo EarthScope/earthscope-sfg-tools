@@ -13,8 +13,9 @@ import (
 	novatelascii "gitlab.com/earthscope/gnsstools/codecs/novatel/novatel_ascii"
 	"gitlab.com/earthscope/gnsstools/core/gnss/observation"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/internal/novatel"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/rows"
 )
 
 // FileType names the file type in errors and stream EDIDs.
@@ -23,46 +24,46 @@ const FileType = "NOV000"
 // The NovAtel ASCII log types NOV000.bin files carry, one per table. Each is
 // also the log source value of its rows.
 const (
-	LogRANGEA    = "RANGEA"              // GNSSObs
-	LogINSPVAA   = datamodels.LogINSPVAA // INSPVA
-	LogINSSTDEVA = "INSSTDEVA"           // INSSTDEV
+	LogRANGEA    = "RANGEA"        // GNSSObs
+	LogINSPVAA   = edid.LogINSPVAA // INSPVA
+	LogINSSTDEVA = "INSSTDEVA"     // INSSTDEV
 )
 
 // GNSSObs parses the RANGEA logs of the NOV000.bin file at path into GNSSObs
 // rows (stamped with stream_edid for scope). The caller releases the table.
-func GNSSObs(path string, scope datamodels.Scope) (arrow.Table, error) {
+func GNSSObs(path string, scope edid.Scope) (arrow.Table, error) {
 	r, err := scan(path, LogRANGEA)
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildGNSSObs(FileType, datamodels.GNSSObsSource{EDID: datamodels.StreamEDID(scope, FileType, LogRANGEA), Epochs: r.epochs})
+	return rows.BuildGNSSObs(FileType, rows.GNSSObsSource{EDID: edid.Stream(scope, FileType, LogRANGEA), Epochs: r.epochs})
 }
 
 // INSPVA parses the INSPVAA logs of the NOV000.bin file at path into inspva
 // rows (stamped with stream_edid for scope). The caller releases the table.
-func INSPVA(path string, scope datamodels.Scope) (arrow.Table, error) {
+func INSPVA(path string, scope edid.Scope) (arrow.Table, error) {
 	r, err := scan(path, LogINSPVAA)
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildINSPVA(r.inspva, datamodels.StreamEDID(scope, FileType, LogINSPVAA))
+	return rows.BuildINSPVA(r.inspva, edid.Stream(scope, FileType, LogINSPVAA))
 }
 
 // INSSTDEV parses the INSSTDEVA logs of the NOV000.bin file at path into
 // insstdev rows (stamped with stream_edid for scope). The caller releases the table.
-func INSSTDEV(path string, scope datamodels.Scope) (arrow.Table, error) {
+func INSSTDEV(path string, scope edid.Scope) (arrow.Table, error) {
 	r, err := scan(path, LogINSSTDEVA)
 	if err != nil {
 		return nil, err
 	}
-	return datamodels.BuildINSSTDEV(r.insstdev, datamodels.StreamEDID(scope, FileType, LogINSSTDEVA))
+	return rows.BuildINSSTDEV(r.insstdev, edid.Stream(scope, FileType, LogINSSTDEVA))
 }
 
 // records are the decoded logs of one NOV000.bin scan.
 type records struct {
 	epochs   []observation.Epoch
-	inspva   []datamodels.INSPVARow
-	insstdev []datamodels.INSSTDEVRow
+	inspva   []rows.INSPVARow
+	insstdev []rows.INSSTDEVRow
 }
 
 // scan decodes the want logs of the NOV000.bin file at path. Logs with no
@@ -124,7 +125,7 @@ func timeStatus(m novatelascii.LongMessage) *string {
 	return &s
 }
 
-func decode(m novatelascii.LongMessage, epochs *[]observation.Epoch, inspva *[]datamodels.INSPVARow, insstdev *[]datamodels.INSSTDEVRow) error {
+func decode(m novatelascii.LongMessage, epochs *[]observation.Epoch, inspva *[]rows.INSPVARow, insstdev *[]rows.INSSTDEVRow) error {
 	switch m.Msg {
 	case LogRANGEA:
 		epoch, err := novatel.RANGEAEpoch(m)

@@ -21,7 +21,8 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
-	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/rows"
 )
 
 const (
@@ -60,7 +61,7 @@ type header struct {
 // stream_edid for scope), every row at the header's cast time. Data rows
 // that are short, not numeric, flagged bad or above the surface are skipped
 // and counted. The caller releases the table.
-func SoundSpeed(path string, scope datamodels.Scope) (arrow.Table, error) {
+func SoundSpeed(path string, scope edid.Scope) (arrow.Table, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -74,7 +75,7 @@ func SoundSpeed(path string, scope datamodels.Scope) (arrow.Table, error) {
 		return nil, fmt.Errorf("%s: %w", filepath.Base(path), err)
 	}
 	var (
-		rs  []datamodels.SoundSpeedRow
+		rs  []rows.SoundSpeedRow
 		bad int
 	)
 	for sc.Scan() {
@@ -93,14 +94,14 @@ func SoundSpeed(path string, scope datamodels.Scope) (arrow.Table, error) {
 			bad++
 			continue
 		}
-		rs = append(rs, datamodels.SoundSpeedRow{Time: h.castTime, Depth: d, Speed: s})
+		rs = append(rs, rows.SoundSpeedRow{Time: h.castTime, Depth: d, Speed: s})
 	}
 	if err := sc.Err(); err != nil {
 		return nil, err
 	}
 	slog.Debug("parsed SEABIRD", "file", filepath.Base(path), "rows", len(rs), "bad_lines", bad,
 		"cast_time", h.castTime.Format(time.RFC3339))
-	return datamodels.BuildSoundSpeed(rs, datamodels.StreamEDID(scope, FileType, LogType))
+	return rows.BuildSoundSpeed(rs, edid.Stream(scope, FileType, LogType))
 }
 
 // readHeader reads sc up to and including the "*END*" line.

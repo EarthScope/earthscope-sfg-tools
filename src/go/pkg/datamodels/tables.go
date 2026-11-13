@@ -3,32 +3,11 @@ package datamodels
 import (
 	"fmt"
 	"maps"
-	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/iceberg-go"
 	"github.com/apache/iceberg-go/table"
 )
-
-// Go counterparts of the Python TableDefs in
-// earthscope_sfg_tools.datamodels.iceberg, except that every Go table's
-// only identity column is stream_edid (no Network, Station, Campaign or
-// Log_Source columns), so the Python definitions no longer match.
-// Iceberg tracks columns by field ID, which is assigned in declaration order
-// starting at 1, so new columns must only ever be appended.
-
-// field is shorthand for an Iceberg schema field in the table definitions.
-// Definitions leave ID zero: newSchema numbers fields in declaration order.
-type field = iceberg.NestedField
-
-// Check is the value constraint of one column, enforced at ingest by
-// Validate.
-type Check struct {
-	// Inclusive (Ge, Le) and exclusive (Gt, Lt) bounds; nil means unbounded.
-	Ge, Le, Gt, Lt *float64
-	// IsIn lists the allowed values of a string column; nil allows any.
-	IsIn []string
-}
 
 // checks merges check sets, e.g. a shared column group's with a table's own.
 func checks(sets ...map[string]Check) map[string]Check {
@@ -47,40 +26,6 @@ func newSchema(fields ...field) *iceberg.Schema {
 		numbered[i] = f
 	}
 	return iceberg.NewSchema(0, numbered...)
-}
-
-// PartitionKey is one partition field: a transform applied to a source column.
-type PartitionKey struct {
-	Source    string
-	Transform iceberg.Transform
-	Name      string // defaults to Source
-}
-
-// TableDef is an Iceberg table definition: name, level, schema and layout.
-type TableDef struct {
-	Name  string
-	Level int
-	Doc   string
-	// Schema is the table's Iceberg schema; nil when External is set (use
-	// IcebergSchema). Iceberg tracks columns by field ID, so a new column
-	// must only be appended, taking the next ID.
-	Schema *iceberg.Schema
-	// Checks are value constraints by column name, enforced by Validate.
-	Checks map[string]Check
-	// PartitionBy defaults to identity on stream_edid, or to
-	// External's spec. Set on an External table, it overrides that spec;
-	// keys name columns of External's schema.
-	PartitionBy []PartitionKey
-	// SortBy names the columns of the table's ascending sort order.
-	SortBy []string
-	// External, when set, supplies the whole table definition from the
-	// library that owns it (see GNSSObs); Schema, Checks and SortBy are
-	// then unused, and PartitionBy, if set, overrides its partition spec.
-	External func() (External, error)
-	// TimeColumn is the timestamp column that orders a stream's rows.
-	// Table.Append replaces existing rows by (stream_edid, TimeColumn
-	// window), so re-ingesting a file does not duplicate its rows.
-	TimeColumn string
 }
 
 // External is a complete table definition owned by another library.
@@ -221,33 +166,4 @@ func (t TableDef) ArrowSchema() (*arrow.Schema, error) {
 		return nil, err
 	}
 	return table.SchemaToArrowSchema(sc, nil, true, false)
-}
-
-// AllTables lists every table of the SFG catalog, Level 0 to 2.
-func AllTables() []TableDef { return SFG.Tables() }
-
-// TableByName returns the SFG table named name, either qualified by its
-// database (gnssa_l1.garpos) or bare (inspva). A bare name in more than one
-// database is an error.
-func TableByName(name string) (TableDef, error) {
-	var found []TableDef
-	for _, db := range SFG.Databases {
-		for _, def := range db.Tables {
-			if name == def.Name || name == db.Name+"."+def.Name {
-				found = append(found, def)
-			}
-		}
-	}
-	switch len(found) {
-	case 0:
-		return TableDef{}, fmt.Errorf("no table %q", name)
-	case 1:
-		return found[0], nil
-	default:
-		names := make([]string, len(found))
-		for i, def := range found {
-			names[i] = QualifiedName(def)
-		}
-		return TableDef{}, fmt.Errorf("table %q is ambiguous: one of %s", name, strings.Join(names, ", "))
-	}
 }
