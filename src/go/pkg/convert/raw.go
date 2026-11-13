@@ -46,7 +46,7 @@ var Patterns = map[string]string{
 type rawSource struct {
 	uris      []string
 	types     []string
-	tables    []datamodels.TableRef // the gnssa_l0 tables to read, in declaration order
+	tables    []catalog.TableRef // the gnssa_l0 tables to read, in declaration order
 	scope     edid.Scope
 	logSource string
 	maxFiles  int
@@ -121,7 +121,7 @@ func newRawSource(spec Spec) (*rawSource, error) {
 		if !ok || !produced[def.Name] {
 			return nil, usagef("--table %s: not produced by --source-type %s", name, strings.Join(s.types, ","))
 		}
-		if !slices.ContainsFunc(s.tables, func(r datamodels.TableRef) bool { return r.Def.Name == def.Name }) {
+		if !slices.ContainsFunc(s.tables, func(r catalog.TableRef) bool { return r.Def.Name == def.Name }) {
 			s.tables = append(s.tables, datamodels.GNSSA_L0.Ref(def))
 		}
 	}

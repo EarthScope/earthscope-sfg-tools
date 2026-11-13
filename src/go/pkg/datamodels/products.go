@@ -2,6 +2,8 @@ package datamodels
 
 import (
 	"slices"
+
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
 )
 
 // Product tables: antenna tracks and GNSS-A shots built by downstream
@@ -18,7 +20,7 @@ import (
 // table has one definition, listed in every database that holds it.
 
 // GNSSAntennaPositionsPPP mirrors level1.GNSS_ANTENNA_POSITIONS_PPP.
-var GNSSAntennaPositionsPPP = TableDef{
+var GNSSAntennaPositionsPPP = catalog.TableDef{
 	Name:       "gnss_antenna_positions_ppp",
 	TimeColumn: "time",
 	Doc: "Antenna positions from PRIDE PPP-AR kinematic solutions of Level 0 " +
@@ -32,7 +34,7 @@ var GNSSAntennaPositionsPPP = TableDef{
 		field{Name: "pdop", Type: float64Type, Doc: "Position dilution of precision", Required: true},
 		field{Name: "wrms", Type: float64Type, Doc: "Weighted RMS of position residuals [m]", Required: true},
 	)...),
-	Checks: checks(AntennaPositionChecks, map[string]Check{
+	Checks: checks(AntennaPositionChecks, map[string]catalog.Check{
 		"q":                    {Ge: bound(0), Le: bound(9)},
 		"number_of_satellites": {Ge: bound(0)},
 		"pdop":                 {Ge: bound(0)},
@@ -42,7 +44,7 @@ var GNSSAntennaPositionsPPP = TableDef{
 
 // GNSSAntennaPositionsSmoothed is Go-only: the workflows keep this track in
 // memory between the smoother and the shot refinement.
-var GNSSAntennaPositionsSmoothed = TableDef{
+var GNSSAntennaPositionsSmoothed = catalog.TableDef{
 	Name:       "gnss_antenna_positions_smoothed",
 	TimeColumn: "time",
 	Doc: "Antenna track from the GNATSS Kalman filter and smoother over PPP " +
@@ -56,7 +58,7 @@ var GNSSAntennaPositionsSmoothed = TableDef{
 		field{Name: "rho_xz", Type: float64Type, Doc: "Position correlation X-Z"},
 		field{Name: "rho_yz", Type: float64Type, Doc: "Position correlation Y-Z"},
 	)...),
-	Checks: checks(AntennaPositionChecks, map[string]Check{
+	Checks: checks(AntennaPositionChecks, map[string]catalog.Check{
 		"rho_xy": {Ge: bound(-1), Le: bound(1)},
 		"rho_xz": {Ge: bound(-1), Le: bound(1)},
 		"rho_yz": {Ge: bound(-1), Le: bound(1)},
@@ -91,7 +93,7 @@ var garposSchema = newSchema(
 )
 
 // garposChecks are the checks of garposSchema.
-var garposChecks = map[string]Check{
+var garposChecks = map[string]catalog.Check{
 	"TT":     {Ge: bound(0)},
 	"head0":  {Ge: bound(0), Le: bound(360)},
 	"pitch0": {Ge: bound(-90), Le: bound(90)},
@@ -117,10 +119,10 @@ func antennaEpochColumns(suffix, label string) []field {
 }
 
 // antennaEpochChecks are the checks of antennaEpochColumns(suffix, ...).
-func antennaEpochChecks(suffix string) map[string]Check {
-	out := map[string]Check{}
+func antennaEpochChecks(suffix string) map[string]catalog.Check {
+	out := map[string]catalog.Check{}
 	for _, a := range []string{"X", "Y", "Z"} {
-		out["ant_sig"+a+suffix] = Check{Ge: bound(0)}
+		out["ant_sig"+a+suffix] = catalog.Check{Ge: bound(0)}
 	}
 	return out
 }
@@ -136,8 +138,8 @@ func attitudeColumns(suffix, label string) []field {
 }
 
 // attitudeChecks are the checks of attitudeColumns(suffix, ...).
-func attitudeChecks(suffix string) map[string]Check {
-	return map[string]Check{
+func attitudeChecks(suffix string) map[string]catalog.Check {
+	return map[string]catalog.Check{
 		"heading" + suffix: {Ge: bound(0), Le: bound(360)},
 		"pitch" + suffix:   {Ge: bound(-90), Le: bound(90)},
 		"roll" + suffix:    {Ge: bound(-180), Le: bound(180)},
@@ -174,7 +176,7 @@ var communitySchema = newSchema(slices.Concat(
 
 // communityChecks are the checks of communitySchema.
 var communityChecks = checks(
-	map[string]Check{
+	map[string]catalog.Check{
 		"TravelTime": {Ge: bound(0)},
 		"acc":        {Ge: bound(0), Le: bound(100)},
 	},
@@ -186,9 +188,9 @@ var communityChecks = checks(
 // database: the DFOP00 GNSS block (gnssa_l0, community_standard only), Level
 // 0 gnss_antenna_positions (gnssa_l1), or the smoothed track (gnssa_l2).
 var (
-	Garpos = TableDef{Name: "garpos", TimeColumn: "ST", Schema: garposSchema, Checks: garposChecks,
+	Garpos = catalog.TableDef{Name: "gnssa_garpos", TimeColumn: "ST", Schema: garposSchema, Checks: garposChecks,
 		Doc: "GNSS-A in GARPOS format: one row per shot, antenna positions in local ENU about the array center."}
-	CommunityStandard = TableDef{Name: "community_standard", TimeColumn: "T_transmit", Schema: communitySchema, Checks: communityChecks,
+	CommunityStandard = catalog.TableDef{Name: "gnssa_community_standard", TimeColumn: "T_transmit", Schema: communitySchema, Checks: communityChecks,
 		Doc: "GNSS-A community standard format: one row per shot (ping and reply), antenna positions in ECEF. " +
 			"Transducer positions are null until lever arms are applied (always at Level 0)."}
 )

@@ -26,10 +26,6 @@ func (e exitError) Error() string { return fmt.Sprintf("exit status %d", e.code)
 
 func init() {
 	rootCmd.AddCommand(crinexCmd)
-	rootCmd.AddCommand(nova2rnxCmd)
-	rootCmd.AddCommand(novb2rnxCmd)
-	rootCmd.AddCommand(nov0002rnxCmd)
-	rootCmd.AddCommand(nov2level0Cmd)
 	rootCmd.AddCommand(level0Cmd)
 	rootCmd.AddCommand(convertCmd)
 	rootCmd.AddCommand(icebergCmd)

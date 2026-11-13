@@ -23,6 +23,8 @@ import (
 	"io"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/apache/iceberg-go"
 	icecat "github.com/apache/iceberg-go/catalog"
 	"github.com/apache/iceberg-go/table"
@@ -286,7 +288,7 @@ func addMissingColumns(ctx context.Context, tbl *table.Table, def TableDef) (*ta
 
 // Table is one Iceberg table and the definition it was opened with. It
 // knows nothing of the Database or Catalog that opened it. Commits through
-// it (Append, Batch.Commit) move it to the new snapshot. It is not safe for
+// it (Append) move it to the new snapshot. It is not safe for
 // concurrent use.
 type Table struct {
 	def TableDef
@@ -296,11 +298,118 @@ type Table struct {
 // appendBatchRows is the row count per write batch when appending.
 const appendBatchRows = 1 << 20
 
+// AppendOption configures one Append.
+type AppendOption func(*appendOptions)
+
+type appendOptions struct {
+	props iceberg.Properties
+}
+
+// WithProperties adds props to the summary of the snapshot Append commits,
+// e.g. the source file or the scope it was parsed for.
+func WithProperties(props map[string]string) AppendOption {
+	return func(o *appendOptions) {
+		if o.props == nil {
+			o.props = iceberg.Properties{}
+		}
+		for k, v := range props {
+			o.props[k] = v
+		}
+	}
+}
+
+// Def is the table's definition.
+func (t *Table) Def() TableDef { return t.def }
+
+// Iceberg is the underlying iceberg-go table, at the snapshot the Table last
+// read or committed.
+func (t *Table) Iceberg() *table.Table { return t.tbl }
+
 // Append writes a full-row Arrow table (a file parser's output for the
-// table's definition) as one snapshot, replacing rather than adding to what is already there: for
-// each stream_edid in rows, existing rows of that stream whose
-// TimeColumn falls within the stream's time range in rows are deleted in
-// the same commit (see ReplaceFilter).
+// table's definition) as one snapshot and returns the number of rows
+// written. It only adds rows: appending the same file twice duplicates its
+// rows. Rows are matched to the table's columns by name (see inTableOrder),
+// so a table evolved since its definition was written is filled correctly.
+// The Table moves to the new snapshot.
 func (t *Table) Append(ctx context.Context, rows arrow.Table, opts ...AppendOption) (int64, error) {
-	// TODO implement simplisticly
+	var o appendOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	n := rows.NumRows()
+	if n == 0 {
+		return 0, nil
+	}
+	// Write with the table's own column order and field IDs, not the
+	// definition's: they differ once the table has evolved.
+	ordered, err := inTableOrder(t.tbl, rows)
+	if err != nil {
+		return 0, fmt.Errorf("appending to %s: %w", t.def.Name, err)
+	}
+	defer ordered.Release()
+	tx := t.tbl.NewTransaction()
+	if err := tx.AppendTable(ctx, ordered, appendBatchRows, o.props); err != nil {
+		return 0, fmt.Errorf("appending to %s: %w", t.def.Name, err)
+	}
+	tbl, err := tx.Commit(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("committing to %s: %w", t.def.Name, err)
+	}
+	t.tbl = tbl
+	return n, nil
+}
+
+// inTableOrder returns rows relabelled with tbl's own schema: its column
+// order and field IDs, matched by name. Rows built from a TableDef carry the
+// def's field IDs (declaration order) in their Arrow field metadata, and
+// iceberg-go maps written columns by those IDs; an evolved table (see
+// evolve) numbers its added columns after the ones it had, so def-labelled
+// rows would land values in the wrong columns. A table column missing from
+// rows is written as nulls if optional; a rows column the table lacks, or a
+// type mismatch, is an error. The caller releases the result.
+func inTableOrder(tbl *table.Table, rows arrow.Table) (arrow.Table, error) {
+	n := rows.NumRows()
+	tsc, err := table.SchemaToArrowSchema(tbl.Schema(), nil, true, false)
+	if err != nil {
+		return nil, err
+	}
+	outFields := tsc.Fields()
+	cols := make([]arrow.Column, len(outFields))
+	release := func() {
+		for i := range cols {
+			if cols[i].Data() != nil {
+				cols[i].Release()
+			}
+		}
+	}
+	used := 0
+	for i, f := range outFields {
+		idx := rows.Schema().FieldIndices(f.Name)
+		switch {
+		case len(idx) == 1:
+			data := rows.Column(idx[0]).Data()
+			if !arrow.TypeEqual(data.DataType(), f.Type) {
+				release()
+				return nil, fmt.Errorf("column %q is %s, table has %s", f.Name, data.DataType(), f.Type)
+			}
+			cols[i] = *arrow.NewColumn(f, data)
+			used++
+		case !f.Nullable:
+			release()
+			return nil, fmt.Errorf("rows lack required column %q", f.Name)
+		default:
+			nulls := array.MakeArrayOfNull(memory.DefaultAllocator, f.Type, int(n))
+			chunked := arrow.NewChunked(f.Type, []arrow.Array{nulls})
+			nulls.Release()
+			cols[i] = *arrow.NewColumn(f, chunked)
+			chunked.Release()
+		}
+	}
+	if used != int(rows.NumCols()) {
+		release()
+		return nil, fmt.Errorf("rows have columns the table lacks")
+	}
+	out := array.NewTable(tsc, cols, n)
+	release()
+	return out, nil
 }

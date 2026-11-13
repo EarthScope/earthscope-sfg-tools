@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
 )
@@ -187,7 +188,7 @@ type streamTally struct {
 	byEDID     map[string]*Stream
 }
 
-func newStreamTally(ref datamodels.TableRef, schema *arrow.Schema) *streamTally {
+func newStreamTally(ref catalog.TableRef, schema *arrow.Schema) *streamTally {
 	def := ref.Def
 	t := &streamTally{table: ref.String(), edid: -1, time: -1, byEDID: map[string]*Stream{}}
 	if schema == nil {

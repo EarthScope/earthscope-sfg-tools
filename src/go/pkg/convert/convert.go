@@ -20,7 +20,6 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
-	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
 )
 
@@ -160,7 +159,7 @@ func ParseScope(s string) (edid.Scope, error) {
 // Conversion is a checked Spec, ready to run.
 type Conversion struct {
 	spec   Spec
-	tables []datamodels.TableRef // the tables the source reads
+	tables []catalog.TableRef // the tables the source reads
 	source Source
 	sink   Sink
 }
@@ -317,7 +316,7 @@ func selectionString(spec Spec) string {
 // Rows is one table's rows from a source: its schema, then its groups.
 // A table the source couldn't read has Err set and no groups.
 type Rows struct {
-	Table  datamodels.TableRef
+	Table  catalog.TableRef
 	Schema *arrow.Schema
 	Groups iter.Seq2[Group, error]
 	Err    error

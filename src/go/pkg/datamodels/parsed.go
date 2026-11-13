@@ -1,6 +1,10 @@
 package datamodels
 
-import "github.com/apache/iceberg-go"
+import (
+	"github.com/apache/iceberg-go"
+
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
+)
 
 // Tables of parsed records: raw parser output from full-rate log files, at
 // the native sampling rate of the source log (database gnssa_l0). Times are UTC timestamptz; other time
@@ -8,7 +12,7 @@ import "github.com/apache/iceberg-go"
 // gnsstools observations table, which also stores GPS time.
 
 // TWTT mirrors level0.TRAVEL_TIMES.
-var TWTT = TableDef{
+var TWTT = catalog.TableDef{
 	Name:       "travel_times",
 	TimeColumn: "T_transmit",
 	Doc: "Two-way travel times per transponder from SV3 range and interrogation " +
@@ -26,7 +30,7 @@ var TWTT = TableDef{
 		field{Name: "aSNR", Type: float64Type, Doc: "Signal-to-noise ratio [dB]"},
 		field{Name: "tat", Type: float64Type, Doc: "Beacon turn-around time [s]"},
 	),
-	Checks: map[string]Check{
+	Checks: map[string]catalog.Check{
 		"TravelTime": {Ge: bound(0), Le: bound(600)},
 		"acc":        {Ge: bound(0), Le: bound(100)},
 		"aSNR":       {Ge: bound(-100), Le: bound(100)},
@@ -35,7 +39,7 @@ var TWTT = TableDef{
 }
 
 // INSPVA mirrors level0.INSPVA.
-var INSPVA = TableDef{
+var INSPVA = catalog.TableDef{
 	Name:       "inspva",
 	TimeColumn: "time",
 	Doc: "NovAtel INSPVAA position, velocity and attitude (NOV000.bin), and the " +
@@ -55,7 +59,7 @@ var INSPVA = TableDef{
 		field{Name: "ins_status", Type: str, Doc: "INS solution status as logged, e.g. INS_SOLUTION_GOOD, INS_ALIGNING"},
 		field{Name: "time_status", Type: str, Doc: "Log header GPS time status, e.g. FINESTEERING, COARSESTEERING"},
 	),
-	Checks: map[string]Check{
+	Checks: map[string]catalog.Check{
 		"lat":     {Ge: bound(-90), Le: bound(90)},
 		"lon":     {Ge: bound(-180), Le: bound(180)},
 		"roll":    {Ge: bound(-180), Le: bound(180)},
@@ -65,7 +69,7 @@ var INSPVA = TableDef{
 }
 
 // INSSTDEV mirrors level0.INSSTDEV.
-var INSSTDEV = TableDef{
+var INSSTDEV = catalog.TableDef{
 	Name:       "insstdev",
 	TimeColumn: "time",
 	Doc: "NovAtel INSSTDEVA solution standard deviations (NOV000.bin). The " +
@@ -87,7 +91,7 @@ var INSSTDEV = TableDef{
 		field{Name: "time_since_update", Type: str, Doc: "Time since last update"},
 		field{Name: "time_status", Type: str, Doc: "Log header GPS time status, e.g. FINESTEERING, COARSESTEERING"},
 	),
-	Checks: map[string]Check{
+	Checks: map[string]catalog.Check{
 		"lat_sig":   {Ge: bound(0)},
 		"lon_sig":   {Ge: bound(0)},
 		"alt_sig":   {Ge: bound(0)},
@@ -110,7 +114,7 @@ var INSSTDEV = TableDef{
 // GPS day, which suits the few streams of a GNSS-A campaign better than
 // hash buckets sized for a large network. The override applies when the
 // table is created; an existing table keeps the spec it was created with.
-var GNSSObs = TableDef{
+var GNSSObs = catalog.TableDef{
 	Name:       "gnss_observations",
 	TimeColumn: "time_gpst",
 	Doc: "GNSS observations, one row per (epoch, satellite, signal), from RANGEA " +
@@ -118,14 +122,14 @@ var GNSSObs = TableDef{
 		"gnsstools observations schema. stream_edid is " +
 		"network.station.campaign.filetype.logsource.",
 	External: gnsstoolsObservations,
-	PartitionBy: []PartitionKey{
+	PartitionBy: []catalog.PartitionKey{
 		{Source: "time_gpst", Transform: iceberg.DayTransform{}, Name: "time_gpst_day"},
 		{Source: "stream_edid", Transform: iceberg.IdentityTransform{}},
 	},
 }
 
 // AttitudeAHRS mirrors level0.ATTITUDE_AHRS.
-var AttitudeAHRS = TableDef{
+var AttitudeAHRS = catalog.TableDef{
 	Name:       "attitude_ahrs",
 	TimeColumn: "time",
 	Doc: "Attitude from the Sonardyne AHRS block of SV3 events (QCPIN) " +
@@ -147,7 +151,7 @@ var AttitudeAHRS = TableDef{
 		field{Name: "p", Type: float64Type, Doc: "Pitch [deg]"},
 		field{Name: "r", Type: float64Type, Doc: "Roll [deg]"},
 	),
-	Checks: map[string]Check{
+	Checks: map[string]catalog.Check{
 		"time_instrument":  {Ge: bound(0)},
 		"time_start_count": {Ge: bound(0)},
 		"h":                {Ge: bound(0), Le: bound(360)},
@@ -158,7 +162,7 @@ var AttitudeAHRS = TableDef{
 }
 
 // SoundSpeed mirrors level0.SOUND_SPEED.
-var SoundSpeed = TableDef{
+var SoundSpeed = catalog.TableDef{
 	Name:       "sound_speed",
 	TimeColumn: "time",
 	Doc: "Sound speed profiles from CTD casts and Sea-Bird profiles. speed must " +
@@ -169,7 +173,7 @@ var SoundSpeed = TableDef{
 		field{Name: "depth", Type: float64Type, Doc: "Depth [m]", Required: true},
 		field{Name: "speed", Type: float64Type, Doc: "Sound speed [m/s]", Required: true},
 	),
-	Checks: map[string]Check{
+	Checks: map[string]catalog.Check{
 		"depth": {Ge: bound(0), Le: bound(10_000)},
 		"speed": {Ge: bound(0), Le: bound(3800)},
 	},
@@ -187,14 +191,14 @@ var AntennaPositionColumns = []field{
 }
 
 // AntennaPositionChecks are the checks of AntennaPositionColumns.
-var AntennaPositionChecks = map[string]Check{
+var AntennaPositionChecks = map[string]catalog.Check{
 	"ant_sigx": {Ge: bound(0)},
 	"ant_sigy": {Ge: bound(0)},
 	"ant_sigz": {Ge: bound(0)},
 }
 
 // GNSSAntennaPositions mirrors level0.GNSS_ANTENNA_POSITIONS.
-var GNSSAntennaPositions = TableDef{
+var GNSSAntennaPositions = catalog.TableDef{
 	Name:       "gnss_antenna_positions",
 	TimeColumn: "time",
 	Doc: "Antenna positions from the GNSS block of SV3 events (QCPIN), " +
@@ -208,7 +212,7 @@ var GNSSAntennaPositions = TableDef{
 		field{Name: "pdop", Type: float64Type, Doc: "Position dilution of precision"},
 		field{Name: "wrms", Type: float64Type, Doc: "Weighted RMS of position residuals [m]"},
 	)...),
-	Checks: checks(AntennaPositionChecks, map[string]Check{
+	Checks: checks(AntennaPositionChecks, map[string]catalog.Check{
 		"q":                    {Ge: bound(0), Le: bound(9)},
 		"number_of_satellites": {Ge: bound(0)},
 		"pdop":                 {Ge: bound(0)},
@@ -217,7 +221,7 @@ var GNSSAntennaPositions = TableDef{
 }
 
 // GNSSSatellitesInView is Go-only: it has no Python TableDef counterpart.
-var GNSSSatellitesInView = TableDef{
+var GNSSSatellitesInView = catalog.TableDef{
 	Name:       "gnss_satellites_in_view",
 	TimeColumn: "time",
 	Doc: "Satellites in view from NMEA GSV sentences of the SV3 GNSS receiver " +
@@ -233,7 +237,7 @@ var GNSSSatellitesInView = TableDef{
 		field{Name: "azimuth", Type: float64Type, Doc: "Azimuth from true north [deg]; null when not reported"},
 		field{Name: "snr", Type: float64Type, Doc: "Carrier-to-noise density [dB-Hz]; null when not tracked"},
 	),
-	Checks: map[string]Check{
+	Checks: map[string]catalog.Check{
 		"sats_in_view": {Ge: bound(0)},
 		"prn":          {Ge: bound(1)},
 		"elevation":    {Ge: bound(-90), Le: bound(90)},
@@ -243,7 +247,7 @@ var GNSSSatellitesInView = TableDef{
 }
 
 // GNSSDOP is Go-only: it has no Python TableDef counterpart.
-var GNSSDOP = TableDef{
+var GNSSDOP = catalog.TableDef{
 	Name:       "gnss_dop",
 	TimeColumn: "time",
 	Doc: "Fix type, satellites used and dilutions of precision from NMEA GSA " +
@@ -261,7 +265,7 @@ var GNSSDOP = TableDef{
 		field{Name: "hdop", Type: float64Type, Doc: "Horizontal dilution of precision"},
 		field{Name: "vdop", Type: float64Type, Doc: "Vertical dilution of precision"},
 	),
-	Checks: map[string]Check{
+	Checks: map[string]catalog.Check{
 		"fix_type":    {Ge: bound(1), Le: bound(3)},
 		"number_used": {Ge: bound(0)},
 		"pdop":        {Ge: bound(0)},
@@ -271,7 +275,7 @@ var GNSSDOP = TableDef{
 }
 
 // GNSSCourseSpeed is Go-only: it has no Python TableDef counterpart.
-var GNSSCourseSpeed = TableDef{
+var GNSSCourseSpeed = catalog.TableDef{
 	Name:       "gnss_course_speed",
 	TimeColumn: "time",
 	Doc: "Course and speed over ground from NMEA VTG sentences of the SV3 GNSS " +
@@ -287,7 +291,7 @@ var GNSSCourseSpeed = TableDef{
 		field{Name: "speed_kmh", Type: float64Type, Doc: "Speed over ground [km/h]"},
 		field{Name: "mode", Type: str, Doc: "Mode indicator: A autonomous, D differential, E estimated, N not valid; null when not reported"},
 	),
-	Checks: map[string]Check{
+	Checks: map[string]catalog.Check{
 		"course_true":     {Ge: bound(0), Le: bound(360)},
 		"course_magnetic": {Ge: bound(0), Le: bound(360)},
 		"speed_knots":     {Ge: bound(0)},
@@ -296,7 +300,7 @@ var GNSSCourseSpeed = TableDef{
 }
 
 // TransceiverInterrogations is Go-only: it has no Python TableDef counterpart.
-var TransceiverInterrogations = TableDef{
+var TransceiverInterrogations = catalog.TableDef{
 	Name:       "transceiver_interrogations",
 	TimeColumn: "time",
 	Doc: "Acoustic interrogations (pings) from the SV3's dialogue with its " +
@@ -315,7 +319,7 @@ var TransceiverInterrogations = TableDef{
 		field{Name: "delay", Type: float64Type, Doc: "Transmit delay (D) [ms]: the SV3 trigger delay"},
 		field{Name: "npl", Type: int32Type, Doc: "NPL as logged"},
 	),
-	Checks: map[string]Check{
+	Checks: map[string]catalog.Check{
 		"event":     {Ge: bound(0)},
 		"rx_window": {Ge: bound(0)},
 		"delay":     {Ge: bound(0)},
@@ -323,7 +327,7 @@ var TransceiverInterrogations = TableDef{
 }
 
 // TransceiverRanges is Go-only: it has no Python TableDef counterpart.
-var TransceiverRanges = TableDef{
+var TransceiverRanges = catalog.TableDef{
 	Name:       "transceiver_ranges",
 	TimeColumn: "time",
 	Doc: "Per-ping range results from the SV3's transceiver (TCVR00 BR): one " +
@@ -346,7 +350,7 @@ var TransceiverRanges = TableDef{
 		field{Name: "telemetry", Type: str, Doc: "Telemetry (TEL), e.g. NONE"},
 		field{Name: "doppler", Type: float64Type, Doc: "Doppler (DOP) as logged"},
 	),
-	Checks: map[string]Check{
+	Checks: map[string]catalog.Check{
 		"event":      {Ge: bound(0)},
 		"sequence":   {Ge: bound(0)},
 		"TravelTime": {Ge: bound(0), Le: bound(600)},
@@ -356,7 +360,7 @@ var TransceiverRanges = TableDef{
 }
 
 // TransceiverSettings is Go-only: it has no Python TableDef counterpart.
-var TransceiverSettings = TableDef{
+var TransceiverSettings = catalog.TableDef{
 	Name:       "transceiver_settings",
 	TimeColumn: "time",
 	Doc: "Transceiver configuration and identity as it reported them (TCVR00): " +

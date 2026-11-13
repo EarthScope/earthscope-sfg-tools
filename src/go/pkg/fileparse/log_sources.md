@@ -18,6 +18,7 @@ Table codes: **PVA** inspva · **STD** insstdev · **OBS** gnss_observations · 
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | NOV000 | PVA | STD | OBS | · | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
 | NOV770 | | | | | OBS | OBS | OBS | OBS | · | · | · | | | | | | | | | | | | | | | | | | | | | |
+| NVA | PVA | STD | OBS | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
 | DFOP00 | PVA | | | | | | | | | | | TT | · | · | | · | · | | | | | | | | | | | | | | | |
 | QCPIN | | | OBS | | | | | | | | | TT | ATT | POS | | | | | | | | | | | | | | | | | | |
 | AHRS00 | | | | | | | | | | | | | ATT | | | | | | | | | | | | | | | | | | | |
@@ -39,6 +40,10 @@ Table codes: **PVA** inspva · **STD** insstdev · **OBS** gnss_observations · 
 | DUALANTENNAHEADINGA | dual-antenna heading/pitch | — | **unparsed**; ~63k per 4 files. Candidate for attitude/heading |
 
 Long logs span several GPSA packets. The payloads that start mid-message (`,0.`, `-12…`) are continuation chunks, not separate log sources.
+
+### NVA — plain NovAtel ASCII logs
+
+Bare NovAtel ASCII logs as a receiver writes them, without Sonardyne's GPSA framing. Same logs and tables as NOV000 (INSPVAA → inspva, INSSTDEVA → insstdev, RANGEA → gnss_observations), read by the same scanner without the GPSA reassembly. There is no file-name pattern for it: give the type explicitly (e.g. `sfg rinex --type NVA`). No sample file was in the survey above.
 
 ### NOV770 — NovAtel binary logs (`*NOV770.raw`)
 

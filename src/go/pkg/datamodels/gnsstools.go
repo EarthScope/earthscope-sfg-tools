@@ -9,16 +9,18 @@ import (
 	"sync"
 
 	"gitlab.com/earthscope/gnsstools/geodata/gnssiceberg"
+
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
 )
 
 // gnsstoolsObservations is GNSSObs's External definition: exactly what
 // gnsstools creates for its observations table. gnsstools does not export
 // the definition, only EnsureObservationsTable, so the table is created once
 // per process in a throwaway SQL catalog and its definition copied out.
-var gnsstoolsObservations = sync.OnceValues(func() (External, error) {
+var gnsstoolsObservations = sync.OnceValues(func() (catalog.External, error) {
 	dir, err := os.MkdirTemp("", "gnssobs-schema-")
 	if err != nil {
-		return External{}, err
+		return catalog.External{}, err
 	}
 	defer os.RemoveAll(dir)
 	tbl, err := gnssiceberg.EnsureObservationsTable(context.Background(),
@@ -26,9 +28,9 @@ var gnsstoolsObservations = sync.OnceValues(func() (External, error) {
 		gnssiceberg.TableConfig{DatabaseName: "probe", TableName: "observations", WarehouseLocation: dir},
 	)
 	if err != nil {
-		return External{}, fmt.Errorf("gnsstools observations table definition: %w", err)
+		return catalog.External{}, fmt.Errorf("gnsstools observations table definition: %w", err)
 	}
-	return External{
+	return catalog.External{
 		Schema:     tbl.Schema(),
 		Spec:       tbl.Spec(),
 		SortOrder:  tbl.SortOrder(),

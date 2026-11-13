@@ -19,7 +19,11 @@ make build
 
 The binary is written to `src/go/build/sfg_<os>_<arch>`. Its commands:
 
-- `nov0002rnx`, `nova2rnx`, `novb2rnx`: NovAtel NOV000, ASCII and binary logs to RINEX
+- `rinex`: raw NovAtel files of one `--type` (NOV000, NOV770, NVA for plain NovAtel ASCII, or QCPIN) to daily RINEX observation files. Epochs from all files are merged, ordered and de-duplicated, cycle slips are flagged from the receiver lock times (RINEX LLI bit 0), epochs are optionally decimated (`--modulo`), and written one file per day to `--out`. Logs with no time fix are dropped. NOV770 needs `--log-source` to pick the log type and antenna, e.g. `RANGECMP5B` or `RANGECMP5B_1`:
+
+  ```bash
+  sfg rinex --type NOV770 --log-source RANGECMP5B_1 --settings settings.json --out rinex/ raw/*NOV770.raw
+  ```
 - `convert`: one source to one sink, every part stated with its own flag. So far: `--source iceberg` (any catalog table, selected by scope, file type, log source and time window) or `--source raw` (raw files of the given types through the Level 0 parsers) to `--sink files` (Parquet, CSV or Arrow) or `--sink iceberg` (re-runs replace rather than duplicate). An Iceberg source with an Iceberg sink copies tables between catalogs, e.g. to sync a local warehouse with a cloud one. `--source-uri` repeats (or takes a shell glob's matches), and each table's snapshots go into one catalog commit unless `--files-per-commit N` caps them. `--result` writes a JSON record of the run; exit codes are 0 ok, 1 fatal, 2 usage, 3 partial. See `plans/sfg-convert-cli.md`.
 - `iceberg ingest`, `iceberg export`: the everyday catalog paths, with the catalog's configuration filled in. `--catalog` defaults to the iceberg-go `default-catalog` and `--warehouse` to its configured warehouse. `ingest` takes raw files, globs or campaign directories as arguments and tells each file's type by its name (files of no type are listed as skipped); `export` writes tables to Parquet, CSV or Arrow files in `--out`. `ingest` parses `--workers` files at once (default: one per CPU) and writes up to `--files-per-snapshot` of them (default 32) as one snapshot, each file still replacing only its own streams' time span; `convert` takes the same two flags, defaulting to one snapshot per file. For example:
 
@@ -28,7 +32,6 @@ The binary is written to `src/go/build/sfg_<os>_<arch>`. Its commands:
   sfg iceberg export --scope cascadia-gorda/GCC1/2022_A_1065 --table inspva --out out/
   ```
 - `level0 rinex`: one GPS day of one `gnss_observations` stream (scope, file type, log source) from the catalog to RINEX
-- `nov2level0`: a NovAtel log to Level 0 Arrow IPC tables (legacy; replaced by `convert --source raw`)
 - `rnxqc`: RINEX observation quality check
 - `crinex`: Hatanaka (CRINEX) compression and decompression
 
@@ -74,5 +77,5 @@ If you get `BinaryNotFoundError`, ensure:
 - **pkg/datamodels/**: Level 0-2 table definitions and row builders
 - **pkg/convert/**: `sfg convert`'s sources, sinks, flag checks and result document
 - **pkg/catalog/**, **pkg/sink/**: Iceberg catalog access, scans and writers
-- **pkg/sfg_utils/**: RINEX conversion helpers and legacy NovAtel parsing
+- **pkg/rinexout/**: daily RINEX observation files from GNSS epochs: ordering, de-duplication, decimation, day split, naming and writing
 - **Makefile**: Build with platform detection

@@ -30,7 +30,7 @@ type Sink interface {
 	// Write validates rows against ref's definition and writes them to
 	// ref's table, returning the number of rows written. It does not
 	// Release rows.
-	Write(ctx context.Context, ref datamodels.TableRef, rows arrow.Table) (int64, error)
+	Write(ctx context.Context, ref catalog.TableRef, rows arrow.Table) (int64, error)
 	Close() error
 }
 
@@ -44,7 +44,7 @@ type Iceberg struct {
 // Write rejects any other table. Other tables are left alone, so an
 // unrelated or incompatible table cannot block these writes. Close closes
 // the catalog.
-func OpenIceberg(ctx context.Context, cfg catalog.Config, refs ...datamodels.TableRef) (*Iceberg, error) {
+func OpenIceberg(ctx context.Context, cfg catalog.Config, refs ...catalog.TableRef) (*Iceberg, error) {
 	if len(refs) == 0 {
 		return nil, fmt.Errorf("iceberg sink: no tables to write")
 	}
@@ -60,7 +60,7 @@ func (s *Iceberg) Catalog() *catalog.Catalog { return s.cat }
 
 // Write appends rows to ref's table as one snapshot (Table.Append
 // validates them).
-func (s *Iceberg) Write(ctx context.Context, ref datamodels.TableRef, rows arrow.Table) (int64, error) {
+func (s *Iceberg) Write(ctx context.Context, ref catalog.TableRef, rows arrow.Table) (int64, error) {
 	tbl, err := s.cat.TableOf(ref)
 	if err != nil {
 		return 0, err
@@ -82,7 +82,7 @@ type Parquet struct {
 func NewParquet(dir string) *Parquet { return &Parquet{dir: dir} }
 
 // Write validates rows and writes them to a new Parquet file.
-func (s *Parquet) Write(_ context.Context, ref datamodels.TableRef, rows arrow.Table) (int64, error) {
+func (s *Parquet) Write(_ context.Context, ref catalog.TableRef, rows arrow.Table) (int64, error) {
 	def := ref.Def
 	if rows.NumRows() == 0 {
 		return 0, nil

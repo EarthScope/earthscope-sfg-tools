@@ -32,7 +32,7 @@ var level0RINEXCmd = &cobra.Command{
 	Long: "Read the gnss_observations stream of --log-source from --type files in the " +
 		"--network/--station/--campaign scope for one GPS day (--day, 00:00-24:00 GPST) " +
 		"and write it to --out as RINEX observations. --settings is a rinex.Settings JSON " +
-		"file for the header, as nov0002rnx takes; without it the marker name is the station. " +
+		"file for the header, as sfg rinex takes; without it the marker name is the station. " +
 		"--catalog is local (--warehouse is then a directory) or a catalog of the iceberg-go " +
 		"configuration (.iceberg-go.yaml in $GOICEBERG_HOME or the home directory), whose " +
 		"warehouse --warehouse overrides.",

@@ -19,7 +19,7 @@ import (
 // icebergSource reads the selected rows of each table from a catalog.
 type icebergSource struct {
 	cfg    catalog.Config
-	tables []datamodels.TableRef
+	tables []catalog.TableRef
 	sel    catalog.Selection
 	// byStream groups rows by stream and time for an Iceberg sink (see
 	// streamGroups) rather than by scan batch.
@@ -121,7 +121,7 @@ const copyChunk = time.Hour
 // Iceberg sink replaces each group's stream over the group's time span, so
 // the groups of one stream must not overlap in time: chunks are
 // [t, t+copyChunk), and no time is split across two groups.
-func (s *icebergSource) streamGroups(ctx context.Context, ref datamodels.TableRef, src *catalog.Table) (*arrow.Schema, iter.Seq2[Group, error], error) {
+func (s *icebergSource) streamGroups(ctx context.Context, ref catalog.TableRef, src *catalog.Table) (*arrow.Schema, iter.Seq2[Group, error], error) {
 	def := src.Def()
 	// The streams and their time spans, from two columns.
 	spanSel := s.sel
@@ -210,8 +210,8 @@ func scanTable(ctx context.Context, src *catalog.Table, sel catalog.Selection) (
 // missing databases and tables are created; older schemas are evolved.
 type icebergSink struct {
 	cfg         catalog.Config
-	tables      []datamodels.TableRef // the tables it writes, built on the first Write
-	props       map[string]string     // added to every snapshot's summary
+	tables      []catalog.TableRef // the tables it writes, built on the first Write
+	props       map[string]string  // added to every snapshot's summary
 	perCommit   int
 	perSnapshot int
 	cat         *catalog.Catalog
@@ -269,7 +269,7 @@ func (p *pendingSnapshot) release() {
 
 // groupWindows checks g's rows against def and returns each stream's time
 // span in them, hashing g's source file if its source didn't.
-func groupWindows(def datamodels.TableDef, g *Group) (map[string]catalog.Window, error) {
+func groupWindows(def catalog.TableDef, g *Group) (map[string]catalog.Window, error) {
 	if g.Rows.NumRows() == 0 {
 		return nil, nil
 	}
