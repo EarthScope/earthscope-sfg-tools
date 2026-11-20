@@ -10,6 +10,8 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/iceberg-go"
 	"github.com/apache/iceberg-go/table"
+
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
 )
 
 // A TableDef declares one Iceberg table: its schema, value checks,
@@ -80,9 +82,16 @@ type TableDef struct {
 	// partition spec.
 	External func() (External, error)
 	// TimeColumn is the timestamp column that orders a stream's rows.
-	// Table.Append replaces existing rows by (stream_edid, TimeColumn
-	// window), so re-ingesting a file does not duplicate its rows.
+	// Table.Replace replaces existing rows by (stream_edid, TimeColumn
+	// window), so re-ingesting a file does not duplicate its rows;
+	// Table.Append only adds rows.
 	TimeColumn string
+	// Sources are the log sources whose rows the parsers write into this
+	// definition's Level 0 placement (declared by datamodels; fileparse's
+	// parsers stamp them). Empty for definitions no parser fills. A
+	// definition shared with product databases (CommunityStandard in
+	// gnssa_l2) carries the same list, which does not apply there.
+	Sources []edid.LogSource
 }
 
 // IcebergSchema is the table's Iceberg schema: Schema, or External's.

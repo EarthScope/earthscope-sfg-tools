@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
 )
 
 // Product tables: antenna tracks and GNSS-A shots built by downstream
@@ -190,7 +191,8 @@ var communityChecks = checks(
 var (
 	Garpos = catalog.TableDef{Name: "gnssa_garpos", TimeColumn: "ST", Schema: garposSchema, Checks: garposChecks,
 		Doc: "GNSS-A in GARPOS format: one row per shot, antenna positions in local ENU about the array center."}
-	CommunityStandard = catalog.TableDef{Name: "gnssa_community_standard", TimeColumn: "T_transmit", Schema: communitySchema, Checks: communityChecks,
+	// CommunityStandard is shared by gnssa_l0 and gnssa_l2; its Sources (DFOP00) apply only to the Level 0 table.
+	CommunityStandard = catalog.TableDef{Name: "gnssa_community_standard", Sources: []edid.LogSource{DFOP00INTGRPLY}, TimeColumn: "T_transmit", Schema: communitySchema, Checks: communityChecks,
 		Doc: "GNSS-A community standard format: one row per shot (ping and reply), antenna positions in ECEF. " +
 			"Transducer positions are null until lever arms are applied (always at Level 0)."}
 )

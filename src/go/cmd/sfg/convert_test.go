@@ -22,14 +22,23 @@ func TestConvertExitCodes(t *testing.T) {
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
-	// A warehouse holding an empty attitude_ahrs table and no inspva.
+	// A warehouse holding an empty attitude_ahrs table, inspva rows from a
+	// DFOP00 fixture, and no gnss_observations table.
 	wh := filepath.Join(dir, "warehouse")
 	ctx := context.Background()
-	cat, err := catalog.Build(ctx, catalog.LocalConfig(wh), datamodels.SFG.Only(datamodels.GNSSA_L0.Ref(datamodels.AttitudeAHRS)))
+	cat, err := catalog.Build(ctx, catalog.LocalConfig(wh), datamodels.SFG.Only(datamodels.L0AttitudeAHRS))
 	if err != nil {
 		t.Fatal(err)
 	}
 	cat.Close()
+	dfop00, err := filepath.Abs("../../../../tests/data/test_gcc1_20250822_DFOP00.raw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command(bin, "iceberg", "ingest", "--catalog", "local", "--warehouse", wh,
+		"--scope", "net/STA/2026_A_1126", "--table", "inspva", dfop00).CombinedOutput(); err != nil {
+		t.Fatalf("seeding inspva: %v\n%s", err, out)
+	}
 
 	base := []string{"convert", "--source", "iceberg", "--source-catalog", "local", "--source-uri", wh,
 		"--scope", "net/STA/2026_A_1126", "--sink", "files", "--table-format", "csv"}
@@ -38,9 +47,11 @@ func TestConvertExitCodes(t *testing.T) {
 		args []string
 		want int
 	}{
-		{"ok", []string{"--table", "attitude_ahrs"}, convert.ExitOK},
-		{"partial", []string{"--table", "attitude_ahrs,inspva"}, convert.ExitPartial},
-		{"fatal", []string{"--table", "inspva"}, convert.ExitFatal},
+		{"ok", []string{"--table", "inspva"}, convert.ExitOK},
+		{"partial", []string{"--table", "inspva,gnss_observations"}, convert.ExitPartial},
+		{"nothing selected", []string{"--table", "attitude_ahrs"}, convert.ExitFatal},
+		{"nothing selected, one table missing", []string{"--table", "attitude_ahrs,gnss_observations"}, convert.ExitFatal},
+		{"fatal", []string{"--table", "gnss_observations"}, convert.ExitFatal},
 		{"missing flag", nil, convert.ExitUsage},
 		{"unknown flag", []string{"--table", "attitude_ahrs", "--max-files", "1"}, convert.ExitUsage},
 		{"bad value", []string{"--table", "garpos"}, convert.ExitUsage},

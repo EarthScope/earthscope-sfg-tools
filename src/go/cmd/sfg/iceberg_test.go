@@ -51,10 +51,14 @@ func TestIcebergIngestExport(t *testing.T) {
 	out := filepath.Join(dir, "out")
 	ex := runResult(t, bin, append(append([]string{"iceberg", "export"}, common...),
 		"--table", "inspva", "--format", "csv", "--out", out), convert.ExitOK)
-	if len(ex.Outputs) != 1 || ex.Outputs[0].Rows != ingested {
+	var exported int64
+	for _, o := range ex.Outputs {
+		exported += o.Rows
+	}
+	if exported != ingested {
 		t.Errorf("exported %+v, want %d inspva rows", ex.Outputs, ingested)
 	}
-	b, err := os.ReadFile(filepath.Join(out, "inspva.csv"))
+	b, err := os.ReadFile(filepath.Join(out, "gnssa_l0", "inspva", "part-00000.csv"))
 	if err != nil {
 		t.Fatal(err)
 	}

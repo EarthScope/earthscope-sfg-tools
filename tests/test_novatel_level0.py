@@ -1,4 +1,4 @@
-"""Tests for the NovAtel Level 0 parsers (``sfg nov2level0``) and conform_arrow."""
+"""Tests for the NovAtel Level 0 parsers (``sfg convert``) and conform_arrow."""
 
 from datetime import UTC, datetime
 from pathlib import Path
@@ -11,13 +11,9 @@ import pyarrow as pa  # noqa: E402
 
 from earthscope_sfg_tools.datamodels.iceberg.schemas import (  # noqa: E402
     GNSS_OBSERVATIONS,
-    INSPVA,
     INSSTDEV,
     SOUND_SPEED,
     Scope,
-)
-from earthscope_sfg_tools.datamodels.iceberg.schemas.level0 import (  # noqa: E402
-    GNSSICEBERG_CONSTELLATIONS,
 )
 from earthscope_sfg_tools.utils.go_utils import (  # noqa: E402
     BinaryNotFoundError,
@@ -106,7 +102,7 @@ def _empty_observations() -> pa.Table:
 
 
 # ---------------------------------------------------------------------------
-# sfg nov2level0 — require the Go binary
+# sfg convert — require the Go binary
 # ---------------------------------------------------------------------------
 
 
@@ -129,12 +125,8 @@ def nov000_tables(sfg_binary):
 
 def test_nov000_cold_start_logs_are_dropped(nov000_tables):
     # The fixture is a receiver cold start: every log has time status UNKNOWN,
-    # so Level 0 ingest keeps none of them but still returns all three tables.
-    assert nov000_tables.keys() == {"gnss_observations", "inspva", "insstdev"}
-    for table_def in (GNSS_OBSERVATIONS, INSPVA, INSSTDEV):
-        table = nov000_tables[table_def.name]
-        assert table.schema.equals(table_def.schema.as_arrow())
-        assert table.num_rows == 0
+    # so Level 0 ingest keeps none of them and Go writes no table.
+    assert nov000_tables == {}
 
 
 @pytest.fixture(scope="module", params=[0, 1], ids=lambda a: f"ant{a}")
@@ -150,17 +142,17 @@ def nov770_table(sfg_binary, request):
 
 def test_nov770_antennas_kept_separate(nov770_table):
     antenna, table = nov770_table
-    assert table.schema.equals(GNSS_OBSERVATIONS.schema.as_arrow())
     assert table.num_rows > 0
-    assert set(table["Log_Source"].to_pylist()) == {f"NOV770_ANT{antenna}"}
+    suffix = "_1" if antenna else ""
+    streams = set(table["stream_edid"].to_pylist())
+    assert streams == {f"NCB.GCC1.2025_A_1126.NOV770.RANGECMP5B{suffix}"}
 
 
-def test_nov770_observations_follow_gnsstools_layout(nov770_table):
+def test_nov770_observations_follow_go_layout(nov770_table):
     _, obs = nov770_table
-    assert set(obs["station_id"].to_pylist()) == {"GCC1"}
-    assert set(obs["session_id"].to_pylist()) == {NOV770.name}
-    assert set(obs["constellation"].to_pylist()) <= set(GNSSICEBERG_CONSTELLATIONS)
+    assert {"stream_edid", "time_utc", "time_gpst", "satellite_id"} <= set(
+        obs.column_names
+    )
+    assert set(obs["constellation"].to_pylist()) <= set("GRECJIS")
     assert obs["code"].null_count < obs.num_rows
-    assert obs["write_time"].null_count == 0
-    assert obs["publish_time"].null_count == obs.num_rows
-    assert obs["epoch"].type.tz == "UTC"
+    assert obs["time_gpst"].type.tz == "UTC"

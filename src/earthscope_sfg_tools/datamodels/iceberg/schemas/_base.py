@@ -251,7 +251,7 @@ class TableDef:
         """Conform a columnar table of parsed rows to this table's schema.
 
         The columnar counterpart of :meth:`to_arrow`, for parsers that emit
-        Arrow directly (e.g. the Go ``sfg nov2level0`` command). Scope columns
+        Arrow directly (e.g. the Go ``sfg convert`` command). Scope columns
         and ``Log_Source`` are stamped, missing nullable columns are filled
         with nulls, and columns are cast and reordered. Raises on a column the
         schema does not define, a missing required column, or nulls in one.

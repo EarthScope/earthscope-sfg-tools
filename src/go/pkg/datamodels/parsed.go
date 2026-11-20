@@ -4,6 +4,7 @@ import (
 	"github.com/apache/iceberg-go"
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
 )
 
 // Tables of parsed records: raw parser output from full-rate log files, at
@@ -13,6 +14,7 @@ import (
 
 // TWTT mirrors level0.TRAVEL_TIMES.
 var TWTT = catalog.TableDef{
+	Sources:    []edid.LogSource{DFOP00INTGRPLY, QCPININTGRPLY},
 	Name:       "travel_times",
 	TimeColumn: "T_transmit",
 	Doc: "Two-way travel times per transponder from SV3 range and interrogation " +
@@ -40,6 +42,7 @@ var TWTT = catalog.TableDef{
 
 // INSPVA mirrors level0.INSPVA.
 var INSPVA = catalog.TableDef{
+	Sources:    []edid.LogSource{NOV000INSPVAA, NVAINSPVAA, DFOP00INSPVAA},
 	Name:       "inspva",
 	TimeColumn: "time",
 	Doc: "NovAtel INSPVAA position, velocity and attitude (NOV000.bin), and the " +
@@ -70,6 +73,7 @@ var INSPVA = catalog.TableDef{
 
 // INSSTDEV mirrors level0.INSSTDEV.
 var INSSTDEV = catalog.TableDef{
+	Sources:    []edid.LogSource{NOV000INSSTDEVA, NVAINSSTDEVA},
 	Name:       "insstdev",
 	TimeColumn: "time",
 	Doc: "NovAtel INSSTDEVA solution standard deviations (NOV000.bin). The " +
@@ -115,6 +119,7 @@ var INSSTDEV = catalog.TableDef{
 // hash buckets sized for a large network. The override applies when the
 // table is created; an existing table keeps the spec it was created with.
 var GNSSObs = catalog.TableDef{
+	Sources:    []edid.LogSource{NOV000RANGEA, NVARANGEA, NOV770RANGECMPB, NOV770RANGECMPB_1, NOV770RANGECMP5B, NOV770RANGECMP5B_1, QCPINRANGEA},
 	Name:       "gnss_observations",
 	TimeColumn: "time_gpst",
 	Doc: "GNSS observations, one row per (epoch, satellite, signal), from RANGEA " +
@@ -130,6 +135,7 @@ var GNSSObs = catalog.TableDef{
 
 // AttitudeAHRS mirrors level0.ATTITUDE_AHRS.
 var AttitudeAHRS = catalog.TableDef{
+	Sources:    []edid.LogSource{AHRS00AHRS, QCPINAHRS},
 	Name:       "attitude_ahrs",
 	TimeColumn: "time",
 	Doc: "Attitude from the Sonardyne AHRS block of SV3 events (QCPIN) " +
@@ -163,6 +169,7 @@ var AttitudeAHRS = catalog.TableDef{
 
 // SoundSpeed mirrors level0.SOUND_SPEED.
 var SoundSpeed = catalog.TableDef{
+	Sources:    []edid.LogSource{CTDCTD, SEABIRDSEABIRD},
 	Name:       "sound_speed",
 	TimeColumn: "time",
 	Doc: "Sound speed profiles from CTD casts and Sea-Bird profiles. speed must " +
@@ -199,6 +206,7 @@ var AntennaPositionChecks = map[string]catalog.Check{
 
 // GNSSAntennaPositions mirrors level0.GNSS_ANTENNA_POSITIONS.
 var GNSSAntennaPositions = catalog.TableDef{
+	Sources:    []edid.LogSource{QCPINGNSSINS, GNSS00GNSSPSEUDO},
 	Name:       "gnss_antenna_positions",
 	TimeColumn: "time",
 	Doc: "Antenna positions from the GNSS block of SV3 events (QCPIN), " +
@@ -222,6 +230,7 @@ var GNSSAntennaPositions = catalog.TableDef{
 
 // GNSSSatellitesInView is Go-only: it has no Python TableDef counterpart.
 var GNSSSatellitesInView = catalog.TableDef{
+	Sources:    []edid.LogSource{GNSS00GSV},
 	Name:       "gnss_satellites_in_view",
 	TimeColumn: "time",
 	Doc: "Satellites in view from NMEA GSV sentences of the SV3 GNSS receiver " +
@@ -248,6 +257,7 @@ var GNSSSatellitesInView = catalog.TableDef{
 
 // GNSSDOP is Go-only: it has no Python TableDef counterpart.
 var GNSSDOP = catalog.TableDef{
+	Sources:    []edid.LogSource{GNSS00GSA},
 	Name:       "gnss_dop",
 	TimeColumn: "time",
 	Doc: "Fix type, satellites used and dilutions of precision from NMEA GSA " +
@@ -276,6 +286,7 @@ var GNSSDOP = catalog.TableDef{
 
 // GNSSCourseSpeed is Go-only: it has no Python TableDef counterpart.
 var GNSSCourseSpeed = catalog.TableDef{
+	Sources:    []edid.LogSource{GNSS00VTG},
 	Name:       "gnss_course_speed",
 	TimeColumn: "time",
 	Doc: "Course and speed over ground from NMEA VTG sentences of the SV3 GNSS " +
@@ -301,6 +312,7 @@ var GNSSCourseSpeed = catalog.TableDef{
 
 // TransceiverInterrogations is Go-only: it has no Python TableDef counterpart.
 var TransceiverInterrogations = catalog.TableDef{
+	Sources:    []edid.LogSource{TCVR00Interrogate},
 	Name:       "transceiver_interrogations",
 	TimeColumn: "time",
 	Doc: "Acoustic interrogations (pings) from the SV3's dialogue with its " +
@@ -328,6 +340,7 @@ var TransceiverInterrogations = catalog.TableDef{
 
 // TransceiverRanges is Go-only: it has no Python TableDef counterpart.
 var TransceiverRanges = catalog.TableDef{
+	Sources:    []edid.LogSource{TCVR00RangeResult},
 	Name:       "transceiver_ranges",
 	TimeColumn: "time",
 	Doc: "Per-ping range results from the SV3's transceiver (TCVR00 BR): one " +
@@ -361,6 +374,7 @@ var TransceiverRanges = catalog.TableDef{
 
 // TransceiverSettings is Go-only: it has no Python TableDef counterpart.
 var TransceiverSettings = catalog.TableDef{
+	Sources:    []edid.LogSource{TCVR00Config, TCVR00Info},
 	Name:       "transceiver_settings",
 	TimeColumn: "time",
 	Doc: "Transceiver configuration and identity as it reported them (TCVR00): " +

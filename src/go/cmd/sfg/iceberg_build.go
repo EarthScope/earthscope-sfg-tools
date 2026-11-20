@@ -7,7 +7,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/convert"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/storage/iceberg"
 )
 
 var icebergBuildCmd = &cobra.Command{
@@ -35,22 +37,24 @@ func runIcebergBuild(cmd *cobra.Command, _ []string) error {
 		for _, n := range names {
 			db, ok := datamodels.SFG.Database(n)
 			if !ok {
-				return fmt.Errorf("--database %q: not an SFG database", n)
+				return &convert.UsageError{Err: fmt.Errorf("--database %q: not an SFG database", n)}
 			}
 			def.Databases = append(def.Databases, db)
 		}
 	}
 	cfg, err := catalog.ParseConfig(name, warehouse)
 	if err != nil {
-		return fmt.Errorf("--catalog: %w", err)
+		return &convert.UsageError{Err: fmt.Errorf("--catalog: %w", err)}
 	}
-	cat, err := catalog.Build(cmd.Context(), cfg, def)
+	prefix, _ := f.GetString("database-prefix")
+	ice, err := iceberg.New(cmd.Context(), cfg, def, iceberg.Create(), iceberg.DatabasePrefix(prefix))
 	if err != nil {
 		return err
 	}
-	defer cat.Close()
+	defer ice.Close()
+	cfg = cfg.WithDatabasePrefix(prefix)
 	for _, db := range def.Databases {
-		slog.Info("built database", "catalog", cfg.String(), "database", db.Name, "tables", len(db.Tables))
+		slog.Info("built database", "catalog", cfg.String(), "database", cfg.Namespace(db.Name), "tables", len(db.Tables))
 	}
 	return nil
 }
@@ -59,6 +63,7 @@ func init() {
 	f := icebergBuildCmd.Flags()
 	f.String("catalog", "", "catalog: local, glue, or a catalog of the iceberg-go configuration (default: its default-catalog)")
 	f.String("warehouse", "", "warehouse: a directory for local, an S3 prefix for glue (s3://bucket/prefix), else overrides the catalog's configured one")
+	f.String("database-prefix", "", "prefix of the catalog's database names, e.g. dev_ builds dev_gnssa_l0 (development catalogs; default none)")
 	f.StringSlice("database", nil, "databases to build, comma-separated (default: all of gnssa_l0, gnssa_l1, gnssa_l2)")
 	icebergCmd.AddCommand(icebergBuildCmd)
 }

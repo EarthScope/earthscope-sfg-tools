@@ -12,7 +12,6 @@ package edid
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 )
 
@@ -22,28 +21,43 @@ type Scope struct {
 	Network, Station, Campaign string
 }
 
-// ScopeFromRawDir reads the scope from a .../<network>/<station>/<campaign>/raw
-// directory path.
-func ScopeFromRawDir(dir string) Scope {
-	campaign := filepath.Dir(filepath.Clean(dir))
-	station := filepath.Dir(campaign)
-	return Scope{
-		Network:  filepath.Base(filepath.Dir(station)),
-		Station:  filepath.Base(station),
-		Campaign: filepath.Base(campaign),
-	}
-}
-
 // Sep separates the fields of a stream EDID. It is a character
 // url.QueryEscape keeps, so stream_edid partition paths read as the EDID.
 // No network, station, campaign, file type or log source contains it
 // (CheckScope); a derived EDID's last field may (Derived).
 const Sep = "."
 
-// Stream is the EDID of the stream of rows from logSource in a file of
-// type fileType for scope: network.station.campaign.fileType.logSource,
+// LogSource names a stream within a scope: the file type and the log source
+// name (INSPVAA, RANGECMP5B_1) of the rows. Neither contains Sep.
+type LogSource struct{ FileType, Name string }
+
+// AllLogSources is the zero LogSource, which names no stream: a selection
+// uses it to mean every log source.
+var AllLogSources = LogSource{}
+
+// IsAll reports whether s is AllLogSources.
+func (s LogSource) IsAll() bool { return s == AllLogSources }
+
+// String is "<FileType>.<Name>".
+func (s LogSource) String() string { return s.FileType + Sep + s.Name }
+
+// ParseLogSource is the inverse of String; it requires exactly one Sep.
+func ParseLogSource(s string) (LogSource, error) {
+	parts := strings.Split(s, Sep)
+	if len(parts) != 2 {
+		return LogSource{}, fmt.Errorf("log source %q: want <file_type>%s<name>", s, Sep)
+	}
+	return LogSource{FileType: parts[0], Name: parts[1]}, nil
+}
+
+// Stream is the EDID of the stream of rows from src for scope:
+// network.station.campaign.fileType.name,
 // e.g. cascadia-gorda.SLT1.2026_A_1126.NOV770.RANGECMP5B_1.
-func Stream(scope Scope, fileType, logSource string) string {
+func Stream(scope Scope, src LogSource) string {
+	return streamEDID(scope, src.FileType, src.Name)
+}
+
+func streamEDID(scope Scope, fileType, logSource string) string {
 	return strings.Join([]string{scope.Network, scope.Station, scope.Campaign, fileType, logSource}, Sep)
 }
 
@@ -77,10 +91,10 @@ const (
 	LogINSPVAA    = "INSPVAA"    // NovAtel INS position, velocity and attitude: inspva
 )
 
-// LogSource is the log source (the EDID's last field) of rows from log type logType on one
+// AntennaLogName is the log source name (the EDID's last field) of rows from log type logType on one
 // antenna (measurement source): the log type, with NovAtel's _<antenna>
 // suffix for antennas after the primary, e.g. RANGECMP5B, RANGECMP5B_1.
-func LogSource(logType string, antenna uint8) string {
+func AntennaLogName(logType string, antenna uint8) string {
 	if antenna == 0 {
 		return logType
 	}
@@ -99,5 +113,5 @@ const (
 // NOV000:RANGEA (or NOV000.RANGEA) is net.sta.camp.PRIDE.NOV000.RANGEA. The
 // input is the last field, so it may hold Sep (see Split).
 func Derived(scope Scope, product, input string) string {
-	return Stream(scope, product, strings.ReplaceAll(input, ":", Sep))
+	return streamEDID(scope, product, strings.ReplaceAll(input, ":", Sep))
 }

@@ -11,7 +11,7 @@
 // are found by name:
 //
 //	cat, err := catalog.Build(ctx, catalog.GlueConfig("s3://bucket/sfg"), datamodels.SFG) // or catalog.LocalConfig(dir)
-//	db, err := cat.Database("gnssa_l0")
+//	db, err := cat.Database("gnssa_l0") // the definition's name, whatever Config.DatabasePrefix says
 //	tbl, err := db.Table("inspva") // or cat.TableOf(datamodels.GNSSA_L0.Ref(datamodels.INSPVA))
 //	n, err := tbl.Append(ctx, rows)
 package catalog
@@ -48,7 +48,7 @@ func Build(ctx context.Context, cfg Config, def CatalogDef) (*Catalog, error) {
 	if err != nil {
 		return nil, err
 	}
-	return connect(ctx, cat, def, buildDatabase)
+	return connect(ctx, cat, cfg.DatabasePrefix, def, buildDatabase)
 }
 
 // Load opens the catalog cfg names and the tables of def it already holds,
@@ -63,20 +63,20 @@ func Load(ctx context.Context, cfg Config, def CatalogDef) (*Catalog, error) {
 	if err != nil {
 		return nil, err
 	}
-	return connect(ctx, cat, def, loadDatabase)
+	return connect(ctx, cat, cfg.DatabasePrefix, def, loadDatabase)
 }
 
-// connect opens each of def's databases in cat with open. It closes cat
-// on error.
-func connect(ctx context.Context, cat icecat.Catalog, def CatalogDef,
-	open func(context.Context, icecat.Catalog, DatabaseDef) (*Database, error)) (*Catalog, error) {
+// connect opens each of def's databases in cat, in the namespace prefix +
+// its name, with open. It closes cat on error.
+func connect(ctx context.Context, cat icecat.Catalog, prefix string, def CatalogDef,
+	open func(context.Context, icecat.Catalog, string, DatabaseDef) (*Database, error)) (*Catalog, error) {
 	c := &Catalog{def: def, cat: cat, dbs: make(map[string]*Database, len(def.Databases))}
 	for _, dbdef := range def.Databases {
 		if _, dup := c.dbs[dbdef.Name]; dup {
 			c.Close()
 			return nil, fmt.Errorf("catalog %s declares database %s twice", def.Name, dbdef.Name)
 		}
-		db, err := open(ctx, cat, dbdef)
+		db, err := open(ctx, cat, prefix, dbdef)
 		if err != nil {
 			c.Close()
 			return nil, err
@@ -97,7 +97,8 @@ func (c *Catalog) Close() error {
 // Def is the definition the catalog was built or loaded with.
 func (c *Catalog) Def() CatalogDef { return c.def }
 
-// Database returns the database named name. It does no I/O.
+// Database returns the database the definition names name (without any
+// DatabasePrefix). It does no I/O.
 func (c *Catalog) Database(name string) (*Database, error) {
 	if db, ok := c.dbs[name]; ok {
 		return db, nil
@@ -124,8 +125,13 @@ var ErrNotInCatalog = errors.New("not in the catalog")
 // built or loaded, and only it names them in the catalog.
 type Database struct {
 	def    DatabaseDef
+	prefix string // Config.DatabasePrefix
 	tables map[string]*Table
 }
+
+// Namespace is the database's Iceberg namespace in the catalog: its
+// definition's name behind Config.DatabasePrefix.
+func (d *Database) Namespace() string { return d.prefix + d.def.Name }
 
 // Table returns the table named name. It does no I/O.
 func (d *Database) Table(name string) (*Table, error) {
@@ -140,7 +146,7 @@ func (d *Database) Table(name string) (*Table, error) {
 
 // newDatabase is def's Database with no tables open yet. It rejects a
 // table name declared twice, which would otherwise shadow the first.
-func newDatabase(def DatabaseDef) (*Database, error) {
+func newDatabase(prefix string, def DatabaseDef) (*Database, error) {
 	seen := make(map[string]bool, len(def.Tables))
 	for _, t := range def.Tables {
 		if seen[t.Name] {
@@ -148,29 +154,30 @@ func newDatabase(def DatabaseDef) (*Database, error) {
 		}
 		seen[t.Name] = true
 	}
-	return &Database{def: def, tables: make(map[string]*Table, len(def.Tables))}, nil
+	return &Database{def: def, prefix: prefix, tables: make(map[string]*Table, len(def.Tables))}, nil
 }
 
-// buildDatabase creates def's namespace if it is missing, with def.Doc as
+// buildDatabase creates def's namespace (prefix + def.Name) if it is missing, with def.Doc as
 // its description ("comment"; Glue's Description), then creates or evolves
 // each of its tables. A new namespace gets no location: the catalog places
 // its tables at <warehouse>/<namespace>.db/<table>, or where the server
 // decides.
-func buildDatabase(ctx context.Context, cat icecat.Catalog, def DatabaseDef) (*Database, error) {
+func buildDatabase(ctx context.Context, cat icecat.Catalog, prefix string, def DatabaseDef) (*Database, error) {
+	ns := prefix + def.Name
 	var props iceberg.Properties
 	if def.Doc != "" {
 		props = iceberg.Properties{"comment": def.Doc}
 	}
-	err := cat.CreateNamespace(ctx, table.Identifier{def.Name}, props)
+	err := cat.CreateNamespace(ctx, table.Identifier{ns}, props)
 	if err != nil && !errors.Is(err, icecat.ErrNamespaceAlreadyExists) {
-		return nil, fmt.Errorf("creating database %s: %w", def.Name, err)
+		return nil, fmt.Errorf("creating database %s: %w", ns, err)
 	}
-	d, err := newDatabase(def)
+	d, err := newDatabase(prefix, def)
 	if err != nil {
 		return nil, err
 	}
 	for _, tdef := range def.Tables {
-		id := table.Identifier{def.Name, tdef.Name}
+		id := table.Identifier{ns, tdef.Name}
 		tbl, err := cat.LoadTable(ctx, id)
 		if errors.Is(err, icecat.ErrNoSuchTable) {
 			tbl, err = create(ctx, cat, id, tdef)
@@ -183,7 +190,7 @@ func buildDatabase(ctx context.Context, cat icecat.Catalog, def DatabaseDef) (*D
 			tbl, err = evolve(ctx, tbl, tdef)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("%s.%s: %w", def.Name, tdef.Name, err)
+			return nil, fmt.Errorf("%s.%s: %w", ns, tdef.Name, err)
 		}
 		d.tables[tdef.Name] = &Table{def: tdef, tbl: tbl}
 	}
@@ -192,18 +199,18 @@ func buildDatabase(ctx context.Context, cat icecat.Catalog, def DatabaseDef) (*D
 
 // loadDatabase opens the tables of def the catalog holds; it creates
 // nothing, not even the namespace.
-func loadDatabase(ctx context.Context, cat icecat.Catalog, def DatabaseDef) (*Database, error) {
-	d, err := newDatabase(def)
+func loadDatabase(ctx context.Context, cat icecat.Catalog, prefix string, def DatabaseDef) (*Database, error) {
+	d, err := newDatabase(prefix, def)
 	if err != nil {
 		return nil, err
 	}
 	for _, tdef := range def.Tables {
-		tbl, err := cat.LoadTable(ctx, table.Identifier{def.Name, tdef.Name})
+		tbl, err := cat.LoadTable(ctx, table.Identifier{d.Namespace(), tdef.Name})
 		if errors.Is(err, icecat.ErrNoSuchTable) || errors.Is(err, icecat.ErrNoSuchNamespace) {
 			continue
 		}
 		if err != nil {
-			return nil, fmt.Errorf("loading %s.%s: %w", def.Name, tdef.Name, err)
+			return nil, fmt.Errorf("loading %s.%s: %w", d.Namespace(), tdef.Name, err)
 		}
 		d.tables[tdef.Name] = &Table{def: tdef, tbl: tbl}
 	}
@@ -288,7 +295,7 @@ func addMissingColumns(ctx context.Context, tbl *table.Table, def TableDef) (*ta
 
 // Table is one Iceberg table and the definition it was opened with. It
 // knows nothing of the Database or Catalog that opened it. Commits through
-// it (Append) move it to the new snapshot. It is not safe for
+// it (Append, Replace) move it to the new snapshot. It is not safe for
 // concurrent use.
 type Table struct {
 	def TableDef
@@ -328,7 +335,7 @@ func (t *Table) Iceberg() *table.Table { return t.tbl }
 // Append writes a full-row Arrow table (a file parser's output for the
 // table's definition) as one snapshot and returns the number of rows
 // written. It only adds rows: appending the same file twice duplicates its
-// rows. Rows are matched to the table's columns by name (see inTableOrder),
+// rows (Replace is the idempotent write). Rows are matched to the table's columns by name (see inTableOrder),
 // so a table evolved since its definition was written is filled correctly.
 // The Table moves to the new snapshot.
 func (t *Table) Append(ctx context.Context, rows arrow.Table, opts ...AppendOption) (int64, error) {

@@ -1,13 +1,13 @@
 # novatel770 — RANGECMPB vs RANGECMP5B
 
-NOV770 files (`*NOV770.raw`) hold NovAtel binary logs from a dual-antenna receiver. Two of those logs carry GNSS observations, and novatel770.go parses both into `gnss_observations`:
+NOV770 files (`*NOV770.raw`) hold NovAtel binary logs from a dual-antenna receiver. Two of those logs carry GNSS observations, and nov770/nov770.go parses both into `gnss_observations`:
 
 | Log source | Message ID | NovAtel name |
 |---|---|---|
 | `RANGECMPB`, `RANGECMPB_1` | 140 | RANGECMP: compressed range |
 | `RANGECMP5B`, `RANGECMP5B_1` | 2537 | RANGECMP5: OEM7 compressed range |
 
-The `_1` suffix marks the second antenna (`datamodels.LogSource`). Decoding is done by gnsstools (`codecs/novatel/novatel_binary`, `message_140.go` and `message_2537.go`); novatel770.go selects messages, drops those with no time fix, and groups epochs by log source.
+The `_1` suffix marks the second antenna (`datamodels.LogSource`). Decoding is done by gnsstools (`codecs/novatel/novatel_binary`, `message_140.go` and `message_2537.go`); nov770/nov770.go selects messages, drops those with no time fix, and groups epochs by log source.
 
 ```mermaid
 flowchart LR
@@ -73,7 +73,7 @@ Both files decoded with gnsstools v0.117.0; messages with no time fix skipped.
 
 RANGECMP5 takes about 40% fewer bytes per observation, with finer resolution. Rate, antenna count and constellations are receiver configuration, not format.
 
-The files also hold other logs novatel770.go doesn't parse: BESTPOSB (42), RAWEPHEMB (41) and GLOEPHEMERIS (723). See [log_sources.md](log_sources.md).
+The files also hold other logs nov770/nov770.go doesn't parse: BESTPOSB (42), RAWEPHEMB (41) and GLOEPHEMERIS (723). See [log_sources.md](log_sources.md).
 
 ## Known issues in the RANGECMP decoder
 

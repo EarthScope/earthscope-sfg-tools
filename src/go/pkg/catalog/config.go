@@ -71,6 +71,13 @@ type Config struct {
 	// default-catalog. Configured only.
 	Name string
 
+	// DatabasePrefix is prepended to the name of every database (Iceberg
+	// namespace) the catalog reads or builds: with "dev_", the definition's
+	// gnssa_l0 lives in the namespace dev_gnssa_l0. It lets development and
+	// tests share a Glue account or REST catalog with production without
+	// touching its databases. Valid for every Kind; "" is no prefix.
+	DatabasePrefix string
+
 	// Props are extra catalog and FileIO properties, applied last so they
 	// override everything above, e.g. glue.endpoint or s3.endpoint for a
 	// local AWS emulator.
@@ -90,6 +97,16 @@ func ConfiguredConfig(name string) Config { return Config{Kind: Configured, Name
 
 // WithRegion is cfg in AWS region region (Glue).
 func (cfg Config) WithRegion(region string) Config { cfg.Region = region; return cfg }
+
+// WithDatabasePrefix is cfg with DatabasePrefix prefix.
+func (cfg Config) WithDatabasePrefix(prefix string) Config {
+	cfg.DatabasePrefix = prefix
+	return cfg
+}
+
+// Namespace is the Iceberg namespace of the database named name in the
+// catalog cfg connects to: DatabasePrefix + name.
+func (cfg Config) Namespace(name string) string { return cfg.DatabasePrefix + name }
 
 // ParseConfig is the Config of a --catalog flag and an optional
 // --warehouse: "local" is Local (warehouse required), "glue" is Glue, and
@@ -164,6 +181,9 @@ func (cfg Config) String() string {
 	}
 	if cfg.Warehouse != "" {
 		s += ":" + cfg.Warehouse
+	}
+	if cfg.DatabasePrefix != "" {
+		s += " (databases " + cfg.DatabasePrefix + "*)"
 	}
 	return s
 }

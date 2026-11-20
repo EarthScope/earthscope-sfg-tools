@@ -2,7 +2,6 @@ package convert
 
 import (
 	"errors"
-	"iter"
 	"slices"
 	"time"
 
@@ -40,6 +39,10 @@ type Result struct {
 	Streams   []Stream   `json:"streams"`
 	Outputs   []Output   `json:"outputs"`
 	Errors    []Error    `json:"errors"`
+
+	// Batches written, and batches that failed (to read or to write); Run
+	// counts them and ExitCode uses them.
+	succeeded, failed int
 }
 
 // Endpoint is a resolved source or sink.
@@ -88,7 +91,7 @@ type Output struct {
 }
 
 // Error is one failure: the stage it happened in (usage, source, read,
-// write), what it happened to, and the message.
+// parse, write, sink), what it happened to, and the message.
 type Error struct {
 	Stage   string `json:"stage"`
 	Subject string `json:"subject,omitempty"`
@@ -119,7 +122,11 @@ func ExitCode(res *Result, err error) int {
 		return ExitFatal
 	case res == nil || res.OK:
 		return ExitOK
-	case len(res.Outputs) > 0:
+	case len(res.Outputs) == 0 && slices.ContainsFunc(res.Errors, func(e Error) bool { return e.Stage == "sink" }):
+		// The sink failed to finish and nothing was written.
+		return ExitFatal
+	case res.succeeded > 0:
+		// Some batches failed, others were written.
 		return ExitPartial
 	default:
 		return ExitFatal
@@ -205,23 +212,15 @@ func newStreamTally(ref catalog.TableRef, schema *arrow.Schema) *streamTally {
 	return t
 }
 
-func (t *streamTally) wrap(groups iter.Seq2[Group, error]) iter.Seq2[Group, error] {
+// addTable counts the rows of tbl.
+func (t *streamTally) addTable(tbl arrow.Table) {
 	if t.edid < 0 || t.time < 0 {
-		return groups
+		return
 	}
-	return func(yield func(Group, error) bool) {
-		for g, err := range groups {
-			if err == nil {
-				rdr := array.NewTableReader(g.Rows, -1)
-				for rdr.Next() {
-					t.add(rdr.RecordBatch())
-				}
-				rdr.Release()
-			}
-			if !yield(g, err) {
-				return
-			}
-		}
+	rdr := array.NewTableReader(tbl, -1)
+	defer rdr.Release()
+	for rdr.Next() {
+		t.add(rdr.RecordBatch())
 	}
 }
 

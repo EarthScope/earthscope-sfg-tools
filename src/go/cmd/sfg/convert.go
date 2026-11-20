@@ -37,16 +37,20 @@ var convertCmd = &cobra.Command{
 		"--table picks tables " +
 		"(default: every table the types feed) and --log-source one log source's rows. A file that " +
 		"fails to parse is reported and skipped.\n\n" +
-		"--sink files writes <table>.<table-format> files into the --sink-uri directory.\n\n" +
+		"--source files reads the --source-uri directory laid out as <database>/<table>/<name>.<table-format> " +
+		"(what --sink files writes), in the --table-format given: parquet or csv. Each file is one batch. " +
+		"A Parquet file written by --sink files records the raw file its rows came from (path and SHA-256), " +
+		"which an Iceberg sink records as for raw input; a CSV records none. --table picks tables " +
+		"(default: every table directory), --scope, --source-type and --log-source select rows by stream_edid " +
+		"as for iceberg, and --columns picks columns. A CSV is typed by its table's schema.\n\n" +
+		"--sink files writes files into the --sink-uri directory as <database>/<table>/<name>.<table-format>: " +
+		"from --source raw one file per raw file and table, named after the raw file; from --source iceberg " +
+		"one file per table, part-00000.\n\n" +
 		"--sink iceberg appends to the --sink-catalog warehouse at --sink-uri, " +
 		"creating missing tables. Each parsed file is one snapshot that replaces " +
 		"its streams' rows over its time span, so re-running doesn't add duplicates. From --source " +
 		"iceberg, the selected rows are copied one stream and one hour at a time, each hour " +
 		"replacing that stream's rows over its span: a sync of what was selected, not a mirror. " +
-		"--files-per-snapshot N merges up to N files into one snapshot, each still replacing only its " +
-		"own span (a file overlapping one already merged starts the next snapshot). " +
-		"A table's snapshots are committed to the catalog together, or --files-per-commit N at a " +
-		"time (a copy's hours count as files); a failed commit loses only its own snapshots. " +
 		"--columns doesn't apply, and the same warehouse on both sides is an error.\n\n" +
 		"Catalogs: --*-catalog is local, a warehouse directory with an SQLite catalog, or the name " +
 		"of a catalog in the iceberg-go configuration (.iceberg-go.yaml in $GOICEBERG_HOME or the home " +
@@ -117,14 +121,14 @@ func convertSpec(f *pflag.FlagSet, args []string) (convert.Spec, error) {
 	s.SourceCatalog, _ = f.GetString("source-catalog")
 	s.SinkURI, _ = f.GetString("sink-uri")
 	s.SinkCatalog, _ = f.GetString("sink-catalog")
+	s.SourceDatabasePrefix, _ = f.GetString("source-database-prefix")
+	s.SinkDatabasePrefix, _ = f.GetString("sink-database-prefix")
 	s.TableFormat, _ = f.GetString("table-format")
 	s.Tables, _ = f.GetStringSlice("table")
 	s.SourceTypes, _ = f.GetStringSlice("source-type")
 	s.LogSource, _ = f.GetString("log-source")
 	s.Columns, _ = f.GetStringSlice("columns")
 	s.MaxFiles, _ = f.GetInt("max-files")
-	s.FilesPerCommit, _ = f.GetInt("files-per-commit")
-	s.FilesPerSnapshot, _ = f.GetInt("files-per-snapshot")
 	s.Workers, _ = f.GetInt("workers")
 	scope, _ := f.GetString("scope")
 	var err error
@@ -169,21 +173,21 @@ func writeResult(path string, res *convert.Result) error {
 
 func init() {
 	f := convertCmd.Flags()
-	f.String("source", "", "source kind: iceberg or raw")
-	f.StringArray("source-uri", nil, "source location: an Iceberg warehouse (a directory for local); raw files: a file, glob or directory (repeatable)")
+	f.String("source", "", "source kind: iceberg, raw or files")
+	f.StringArray("source-uri", nil, "source location: an Iceberg warehouse (a directory for local); raw files: a file, glob or directory (repeatable); files: the directory of <database>/<table>/ files")
 	f.String("source-catalog", "", "source catalog: local, glue, or a catalog of the iceberg-go configuration")
 	f.String("sink", "", "sink kind: files or iceberg")
 	f.String("sink-uri", "", "sink location: the output directory; or an Iceberg warehouse (a directory for local)")
 	f.String("sink-catalog", "", "sink catalog: local, glue, or a catalog of the iceberg-go configuration")
-	f.String("table-format", "", "files sink format: parquet, csv or arrow")
+	f.String("source-database-prefix", "", "source catalog: prefix of its database names, e.g. dev_ for dev_gnssa_l0")
+	f.String("sink-database-prefix", "", "sink catalog: prefix of its database names, e.g. dev_ for dev_gnssa_l0")
+	f.String("table-format", "", "table file format: parquet, csv or arrow for a files sink; parquet or csv for a files source")
 	f.String("scope", "", "NET[/STA[/CAMP]]")
 	f.StringSlice("table", nil, "tables: name or namespace.name, comma-separated")
 	f.StringSlice("source-type", nil, "raw file types, comma-separated; for iceberg, one file type, or product for Level 1/2 tables (needs the full scope)")
 	f.Int("max-files", 0, "raw: parse at most this many files of each type (0 = all)")
-	f.Int("files-per-commit", 0, "iceberg sink: commit a table's snapshots this many at a time (0 = all at once)")
-	f.Int("files-per-snapshot", 1, "iceberg sink: merge up to this many files into one snapshot, each replacing only its own span")
 	f.Int("workers", 0, "raw: files parsed at once (0 = one per CPU)")
-	f.String("log-source", "", "log source, or product input for Level 1/2 tables")
+	f.String("log-source", "", "log source, or product input for Level 1/2 tables; --source raw: FILE_TYPE.NAME as listed in a Level 0 table's sources, e.g. DFOP00.INSPVAA")
 	f.String("start", "", "earliest time, inclusive: YYYY-MM-DD or RFC 3339")
 	f.String("end", "", "latest time, exclusive: YYYY-MM-DD or RFC 3339")
 	f.StringSlice("columns", nil, "columns to write, in this order (default: all)")

@@ -1,0 +1,96 @@
+// Package ctd parses the two sound speed profile formats, CTD (ParseCTD, in this
+// file) and Sea-Bird .cnv (ParseSeabird, in seabird.go).
+//
+// CTD files are headerless two-column text
+// files (e.g. CTD_NBR1_2023_fit, NTH1_2025_CTD_fit) of depth and sound speed,
+// separated by whitespace or commas, with depth logged negative-down.
+//
+// Level 0 stores the profile as logged: depth is flipped to positive-down,
+// but the profile is not extrapolated or jittered (compare
+// soundspeed_operations.ctd_to_svp_v1/_v2 in the Python package).
+package ctd
+
+import (
+	"bufio"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/fileparse/internal/rowutil"
+)
+
+// yearRe finds the profile year in a file name: a 4-digit 19xx/20xx token
+// between underscores or at either end, e.g. the 2023 in CTD_NBR1_2023_fit.
+var yearRe = regexp.MustCompile(`(?:^|_)((?:19|20)\d\d)(?:_|$)`)
+
+// ctdProfileTime is the time given to every row of the profile at path:
+// 1 January 00:00 UTC of the year in its file name. The files carry no cast
+// time, and the year is all the name gives; a fixed time keeps re-ingesting
+// a file a replacement of its rows rather than an addition.
+func ctdProfileTime(path string) (time.Time, error) {
+	m := yearRe.FindStringSubmatch(filepath.Base(path))
+	if m == nil {
+		return time.Time{}, fmt.Errorf("%s: no profile year in the file name", filepath.Base(path))
+	}
+	year, _ := strconv.Atoi(m[1])
+	return time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC), nil
+}
+
+// ParseCTD parses the CTD profile at path into sound_speed rows. Lines that are not two numbers, or whose depth
+// is above the surface, are skipped and counted.
+func ParseCTD(path string, src edid.LogSource) ([]datamodels.SoundSpeedRow, error) {
+	at, err := ctdProfileTime(path)
+	if err != nil {
+		return nil, err
+	}
+	rs, bad, err := readProfile(path, at)
+	if err != nil {
+		return nil, err
+	}
+	slog.Debug("parsed CTD", "file", filepath.Base(path), "rows", len(rs), "bad_lines", bad,
+		"time", at.Format(time.DateOnly))
+	for i := range rs {
+		rs[i].LogSource = datamodels.CTDCTD
+	}
+	return rowutil.Filter(rs, src, func(r datamodels.SoundSpeedRow) edid.LogSource { return r.LogSource }), nil
+}
+
+func readProfile(path string, at time.Time) (rs []datamodels.SoundSpeedRow, bad int, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		fields := strings.FieldsFunc(sc.Text(), func(r rune) bool {
+			return r == ',' || r == ' ' || r == '\t' || r == '\r'
+		})
+		if len(fields) == 0 {
+			continue
+		}
+		if len(fields) != 2 {
+			bad++
+			continue
+		}
+		d, err1 := strconv.ParseFloat(fields[0], 64)
+		s, err2 := strconv.ParseFloat(fields[1], 64)
+		depth := -d
+		if err1 != nil || err2 != nil || depth < 0 {
+			bad++
+			continue
+		}
+		if depth == 0 {
+			depth = 0 // the surface line flips to -0
+		}
+		rs = append(rs, datamodels.SoundSpeedRow{Time: at, Depth: depth, Speed: s})
+	}
+	return rs, bad, sc.Err()
+}

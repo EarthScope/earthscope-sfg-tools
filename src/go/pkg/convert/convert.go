@@ -2,43 +2,51 @@
 // behind `sfg convert`. Every part of a conversion is stated explicitly;
 // nothing is inferred from paths, file names or extensions.
 //
-// A Source yields tables of rows; a Sink writes them and reports what it
-// wrote. CheckFlags and New reject a conversion before any work starts;
-// Run carries it out and returns its Result.
+// A conversion connects a storage.Reader to a storage.Writer (see Run).
+// CheckFlags and New reject a conversion before any work starts; Conversion.Run
+// carries it out and returns its Result.
 package convert
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"iter"
+	"io"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/apache/arrow-go/v18/arrow"
-
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/catalog"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/datamodels"
 	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/edid"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/storage"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/storage/files"
+	"github.com/EarthScope/es_sfgtools/src/golangtools/pkg/storage/iceberg"
+	rawio "github.com/EarthScope/es_sfgtools/src/golangtools/pkg/storage/raw"
 )
 
 // Source and sink kinds.
 const (
 	SourceIceberg = "iceberg"
+	SourceFiles   = "files"
 	SinkFiles     = "files"
 	SinkIceberg   = "iceberg"
 )
 
 // Spec is one conversion as given on the command line.
 type Spec struct {
-	Source        string   // SourceIceberg or SourceRaw
-	SourceURIs    []string // the warehouse: a directory (catalog.Local) or overriding the catalog's; or raw files: files, globs or directories
+	Source        string   // SourceIceberg, SourceRaw or SourceFiles
+	SourceURIs    []string // the warehouse: a directory (catalog.Local) or overriding the catalog's; raw files: files, globs or directories; or the directory of <database>/<table>/ files
 	SourceCatalog string   // "local", "glue" or a catalog of the iceberg-go configuration (see catalog.ParseConfig)
-	Sink          string   // SinkFiles or SinkIceberg
-	SinkURI       string   // a local directory; or the sink warehouse: a directory (catalog.Local) or overriding the catalog's
-	SinkCatalog   string   // "local", "glue" or a catalog of the iceberg-go configuration (see catalog.ParseConfig)
-	TableFormat   string   // FormatParquet, FormatCSV or FormatArrow
+	// SourceDatabasePrefix and SinkDatabasePrefix are the catalog's
+	// Config.DatabasePrefix on each side, e.g. "dev_".
+	SourceDatabasePrefix string
+	Sink                 string // SinkFiles or SinkIceberg
+	SinkURI              string // a local directory; or the sink warehouse: a directory (catalog.Local) or overriding the catalog's
+	SinkCatalog          string // "local", "glue" or a catalog of the iceberg-go configuration (see catalog.ParseConfig)
+	SinkDatabasePrefix   string
+	TableFormat          string // files.Parquet, files.CSV or files.Arrow (a files source reads only the first two)
 
 	Scope       edid.Scope
 	Tables      []string // bare or namespace-qualified table names
@@ -53,9 +61,7 @@ type Spec struct {
 	// types read, all by default, and named files of no type are skipped.
 	TypesFromNames bool
 
-	FilesPerCommit   int // Iceberg sink: snapshots per catalog commit; 0 is all of a table's
-	FilesPerSnapshot int // Iceberg sink: groups (files) merged into one snapshot; 0 or 1 is one each
-	Workers          int // raw: files parsed at once; 0 is runtime.NumCPU()
+	Workers int // raw: files parsed at once; 0 is runtime.NumCPU()
 }
 
 // A UsageError is a conversion stated wrongly: a missing, inapplicable or
@@ -83,7 +89,11 @@ var (
 var sources = map[string]endpoint{
 	SourceIceberg: {
 		required: []string{"source-catalog", "table"},
-		optional: []string{"source-type", "log-source", "start", "end", "columns"},
+		optional: []string{"source-database-prefix", "source-type", "log-source", "start", "end", "columns"},
+	},
+	SourceFiles: {
+		required: []string{"table-format"},
+		optional: []string{"table", "source-type", "log-source", "columns"},
 	},
 	SourceRaw: {
 		required: []string{"source-type"},
@@ -93,7 +103,7 @@ var sources = map[string]endpoint{
 
 var sinks = map[string]endpoint{
 	SinkFiles:   {required: []string{"table-format"}},
-	SinkIceberg: {required: []string{"sink-catalog"}, optional: []string{"files-per-commit", "files-per-snapshot"}, rejects: []string{"columns"}},
+	SinkIceberg: {required: []string{"sink-catalog"}, optional: []string{"sink-database-prefix"}, rejects: []string{"columns"}},
 }
 
 func kinds(m map[string]endpoint) string {
@@ -119,7 +129,7 @@ func CheckFlags(source, sink string, given []string) error {
 	}
 	var missing, extra []string
 	for _, name := range slices.Concat(alwaysRequired, src.required, snk.required) {
-		if !slices.Contains(given, name) {
+		if !slices.Contains(given, name) && !slices.Contains(missing, "--"+name) {
 			missing = append(missing, "--"+name)
 		}
 	}
@@ -156,15 +166,22 @@ func ParseScope(s string) (edid.Scope, error) {
 	return sc, nil
 }
 
-// Conversion is a checked Spec, ready to run.
+// Conversion is a checked Spec, ready to run: the Reader and Writer it
+// connects (an Iceberg one is opened by Run, so that nothing connects before
+// the flags are checked) and the Selection it reads.
 type Conversion struct {
 	spec   Spec
 	tables []catalog.TableRef // the tables the source reads
-	source Source
-	sink   Sink
+	sel    storage.Selection
+
+	reader storage.Reader
+	writer storage.Writer
+	// openReader and openWriter make the Reader or Writer when it is nil.
+	openReader func(context.Context) (storage.Reader, error)
+	openWriter func(context.Context) (storage.Writer, error)
 }
 
-// New checks spec's values and builds its source and sink. An Iceberg
+// New checks spec's values and builds its reader and writer. An Iceberg
 // source or sink without a URI takes its catalog's configured warehouse
 // (see catalog.Config.DefaultWarehouse). Every error is a *UsageError.
 func New(spec Spec) (*Conversion, error) {
@@ -195,58 +212,88 @@ func New(spec Spec) (*Conversion, error) {
 
 	switch spec.Source {
 	case SourceIceberg:
-		src, err := newIcebergSource(spec)
+		plan, err := checkIcebergSource(spec)
 		if err != nil {
 			return nil, err
 		}
-		c.source, c.tables = src, src.tables
+		c.tables, c.sel = plan.refs, plan.sel
+		def := datamodels.SFG.Only(plan.refs...)
+		c.openReader = func(ctx context.Context) (storage.Reader, error) {
+			r, err := iceberg.New(ctx, plan.cfg, def)
+			if err != nil {
+				return nil, err
+			}
+			return r, nil
+		}
 	case SourceRaw:
-		src, err := newRawSource(spec)
+		plan, err := checkRawSource(spec)
 		if err != nil {
 			return nil, err
 		}
-		c.source, c.tables = src, src.tables
+		c.tables = plan.tables
+		opts := []rawio.Option{rawio.Types(plan.types...), rawio.MaxFiles(spec.MaxFiles), rawio.Workers(spec.Workers)}
+		if !spec.TypesFromNames && len(plan.types) == 1 {
+			opts = append(opts, rawio.AsGiven())
+		}
+		if c.reader, err = rawio.NewReader(spec.SourceURIs, opts...); err != nil {
+			return nil, usagef("--source-uri: %w", err)
+		}
+		c.sel = storage.Selection{Scope: spec.Scope, Tables: plan.tables}
+		if !plan.logSource.IsAll() {
+			c.sel.LogSources = []edid.LogSource{plan.logSource}
+		}
+	case SourceFiles:
+		plan, err := checkFilesSource(spec)
+		if err != nil {
+			return nil, err
+		}
+		rdr, err := files.NewReader(plan.dir, plan.format)
+		if err != nil {
+			return nil, usagef("--source-uri: %w", err)
+		}
+		c.tables, c.sel, c.reader = plan.refs, plan.sel, rdr
+		if len(c.tables) == 0 {
+			c.tables = rdr.Tables()
+		}
+		if len(c.tables) == 0 {
+			return nil, usagef("--source-uri %s holds no %s files under <database>/<table>/", plan.dir, plan.format)
+		}
 	}
 
 	switch spec.Sink {
 	case SinkFiles:
-		// Files are named after each table's bare name.
-		for i, ref := range c.tables {
-			for _, prev := range c.tables[:i] {
-				if prev.Def.Name == ref.Def.Name {
-					return nil, usagef("--table: %s and %s would both write %s files",
-						prev, ref, ref.Def.Name)
-				}
-			}
+		if !slices.Contains([]files.Format{files.Parquet, files.CSV, files.Arrow}, files.Format(spec.TableFormat)) {
+			return nil, usagef("--table-format %q: want %s, %s or %s", spec.TableFormat, files.Parquet, files.CSV, files.Arrow)
 		}
-		if !slices.Contains([]string{FormatParquet, FormatCSV, FormatArrow}, spec.TableFormat) {
-			return nil, usagef("--table-format %q: want %s, %s or %s", spec.TableFormat, FormatParquet, FormatCSV, FormatArrow)
+		w, err := files.NewWriter(spec.SinkURI, files.Format(spec.TableFormat))
+		if err != nil {
+			return nil, usagef("--sink-uri: %w", err)
 		}
-		c.sink = &filesSink{dir: spec.SinkURI, format: spec.TableFormat}
+		c.writer = w
 	case SinkIceberg:
 		sinkCfg, err := catalog.ParseConfig(spec.SinkCatalog, spec.SinkURI)
 		if err != nil {
 			return nil, usagef("--sink-catalog: %w", err)
 		}
-		var props map[string]string
-		if src, ok := c.source.(*icebergSource); ok {
-			if spec.SourceCatalog == spec.SinkCatalog && sameWarehouse(spec.SourceURIs[0], spec.SinkURI) {
-				return nil, usagef("--source-uri and --sink-uri are the same %s warehouse: a table can't be copied onto itself", spec.SinkCatalog)
+		opts := []iceberg.Option{iceberg.Create(), iceberg.DatabasePrefix(spec.SinkDatabasePrefix)}
+		if spec.Source == SourceIceberg {
+			if spec.SourceCatalog == spec.SinkCatalog && spec.SourceDatabasePrefix == spec.SinkDatabasePrefix &&
+				sameWarehouse(spec.SourceURIs[0], spec.SinkURI) {
+				return nil, usagef("--source-uri and --sink-uri are the same %s warehouse (and database prefix): a table can't be copied onto itself", spec.SinkCatalog)
 			}
-			src.byStream = true
-			props = map[string]string{
+			opts = append(opts, iceberg.Properties(map[string]string{
 				PropCopySource:    spec.SourceCatalog + ":" + spec.SourceURIs[0],
 				PropCopySelection: selectionString(spec),
+			}))
+		}
+		def := datamodels.SFG.Only(c.tables...)
+		c.openWriter = func(ctx context.Context) (storage.Writer, error) {
+			w, err := iceberg.New(ctx, sinkCfg, def, opts...)
+			if err != nil {
+				return nil, err
 			}
+			return w, nil
 		}
-		if spec.FilesPerCommit < 0 {
-			return nil, usagef("--files-per-commit %d: want 0 (all) or more", spec.FilesPerCommit)
-		}
-		if spec.FilesPerSnapshot < 0 {
-			return nil, usagef("--files-per-snapshot %d: want 0 or more", spec.FilesPerSnapshot)
-		}
-		c.sink = &icebergSink{cfg: sinkCfg, tables: c.tables,
-			props: props, perCommit: spec.FilesPerCommit, perSnapshot: max(spec.FilesPerSnapshot, 1)}
 	}
 	return c, nil
 }
@@ -271,6 +318,8 @@ func uriHint(kind, cat, side string) string {
 	switch {
 	case kind == SourceRaw:
 		return "the raw files, globs or directories"
+	case kind == SourceFiles:
+		return "the directory of <database>/<table>/ files"
 	case kind == SinkFiles:
 		return "the output directory"
 	case cat == string(catalog.Local):
@@ -313,77 +362,46 @@ func selectionString(spec Spec) string {
 	return strings.Join(parts, " ")
 }
 
-// Rows is one table's rows from a source: its schema, then its groups.
-// A table the source couldn't read has Err set and no groups.
-type Rows struct {
-	Table  catalog.TableRef
-	Schema *arrow.Schema
-	Groups iter.Seq2[Group, error]
-	Err    error
-}
-
-// A Group is rows a sink writes as one unit: an Iceberg sink appends each
-// group as one snapshot, replacing each of its streams' rows over the
-// group's time span. A raw source makes one group per parsed file.
-type Group struct {
-	Rows   arrow.Table
-	Source string // the file the rows came from, if any
-	SHA256 string // Source's hex SHA-256, if the source hashed it
-}
-
-// A Source reads tables of rows.
-type Source interface {
-	// Read calls write once per table, in order. An error from Read itself
-	// (the source can't be opened) is fatal to the run.
-	Read(ctx context.Context, write func(Rows)) error
-}
-
-// A Sink writes tables of rows.
-type Sink interface {
-	// Write writes one table's rows and returns what it wrote. It releases
-	// each group it takes, and may stop taking groups after an error.
-	Write(ctx context.Context, rows Rows) ([]Output, error)
-	// Close releases what Write opened.
-	Close() error
-}
-
-// Run carries out the conversion. A table that fails is recorded in the
-// result and the run moves on; the returned error is a fatal one, after
-// which the result holds what was done before it.
+// Run carries out the conversion with convert.Run, and adds what was asked
+// for to its Result. A table or batch that fails is recorded in the result
+// and the run moves on; the returned error is a fatal one, after which the
+// result holds what was done before it. A usage error found by Run (the
+// writer does not accept a table) returns a nil Result.
 func (c *Conversion) Run(ctx context.Context) (*Result, error) {
-	res := c.result()
-	defer func() {
-		if err := c.sink.Close(); err != nil {
+	r := c.reader
+	if r == nil {
+		var err error
+		if r, err = c.openReader(ctx); err != nil {
+			res := c.result()
+			res.addError("source", strings.Join(c.spec.SourceURIs, " "), err)
+			return res, err
+		}
+	}
+	if cl, ok := r.(io.Closer); ok {
+		defer cl.Close()
+	}
+	w := c.writer
+	if w == nil {
+		var err error
+		if w, err = c.openWriter(ctx); err != nil {
+			res := c.result()
 			res.addError("sink", c.spec.SinkURI, err)
-			res.OK = false
-		}
-	}()
-	err := c.source.Read(ctx, func(rows Rows) {
-		name := rows.Table.String()
-		if rows.Err != nil {
-			res.addError("read", name, rows.Err)
-			return
-		}
-		tally := newStreamTally(rows.Table, rows.Schema)
-		rows.Groups = tally.wrap(rows.Groups)
-		outs, err := c.sink.Write(ctx, rows)
-		res.Streams = append(res.Streams, tally.streams()...)
-		res.Outputs = append(res.Outputs, outs...)
-		if err != nil {
-			res.addError("write", name, err)
-		}
-	})
-	if in, ok := c.source.(interface{ Inputs() []Input }); ok {
-		res.Inputs = append(res.Inputs, in.Inputs()...)
-		for _, i := range in.Inputs() {
-			if i.Status == "failed" {
-				res.Errors = append(res.Errors, Error{Stage: "parse", Subject: i.Path, Message: i.Error})
-			}
+			return res, err
 		}
 	}
-	if err != nil {
-		res.addError("source", strings.Join(c.spec.SourceURIs, " "), err)
+	res, err := Run(ctx, r, w, c.sel)
+	if res == nil {
+		return nil, err // a usage error
 	}
-	res.OK = len(res.Errors) == 0
+	meta := c.result()
+	res.Source, res.Sink, res.Scope, res.Selection = meta.Source, meta.Sink, meta.Scope, meta.Selection
+	for i, e := range res.Errors {
+		switch {
+		case e.Stage == "source" && e.Subject == "":
+			res.Errors[i].Subject = strings.Join(c.spec.SourceURIs, " ")
+		case e.Stage == "sink" && e.Subject == "":
+			res.Errors[i].Subject = c.spec.SinkURI
+		}
+	}
 	return res, err
 }

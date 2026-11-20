@@ -1,0 +1,30 @@
+check	bad-log-source	ok
+check	build	ok
+check	definitions	ok
+check	export	ok
+check	files-to-iceberg	ok
+check	fixtures-yield	ok
+check	iceberg-build	ok
+check	ingest	ok
+check	load-creates-nothing	ok
+check	partial	ok
+check	reingest	ok
+check	reingest-run	ok
+check	rinex	ok
+check	rinex-bad-log-source	ok
+check	rinex-iceberg	ok
+check	rinex-two-streams	ok
+count	gnss_observations	verify.VRFY.2026_A_0001.NOV770.RANGECMP5B	2578
+count	gnss_observations	verify.VRFY.2026_A_0001.NOV770.RANGECMP5B_1	2518
+count	gnssa_community_standard	verify.VRFY.2026_A_0001.DFOP00.INTG-RPLY	42
+count	inspva	verify.VRFY.2026_A_0001.DFOP00.INSPVAA	132
+count	travel_times	verify.VRFY.2026_A_0001.DFOP00.INTG-RPLY	43
+count-files	gnss_observations	verify.VRFY.2026_A_0001.NOV770.RANGECMP5B	2578
+count-files	gnss_observations	verify.VRFY.2026_A_0001.NOV770.RANGECMP5B_1	2518
+count-files	gnssa_community_standard	verify.VRFY.2026_A_0001.DFOP00.INTG-RPLY	42
+count-files	inspva	verify.VRFY.2026_A_0001.DFOP00.INSPVAA	132
+count-files	travel_times	verify.VRFY.2026_A_0001.DFOP00.INTG-RPLY	43
+rinex	verify.VRFY.2026_A_0001.NOV770.RANGECMP5B	76fe4739ac2ced17df759d4367ea594dde3ddec535fad671be1a4202634afa92
+rinex	verify.VRFY.2026_A_0001.NOV770.RANGECMP5B_1	59498ebdaab3163595a14e8124bef8a8ca82dc4584ea2f90d0b36d384b9ab3ff
+rinex-iceberg	verify.VRFY.2026_A_0001.NOV770.RANGECMP5B	76fe4739ac2ced17df759d4367ea594dde3ddec535fad671be1a4202634afa92
+rinex-iceberg	verify.VRFY.2026_A_0001.NOV770.RANGECMP5B_1	59498ebdaab3163595a14e8124bef8a8ca82dc4584ea2f90d0b36d384b9ab3ff
